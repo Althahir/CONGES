@@ -1,279 +1,384 @@
-/* Dashboard utilisateur */
+/* Dashboard utilisateur - Vue unique avec calendrier annuel */
 body {
     margin: 0;
     overflow: hidden;
 }
 
-.app-container {
+.dashboard-container {
     display: flex;
+    flex-direction: column;
     height: 100vh;
 }
 
-/* Sidebar */
-.sidebar {
-    width: 250px;
-    background: linear-gradient(180deg, var(--orange) 0%, var(--bleu) 100%);
+/* ========== HEADER ========== */
+.dashboard-header {
+    background: linear-gradient(90deg, var(--orange) 0%, var(--bleu) 100%);
     color: white;
+    padding: 15px 30px;
     display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.sidebar-header {
-    padding: 20px;
-    text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.sidebar-logo {
-    width: 90%;
-    width: 100%;
-}
-
-.sidebar-nav {
+.header-left {
     flex: 1;
-    padding: 20px 0;
 }
 
-.nav-item {
-    display: block;
-    padding: 15px 25px;
-    color: white;
-    text-decoration: none;
-    transition: background 0.3s;
-    border-left: 3px solid transparent;
+.header-logo {
+    height: 40px;
 }
 
-.nav-item:hover {
-    background: rgba(255, 255, 255, 0.1);
+.header-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
 }
 
-.nav-item.active {
+.header-center h1 {
+    margin: 0;
+    font-size: 1.8em;
+    min-width: 100px;
+    text-align: center;
+}
+
+.btn-year {
     background: rgba(255, 255, 255, 0.2);
-    border-left-color: white;
-}
-
-.nav-item span {
-    margin-right: 10px;
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s;
     font-size: 1.2em;
 }
-#span1{
-        color: var(--bleu);
-}
-#span2{
-        color: var(--mauve);
-}
-#span3{
-        color: var(--rouge);
-}
-#span4{
-        color: var(--orange);
-}
 
-.sidebar-footer {
-    padding: 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.user-info {
-    margin-bottom: 15px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 5px;
-    text-align: center;
-    font-weight: 500;
-}
-
-.sidebar-footer .btn-secondary {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.sidebar-footer .btn-secondary:hover {
+.btn-year:hover {
     background: rgba(255, 255, 255, 0.3);
 }
 
-/* Main content */
-.main-content {
+.header-right {
     flex: 1;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 15px;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 0.9em;
+}
+
+/* ========== CONTENU PRINCIPAL ========== */
+.dashboard-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 350px;
     overflow: hidden;
 }
 
-.content-header {
-    padding: 20px 30px;
-    background: white;
-    border-bottom: 1px solid #e0e0e0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+/* ========== CALENDRIER (GAUCHE) ========== */
+.calendar-section {
+    background: #f5f5f5;
+    padding: 15px;
+    overflow: hidden;
+    display: flex;
+    width: 100%;
 }
 
-.content-header h1 {
-    margin: 0;
-    color: var(--bleu);
-    font-size: 1.8em;
-}
-
-.page-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 30px;
-}
-
-/* Pages content */
-.content-page {
-    display: none;
-}
-
-.content-page.active {
-    display: block;
-}
-
-/* Soldes cards */
-.soldes-container {
+.calendrier-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    height: 100%;
+    width: 100%;
 }
 
-.solde-card {
+/* Mini calendrier mensuel */
+.mois-calendrier {
     background: white;
-    padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 0;
+}
+
+.mois-header {
     text-align: center;
-    border-top: 4px solid;
+    font-weight: bold;
+    color: var(--bleu);
+    margin-bottom: 8px;
+    font-size: 0.9em;
 }
 
-.solde-card.cp-n {
-    border-top-color: #3B82F6;
+.jours-semaine {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 3px;
 }
 
-.solde-card.cp-n1 {
-    border-top-color: #93C5FD;
-}
-
-.solde-card.rtt {
-    border-top-color: #10B981;
-}
-
-.solde-card.recup {
-    border-top-color: #F59E0B;
-}
-
-.solde-card h3 {
-    margin: 0 0 15px 0;
-    font-size: 0.95em;
+.jour-semaine {
+    text-align: center;
+    font-size: 0.7em;
     color: #666;
     font-weight: 500;
 }
 
-.solde-value {
-    font-size: 2.5em;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 5px;
+.jours-mois {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    grid-auto-rows: 30px;
 }
 
-.solde-unit {
-    font-size: 0.9em;
+.jour {
+    width: 100%;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.jour:hover {
+    transform: scale(1.1);
+}
+
+.jour.vide {
+    visibility: hidden;
+}
+
+.jour.weekend {
     color: #999;
 }
 
-/* Quick actions */
-.quick-actions {
-    text-align: center;
-    margin-top: 20px;
+.jour.ferie {
+    background: #e0e0e0;
+    color: #666;
 }
 
-.btn-large {
-    padding: 15px 40px;
+.jour.cp {
+    background: #3B82F6;
+    color: white;
+    font-weight: bold;
+}
+
+.jour.rtt {
+    background: #10B981;
+    color: white;
+    font-weight: bold;
+}
+
+.jour.recup {
+    background: #F59E0B;
+    color: white;
+    font-weight: bold;
+}
+
+.jour.maladie {
+    background: #EF4444;
+    color: white;
+    font-weight: bold;
+}
+
+/* ========== PANNEAU LATÉRAL (DROITE) ========== */
+.sidebar-panel {
+    background: white;
+    border-left: 1px solid #e0e0e0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-section {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.panel-section h2 {
+    margin: 0 0 15px 0;
     font-size: 1.1em;
+    color: var(--bleu);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .sidebar {
-        width: 200px;
+/* ========== SOLDES ========== */
+.soldes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.solde-mini {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    border-top: 3px solid;
+}
+
+.solde-mini.cp-n1 {
+    border-top-color: #93C5FD;
+}
+
+.solde-mini.cp-n {
+    border-top-color: #3B82F6;
+}
+
+.solde-mini.rtt {
+    border-top-color: #10B981;
+}
+
+.solde-mini.recup {
+    border-top-color: #F59E0B;
+}
+
+.solde-label {
+    font-size: 0.8em;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.solde-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #333;
+}
+
+/* ========== LÉGENDE ========== */
+.legende-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.legende-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+}
+
+.legende-color.cp {
+    background: #3B82F6;
+}
+
+.legende-color.rtt {
+    background: #10B981;
+}
+
+.legende-color.recup {
+    background: #F59E0B;
+}
+
+.legende-color.maladie {
+    background: #EF4444;
+}
+
+.legende-color.ferie {
+    background: #e0e0e0;
+}
+
+/* ========== FORMULAIRE COMPACT ========== */
+.form-group-compact {
+    margin-bottom: 12px;
+}
+
+.form-group-compact label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.85em;
+    color: #555;
+    font-weight: 500;
+}
+
+.form-group-compact input,
+.form-group-compact select,
+.form-group-compact textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.form-row-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.resume-compact {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 0.85em;
+}
+
+.resume-compact div {
+    margin: 5px 0;
+}
+
+.alert-compact {
+    color: #dc3545;
+    font-size: 0.85em;
+    margin-top: 5px;
+}
+
+.form-actions-compact {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.form-actions-compact button {
+    flex: 1;
+}
+
+/* ========== HISTORIQUE ========== */
+.historique-list {
+    font-size: 0.9em;
+}
+
+.text-muted {
+    color: #999;
+    font-style: italic;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 1200px) {
+    .calendrier-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .dashboard-content {
+        grid-template-columns: 1fr;
     }
     
-    .soldes-container {
+    .sidebar-panel {
+        border-left: none;
+        border-top: 1px solid #e0e0e0;
+    }
+    
+    .calendrier-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
-    .content-header h1 {
-        font-size: 1.4em;
-    }
-}
-/* Formulaire d'absence */
-.form-container {
-    max-width: 800px;
-    margin: 0 auto;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 20px;
-}
-
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    font-size: 14px;
-    transition: border-color 0.3s;
-}
-
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: var(--bleu);
-}
-
-.form-group textarea {
-    resize: vertical;
-    font-family: inherit;
-}
-
-/* Résumé de la demande */
-.resume-box {
-    background: #f8f9fa;
-    border-left: 4px solid var(--bleu);
-    padding: 20px;
-    border-radius: 5px;
-    margin: 20px 0;
-}
-
-.resume-box h3 {
-    margin-top: 0;
-    color: var(--bleu);
-    font-size: 1.1em;
-}
-
-.resume-box p {
-    margin: 10px 0;
-}
-
-.resume-box strong {
-    color: #555;
-}
-
-/* Actions du formulaire */
-.form-actions {
-    display: flex;
-    gap: 15px;
-    justify-content: flex-end;
-    margin-top: 30px;
-    padding-top: 20px;
-    border-top: 1px solid #e0e0e0;
-}
-
-.form-actions button {
-    min-width: 150px;
 }
