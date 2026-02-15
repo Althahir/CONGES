@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athelia - Mon espace</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/dashboard-user.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="../assets/logo_horiz_fdBlanc.png" alt="Logo" class="sidebar-logo">
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-page="accueil">
+                    <span id="span1"><i class="fa-regular fa-house"></i></span> Accueil
+                </a>
+                <a href="#" class="nav-item" data-page="calendrier">
+                    <span id="span2"><i class="fa-regular fa-calendar"></i></span> Mon calendrier
+                </a>
+                <a href="#" class="nav-item" data-page="poser-absence">
+                    <span id="span3"><i class="fa-solid fa-plus"></i></span> Poser une absence
+                </a>
+                <a href="#" class="nav-item" data-page="historique">
+                    <span id="span4"><i class="fa-solid fa-file"></i></span> Historique
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <span id="userName">Chargement...</span>
+                </div>
+                <button id="logoutBtn" class="btn-secondary">Déconnexion</button>
+            </div>
+        </aside>
+        
+        <!-- Main content -->
+        <main class="main-content">
+            <div class="content-header">
+                <h1 id="pageTitle">Tableau de bord</h1>
+            </div>
+            
+            <div id="pageContent" class="page-content">
+                <!-- Le contenu changera selon la page -->
+                
+                <!-- Page Accueil -->
+                <div id="accueil-page" class="content-page active">
+                    <div class="soldes-container">
+                        <div class="solde-card cp-n">
+                            <h3>CP Année en cours (N)</h3>
+                            <div class="solde-value" id="solde-cp-n">-</div>
+                            <div class="solde-unit">jours</div>
+                        </div>
+                        
+                        <div class="solde-card cp-n1">
+                            <h3>CP Année précédente (N-1)</h3>
+                            <div class="solde-value" id="solde-cp-n1">-</div>
+                            <div class="solde-unit">jours</div>
+                        </div>
+                        
+                        <div class="solde-card rtt">
+                            <h3>RTT</h3>
+                            <div class="solde-value" id="solde-rtt">-</div>
+                            <div class="solde-unit">jours</div>
+                        </div>
+                        
+                        <div class="solde-card recup">
+                            <h3>Récupération</h3>
+                            <div class="solde-value" id="solde-recup">-</div>
+                            <div class="solde-unit">heures</div>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-actions">
+                        <button class="btn-primary btn-large" id="btnPoserAbsence">
+                            ➕ Poser une absence
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Page Calendrier -->
+                <div id="calendrier-page" class="content-page">
+                    <p>Calendrier - En cours de développement...</p>
+                </div>
+                
+                <!-- Page Poser absence -->
+                <div id="poser-absence-page" class="content-page">
+                    <div class="form-container">
+                        <form id="formAbsence">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="typeAbsence">Type d'absence *</label>
+                                <select id="typeAbsence" name="typeAbsence" required>
+                                    <option value="">-- Sélectionner --</option>
+                                    <option value="CP">Congés payés (CP)</option>
+                                    <!-- RTT et Récup seront ajoutés dynamiquement si le salarié y a droit -->
+                                    <option value="MALADIE">Arrêt maladie</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="dateDebut">Date de début *</label>
+                                <input type="date" id="dateDebut" name="dateDebut" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="dateFin">Date de fin *</label>
+                                <input type="date" id="dateFin" name="dateFin" required>
+                            </div>
+                        </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="periodeType">Période *</label>
+                                <select id="periodeType" name="periodeType" required>
+                                    <option value="journee">Journée entière</option>
+                                    <option value="demi">Demi-journée</option>
+                                </select>
+                        </div>
+                    </div>
+
+                    <!-- Champs spécifiques pour Récupération -->
+                    <div id="recupFields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="recupType">Type de récupération *</label>
+                                    <select id="recupType" name="recupType">
+                                    <option value="jours">En jours (7h par jour)</option>
+                                    <option value="heures">En heures</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" id="recupHeuresGroup" style="display: none;">
+                                <label for="recupHeures">Nombre d'heures *</label>
+                                <input type="number" id="recupHeures" name="recupHeures" min="0.5" step="0.5" placeholder="Ex: 3.5">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="commentaire">Commentaire (optionnel)</label>
+                            <textarea id="commentaire" name="commentaire" rows="3" placeholder="Informations complémentaires..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Résumé de la demande -->
+                    <div id="resumeAbsence" class="resume-box" style="display: none;">
+                        <h3>📋 Résumé de votre demande</h3>
+                        <p><strong>Durée :</strong> <span id="resumeDuree">-</span></p>
+                        <p><strong>Décompte :</strong> <span id="resumeDecompte">-</span></p>
+                        <p><strong>Solde après :</strong> <span id="resumeSoldeApres">-</span></p>
+                        <div id="alerteSolde" class="error-message"></div>
+                        <div id="alertePeriode" class="error-message"></div>
+                    </div>
+
+                    <div id="errorMessage" class="error-message"></div>
+                    <div id="successMessage" class="success-message"></div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCalculer" class="btn-secondary">Calculer la durée</button>
+                        <button type="submit" class="btn-primary">Valider la demande</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+                
+                <!-- Page Historique -->
+                <div id="historique-page" class="content-page">
+                    <p>Historique - En cours de développement...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="../js/dashboard-user.js"></script>
+</body>
+</html>

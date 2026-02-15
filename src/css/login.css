@@ -1,0 +1,96 @@
+:root {
+    --bleu: rgb(0, 108, 137);      
+    --mauve: rgb(116, 43, 135);  
+    --rouge: rgb(181, 22, 63);       
+    --orange: rgb(237, 113, 17);  
+    --jaune:rgb(249,198,73)  ;
+
+}
+
+
+/* Page de connexion uniquement */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--bleu) 0%, var(--orange) 100%);
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.login-box h1 {
+    text-align: center;
+    color: var(--bleu);
+    font-size: 2em;
+    /* margin-bottom: 10px; */
+}
+.login-box #logo {
+    display: block;
+    width: 80%;
+    max-width: 300px;
+    margin: 0 auto 20px auto;
+}
+
+.login-box h2 {
+    text-align: center;
+    color: var(--bleu);
+    font-size: 1.2em;
+    font-weight: normal;
+    margin-bottom: 30px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: #555;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--bleu);
+}
+
+#loginForm .btn-primary {
+    width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .login-box {
+        padding: 30px 20px;
+    }
+    
+    .login-box h1 {
+        font-size: 1.5em;
+    }
+    
+    .login-box h2 {
+        font-size: 1em;
+    }
+}
