@@ -1,0 +1,711 @@
+/* Dashboard Admin */
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+.dashboard-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ========== HEADER ========== */
+.dashboard-header {
+    background: linear-gradient(90deg, var(--bleu) 0%,var(--mauve) 25%, var(--rouge) 50%, var(--orange) 75%, var(--jaune) 100%);
+    color: white;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.header-left {
+    flex: 1;
+}
+
+.header-logo {
+    height: 40px;
+}
+
+.header-center {
+    flex: 1;
+    text-align: center;
+}
+
+.header-center h1 {
+    margin: 0;
+    font-size: 1.8em;
+}
+
+.header-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 15px;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 0.9em;
+}
+
+/* ========== NAVIGATION ========== */
+.admin-nav {
+    background: white;
+    border-bottom: 2px solid #e0e0e0;
+    padding: 10px 30px;
+    display: flex;
+    gap: 10px;
+}
+
+.nav-btn {
+    padding: 12px 20px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 0.95em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-btn:hover {
+    background: #f5f5f5;
+    border-color: var(--bleu);
+}
+
+.nav-btn.active {
+    background: var(--bleu);
+    color: white;
+    border-color: var(--bleu);
+}
+
+.nav-btn i {
+    font-size: 1.1em;
+}
+
+/* ========== CONTENU ========== */
+.admin-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+    background: #f5f5f5;
+}
+
+.content-section {
+    display: none;
+}
+
+.content-section.active {
+    display: block;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: var(--bleu);
+    font-size: 1.5em;
+}
+
+/* ========== LISTE SALARIÉS ========== */
+.liste-salaries {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.salarie-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.salarie-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.salarie-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 15px;
+}
+
+.salarie-nom {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--bleu);
+}
+
+.salarie-badge {
+    font-size: 0.75em;
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: #e0e0e0;
+}
+
+.salarie-badge.admin {
+    background: var(--rouge);
+    color: white;
+}
+
+.salarie-info {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 10px;
+}
+
+.salarie-soldes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.solde-mini {
+    background: #f8f9fa;
+    padding: 8px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.solde-mini-label {
+    font-size: 0.75em;
+    color: #666;
+}
+
+.solde-mini-value {
+    font-size: 1em;
+    font-weight: bold;
+    color: var(--bleu);
+}
+
+/* ========== CALENDRIER GLOBAL ========== */
+.year-selector {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.year-selector span {
+    font-size: 1.2em;
+    font-weight: bold;
+    min-width: 80px;
+    text-align: center;
+}
+
+.btn-year {
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    color: #333;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.btn-year:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.calendrier-global {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+/* ========== JOURS FÉRIÉS ========== */
+.liste-feries {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.ferie-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.ferie-item:last-child {
+    border-bottom: none;
+}
+
+.ferie-date {
+    font-weight: bold;
+    color: var(--bleu);
+}
+
+.ferie-libelle {
+    flex: 1;
+    margin-left: 20px;
+}
+
+/* ========== TABLE RTT ========== */
+.table-rtt {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th {
+    background: var(--bleu);
+    color: white;
+    padding: 12px;
+    text-align: left;
+}
+
+table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+table tr:hover {
+    background: #f8f9fa;
+}
+
+/* ========== CALENDRIER GLOBAL ========== */
+.legende-salaries {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.legende-salarie {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+}
+
+.legende-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+}
+
+.calendrier-grid-global {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.mois-calendrier {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mois-header {
+    text-align: center;
+    font-weight: bold;
+    color: var(--bleu);
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.jours-semaine {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 3px;
+}
+
+.jour-semaine {
+    text-align: center;
+    font-size: 0.7em;
+    color: #666;
+    font-weight: 500;
+}
+
+.jours-mois {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    grid-auto-rows: 30px;
+}
+
+.jour {
+    width: 100%;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.jour:hover {
+    transform: scale(1.1);
+}
+
+.jour.vide {
+    visibility: hidden;
+}
+
+.jour.weekend {
+    color: #999;
+}
+
+.jour.ferie {
+    background: var(--jaune);
+    color: #666;
+}
+.jour.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
+}
+
+/* Multi-absences */
+.jour.multi-absences {
+    flex-direction: column;
+    padding: 2px;
+    gap: 1px;
+}
+
+.jour.multi-absences span {
+    font-size: 0.7em;
+}
+
+.barres-container {
+    display: flex;
+    gap: 1px;
+    width: 100%;
+}
+
+.barre-absence {
+    flex: 1;
+    height: 3px;
+    border-radius: 1px;
+}
+
+/* Tooltip (déjà présent mais on s'assure qu'il fonctionne) */
+.jour[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 5px;
+}
+
+.jour[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    pointer-events: none;
+}
+
+
+
+@media (max-width: 1200px) {
+    .calendrier-grid-global {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .calendrier-grid-global {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+/* ========== SECTION MES CONGÉS (style dashboard user) ========== */
+.user-dashboard-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 0;
+    height: calc(100vh - 200px);
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.user-dashboard-wrapper .calendar-section {
+    background: #f5f5f5;
+    padding: 15px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.user-dashboard-wrapper .calendrier-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    height: 100%;
+    width: 100%;
+}
+
+.user-dashboard-wrapper .sidebar-panel {
+    background: white;
+    border-left: 1px solid #e0e0e0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-dashboard-wrapper .panel-section {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.user-dashboard-wrapper .panel-section h2 {
+    margin: 0 0 15px 0;
+    font-size: 1.1em;
+    color: var(--bleu);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-dashboard-wrapper .soldes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.user-dashboard-wrapper .solde-mini {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    border-top: 3px solid;
+}
+
+.user-dashboard-wrapper .solde-mini.cp-n1 {
+    border-top-color: var(--bleu);
+}
+
+.user-dashboard-wrapper .solde-mini.cp-n {
+    border-top-color: var(--mauve);
+}
+
+.user-dashboard-wrapper .solde-mini.rtt {
+    border-top-color: var(--rouge);
+}
+
+.user-dashboard-wrapper .solde-mini.recup {
+    border-top-color: var(--orange);
+}
+
+.user-dashboard-wrapper .solde-label {
+    font-size: 0.8em;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.user-dashboard-wrapper .solde-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #333;
+}
+
+.user-dashboard-wrapper .legende-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.user-dashboard-wrapper .legende-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+}
+
+.user-dashboard-wrapper .legende-color.cp {
+    background: var(--bleu);
+}
+
+.user-dashboard-wrapper .legende-color.rtt {
+    background: var(--mauve);
+}
+
+.user-dashboard-wrapper .legende-color.recup {
+    background: var(--rouge);
+}
+
+.user-dashboard-wrapper .legende-color.maladie {
+    background: var(--orange);
+}
+
+.user-dashboard-wrapper .legende-color.ferie {
+    background: var(--jaune);
+}
+.legende-color.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
+}
+
+.user-dashboard-wrapper .form-group-compact {
+    margin-bottom: 12px;
+}
+
+.user-dashboard-wrapper .form-group-compact label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.85em;
+    color: #555;
+    font-weight: 500;
+}
+
+.user-dashboard-wrapper .form-group-compact input,
+.user-dashboard-wrapper .form-group-compact select,
+.user-dashboard-wrapper .form-group-compact textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.user-dashboard-wrapper .form-row-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.user-dashboard-wrapper .resume-compact {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 0.85em;
+}
+
+.user-dashboard-wrapper .alert-compact {
+    color: #dc3545;
+    font-size: 0.85em;
+    margin-top: 5px;
+}
+
+.user-dashboard-wrapper .form-actions-compact {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.user-dashboard-wrapper .form-actions-compact button {
+    flex: 1;
+}
+
+.user-dashboard-wrapper .historique-list {
+    font-size: 0.9em;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.user-dashboard-wrapper .historique-item {
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #f8f9fa;
+    border-left: 4px solid;
+    border-radius: 4px;
+}
+
+.user-dashboard-wrapper .historique-item.cp {
+    border-left-color: var(--bleu);
+}
+
+.user-dashboard-wrapper .historique-item.rtt {
+    border-left-color: var(--mauve);
+}
+
+.user-dashboard-wrapper .historique-item.recup {
+    border-left-color: var(--rouge);
+}
+
+.user-dashboard-wrapper .historique-item.maladie {
+    border-left-color: var(--orange);
+}
+
+.user-dashboard-wrapper .historique-date {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 3px;
+}
+
+.user-dashboard-wrapper .historique-type {
+    font-size: 0.85em;
+    color: #666;
+}
+
+.user-dashboard-wrapper .historique-duree {
+    font-size: 0.85em;
+    color: #999;
+    margin-top: 3px;
+}
+
+.user-dashboard-wrapper .jour.preview {
+    background: rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+#btnCalculer {
+    display: none;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+    .admin-nav {
+        overflow-x: auto;
+    }
+    
+    .liste-salaries {
+        grid-template-columns: 1fr;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+}

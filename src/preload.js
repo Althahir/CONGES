@@ -36,5 +36,18 @@ contextBridge.exposeInMainWorld('api', {
     calculerDuree: (dateDebut, dateFin, periodeType) => ipcRenderer.invoke('calculerDuree', dateDebut, dateFin, periodeType),
 
     // Navigation
-    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page)
+    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page),
+    
+    // Création et mise à jour
+    createAbsence: (absenceData) => ipcRenderer.invoke('createAbsence', absenceData),
+    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
+    
+    // Navigation
+    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page),
+
+    // Création et mise à jour
+    createAbsence: (absenceData) => ipcRenderer.invoke('createAbsence', absenceData),
+    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
+    genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),
+    
 });

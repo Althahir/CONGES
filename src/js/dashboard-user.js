@@ -39,14 +39,14 @@ async function loadSoldes() {
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
         
         if (soldes) {
-            document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + 'j';
-            document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
-            document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
+            document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + ' j';
+            document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + ' j';
+            document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + ' j';
             
             const recupJours = Math.floor(soldes.recup_heures / 7);
             const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
             document.getElementById('solde-recup').innerHTML = 
-                `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+                `${soldes.recup_heures.toFixed(1)} h <small class="small-recup">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
         } else {
             // Créer les soldes si ils n'existent pas
             await window.api.updateSoldes(user.id, anneeActuelle, {
@@ -258,8 +258,9 @@ function surlignerJoursPrevisualisation(dateDebut, dateFin) {
     
     if (!dateDebut || !dateFin) return;
     
-    const debut = new Date(dateDebut);
-    const fin = new Date(dateFin);
+    // Parser les dates manuellement en ISO
+    const [anneeDebut, moisDebut, jourDebut] = dateDebut.split('-').map(Number);
+    const [anneeFin, moisFin, jourFin] = dateFin.split('-').map(Number);
     
     // Parcourir chaque jour du calendrier
     document.querySelectorAll('.jour').forEach(jourDiv => {
@@ -276,14 +277,17 @@ function surlignerJoursPrevisualisation(dateDebut, dateFin) {
         if (moisIndex === -1) return;
         
         const jour = parseInt(jourTexte);
-        const dateJour = new Date(anneeActuelle, moisIndex, jour);
+        
+        // Créer la date ISO du jour du calendrier
+        const dateJourISO = `${anneeActuelle}-${String(moisIndex + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
         
         // Si le jour est dans la plage, le surligner
-        if (dateJour >= debut && dateJour <= fin) {
+        if (dateJourISO >= dateDebut && dateJourISO <= dateFin) {
             jourDiv.classList.add('preview');
         }
     });
 }
+
 // Bouton "Calculer la durée" (reprise du code existant)
 // Fonction de calcul (extraite pour être réutilisable)
 async function calculerDureeAbsence() {
@@ -477,6 +481,200 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
     sessionStorage.removeItem('user');
     window.location.href = 'login.html';
 });
+// ========== VALIDATION ET ENREGISTREMENT DE L'ABSENCE ==========
+
+document.getElementById('formAbsence').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const typeAbsence = document.getElementById('typeAbsence').value;
+    const dateDebut = document.getElementById('dateDebut').value;
+    const dateFin = document.getElementById('dateFin').value;
+    const periodeType = document.getElementById('periodeType').value;
+    const recupType = document.getElementById('recupType').value;
+    const recupHeures = document.getElementById('recupHeures').value;
+    const commentaire = document.getElementById('commentaire').value;
+    
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    
+    // Réinitialiser les messages
+    errorMessage.classList.remove('show');
+    successMessage.classList.remove('show');
+    errorMessage.textContent = '';
+    successMessage.textContent = '';
+    
+    // Validations
+    if (!typeAbsence) {
+        errorMessage.textContent = 'Veuillez sélectionner un type d\'absence';
+        errorMessage.classList.add('show');
+        return;
+    }
+    
+    if (!dateDebut || !dateFin) {
+        errorMessage.textContent = 'Veuillez saisir les dates';
+        errorMessage.classList.add('show');
+        return;
+    }
+    
+    try {
+        let dureeJours = 0;
+        let dureeHeures = 0;
+        let typeToSave = typeAbsence;
+        
+        // Calculer la durée
+        if (typeAbsence === 'RECUP' && recupType === 'heures') {
+            if (!recupHeures || recupHeures <= 0) {
+                errorMessage.textContent = 'Veuillez saisir le nombre d\'heures';
+                errorMessage.classList.add('show');
+                return;
+            }
+            dureeHeures = parseFloat(recupHeures);
+            dureeJours = dureeHeures / 7;
+        } else {
+            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            dureeJours = result.dureeJours;
+            dureeHeures = dureeJours * 7;
+        }
+        
+        // Pour les CP, on enregistre en tant que CP_N (le backend gérera CP_N1 puis CP_N)
+        if (typeAbsence === 'CP') {
+            typeToSave = 'CP_N';
+        }
+        
+        // Créer l'absence
+        const absenceData = {
+            salarie_id: user.id,
+            type: typeToSave,
+            date_debut: dateDebut,
+            date_fin: dateFin,
+            duree_jours: typeAbsence === 'RECUP' && recupType === 'heures' ? null : dureeJours,
+            duree_heures: typeAbsence === 'RECUP' ? dureeHeures : null,
+            commentaire: commentaire || null
+        };
+        
+        const resultAbsence = await window.api.createAbsence(absenceData);
+        
+        if (resultAbsence.success) {
+            // Mettre à jour les soldes
+            const resultSoldes = await window.api.updateSoldesAfterAbsence(
+                user.id, 
+                anneeActuelle, 
+                typeAbsence, 
+                dureeJours, 
+                dureeHeures
+            );
+            
+            // Générer le PDF
+            const pdfData = {
+                salarie: {
+                    nom: user.nom,
+                    prenom: user.prenom
+                },
+                absence: {
+                    type: typeToSave,
+                    date_debut: dateDebut,
+                    date_fin: dateFin,
+                    duree_jours: typeAbsence === 'RECUP' && recupType === 'heures' ? null : dureeJours,
+                    duree_heures: typeAbsence === 'RECUP' ? dureeHeures : null,
+                    commentaire: commentaire || null
+                },
+                soldes: resultSoldes.nouveaux_soldes
+            };
+            
+            try {
+                const pdfResult = await window.api.genererPDF(pdfData);
+                if (pdfResult.success) {
+                    console.log('PDF généré :', pdfResult.filePath);
+                }
+            } catch (error) {
+                console.error('Erreur génération PDF:', error);
+            }
+            
+            // Recharger les données
+            await loadSoldes();
+            await chargerCalendrier();
+            await afficherHistorique();
+            // Message de succès
+            successMessage.textContent = '✅ Absence enregistrée avec succès ! PDF généré.';
+            successMessage.classList.add('show');
+            
+            // Réinitialiser le formulaire
+            document.getElementById('formAbsence').reset();
+            document.getElementById('resumeAbsence').style.display = 'none';
+            document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
+            
+            // Masquer le message après 3 secondes
+            setTimeout(() => {
+                successMessage.classList.remove('show');
+            }, 3000);
+        }
+        
+    } catch (error) {
+        console.error('Erreur lors de l\'enregistrement:', error);
+        errorMessage.textContent = 'Erreur lors de l\'enregistrement de l\'absence';
+        errorMessage.classList.add('show');
+    }
+});
+// ========== AFFICHAGE DE L'HISTORIQUE ==========
+
+async function afficherHistorique() {
+    try {
+        const historiqueContainer = document.getElementById('historiqueList');
+        
+        // Récupérer les absences
+        const toutesAbsences = await window.api.getAbsences(user.id);
+        
+        // Trier par date décroissante et prendre les 5 dernières
+        const dernieresAbsences = toutesAbsences
+            .sort((a, b) => new Date(b.date_debut) - new Date(a.date_debut))
+            .slice(0, 5);
+        
+        if (dernieresAbsences.length === 0) {
+            historiqueContainer.innerHTML = '<p class="text-muted">Aucune absence enregistrée</p>';
+            return;
+        }
+        
+        // Générer le HTML
+        historiqueContainer.innerHTML = dernieresAbsences.map(abs => {
+            const dateD = new Date(abs.date_debut).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+            const dateF = new Date(abs.date_fin).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+            
+            const typeLabels = {
+                'CP_N': 'CP',
+                'CP_N1': 'CP N-1',
+                'RTT': 'RTT',
+                'RECUP': 'Récup',
+                'MALADIE': 'Maladie'
+            };
+            
+            const typeClasses = {
+                'CP_N': 'cp',
+                'CP_N1': 'cp',
+                'RTT': 'rtt',
+                'RECUP': 'recup',
+                'MALADIE': 'maladie'
+            };
+            
+            const duree = abs.duree_jours 
+                ? `${abs.duree_jours.toFixed(1)}j`
+                : `${abs.duree_heures.toFixed(1)}h`;
+            
+            return `
+            <div class="historique-item ${typeClasses[abs.type]}" data-id="${abs.id}">
+                <div class="historique-date">${dateD} - ${dateF}</div>
+                <div class="historique-type">${typeLabels[abs.type]} • ${duree}</div>
+                ${abs.commentaire ? `<div class="historique-duree">${abs.commentaire}</div>` : ''}
+            </div>
+            `;
+        }).join('');
+        
+
+        
+    } catch (error) {
+        console.error('Erreur chargement historique:', error);
+    }
+}
+
 
 // ========== INITIALISATION ==========
 
@@ -484,6 +682,7 @@ async function init() {
     await loadSoldes();
     await initFormAbsence();
     await chargerCalendrier();
+    await afficherHistorique();
 }
 
 init();

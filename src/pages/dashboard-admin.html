@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaCiotatEntrprendre - Administrateur</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/dashboard-admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-left">
+                <img src="../assets/logo_horiz_fdBlanc.png" alt="Logo" class="header-logo">
+            </div>
+            <div class="header-center">
+                <h1>Administration</h1>
+            </div>
+            <div class="header-right">
+                <span id="userName" class="user-name">Admin</span>
+                <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="admin-nav">
+            <button class="nav-btn active" data-section="mes-conges">
+                <i class="fa-solid fa-user"></i> Mes congés
+            </button>
+            <button class="nav-btn" data-section="salaries">
+                <i class="fa-solid fa-users"></i> Salariés
+            </button>
+            <button class="nav-btn" data-section="calendrier">
+                <i class="fa-solid fa-calendar"></i> Calendrier Global
+            </button>
+            <button class="nav-btn" data-section="feries">
+                <i class="fa-solid fa-flag"></i> Jours Fériés
+            </button>
+            <button class="nav-btn" data-section="rtt">
+                <i class="fa-solid fa-calculator"></i> RTT Annuels
+            </button>
+        </nav>
+                
+                    <!-- Section Mes Congés (identique au dashboard user) -->
+            <section id="mes-conges-section" class="content-section active">
+                <div class="user-dashboard-wrapper">
+                    <!-- Calendrier annuel (gauche) -->
+                    <div class="calendar-section">
+                        <div id="calendrierAnnuelUser" class="calendrier-grid">
+                            <!-- Les 12 mois seront générés dynamiquement ici -->
+                        </div>
+                    </div>
+
+                    <!-- Panneau latéral (droite) -->
+                    <aside class="sidebar-panel">
+                        <!-- Soldes -->
+                        <div class="panel-section soldes-section">
+                            <h2><i class="fa-solid fa-chart-bar"></i> Mes soldes</h2>
+                            <div class="soldes-grid">
+                                <div class="solde-mini cp-n1">
+                                    <div class="solde-label">CP N-1</div>
+                                    <div class="solde-value" id="solde-cp-n1-user">-</div>
+                                </div>
+                                <div class="solde-mini cp-n">
+                                    <div class="solde-label">CP N</div>
+                                    <div class="solde-value" id="solde-cp-n-user">-</div>
+                                </div>
+                                <div class="solde-mini rtt">
+                                    <div class="solde-label">RTT</div>
+                                    <div class="solde-value" id="solde-rtt-user">-</div>
+                                </div>
+                                <div class="solde-mini recup">
+                                    <div class="solde-label">Récup</div>
+                                    <div class="solde-value" id="solde-recup-user">-</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Légende -->
+                        <div class="panel-section legende-section">
+                            <h2><i class="fa-solid fa-palette"></i> Légende</h2>
+                            <div class="legende-item">
+                                <span class="legende-color cp"></span>
+                                <span>Congés payés (CP)</span>
+                            </div>
+                            <div class="legende-item">
+                                <span class="legende-color rtt"></span>
+                                <span>RTT</span>
+                            </div>
+                            <div class="legende-item">
+                                <span class="legende-color recup"></span>
+                                <span>Récupération</span>
+                            </div>
+                            <div class="legende-item">
+                                <span class="legende-color maladie"></span>
+                                <span>Arrêt maladie</span>
+                            </div>
+                            <div class="legende-item">
+                                <span class="legende-color ferie"></span>
+                                <span>Jour férié</span>
+                            </div>
+                        </div>
+
+                        <!-- Formulaire poser absence -->
+                        <div class="panel-section form-section">
+                            <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>
+                            <form id="formAbsenceUser">
+                                <div class="form-group-compact">
+                                    <label for="typeAbsenceUser">Type *</label>
+                                    <select id="typeAbsenceUser" name="typeAbsence" required>
+                                        <option value="">-- Sélectionner --</option>
+                                        <option value="CP">Congés payés (CP)</option>
+                                        <option value="MALADIE">Arrêt maladie</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-row-compact">
+                                    <div class="form-group-compact">
+                                        <label for="dateDebutUser">Du *</label>
+                                        <input type="date" id="dateDebutUser" name="dateDebut" required>
+                                    </div>
+                                    <div class="form-group-compact">
+                                        <label for="dateFinUser">Au *</label>
+                                        <input type="date" id="dateFinUser" name="dateFin" required>
+                                    </div>
+                                </div>
+
+                                <div class="form-group-compact">
+                                    <label for="periodeTypeUser">Période *</label>
+                                    <select id="periodeTypeUser" name="periodeType" required>
+                                        <option value="journee">Journée entière</option>
+                                        <option value="demi">Demi-journée</option>
+                                    </select>
+                                </div>
+
+                                <!-- Champs Récup -->
+                                <div id="recupFieldsUser" style="display: none;">
+                                    <div class="form-group-compact">
+                                        <label for="recupTypeUser">Type *</label>
+                                        <select id="recupTypeUser" name="recupType">
+                                            <option value="jours">En jours (7h/j)</option>
+                                            <option value="heures">En heures</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group-compact" id="recupHeuresGroupUser" style="display: none;">
+                                        <label for="recupHeuresUser">Heures *</label>
+                                        <input type="number" id="recupHeuresUser" name="recupHeures" min="0.5" step="0.5">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-compact">
+                                    <label for="commentaireUser">Commentaire</label>
+                                    <textarea id="commentaireUser" name="commentaire" rows="2"></textarea>
+                                </div>
+
+                                <!-- Résumé -->
+                                <div id="resumeAbsenceUser" class="resume-compact" style="display: none;">
+                                    <div><strong>Durée:</strong> <span id="resumeDureeUser">-</span></div>
+                                    <div><strong>Décompte:</strong> <span id="resumeDecompteUser">-</span></div>
+                                    <div id="alerteSoldeUser" class="alert-compact"></div>
+                                    <div id="alertePeriodeUser" class="alert-compact"></div>
+                                </div>
+
+                                <div id="errorMessageUser" class="error-message"></div>
+                                <div id="successMessageUser" class="success-message"></div>
+
+                                <div class="form-actions-compact">
+                                    <button type="submit" class="btn-primary btn-small">Valider</button>
+                                </div>
+                                </form>
+                                    </div>
+
+                                    <!-- Historique -->
+                                        <div class="panel-section historique-section">
+                                            <h2><i class="fa-solid fa-history"></i> Historique récent</h2>
+                                        <div id="historiqueListUser" class="historique-list">
+                                        <p class="text-muted">Aucune absence enregistrée</p>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+                    </section>
+                </div>
+            </section>
+    
+    <!-- Section Salariés -->
+    <section id="salaries-section" class="content-section">
+        <!-- Contenu principal -->
+        <div class="admin-content">
+            
+            <!-- Section Salariés -->
+            <section id="salaries-section" class="content-section active">
+                <div class="section-header">
+                    <h2>Gestion des Salariés</h2>
+                    <button id="btnAjouterSalarie" class="btn-primary">
+                        <i class="fa-solid fa-plus"></i> Ajouter un salarié
+                    </button>
+                </div>
+                
+                <div id="listeSalaries" class="liste-salaries">
+                    <!-- Sera rempli dynamiquement -->
+                </div>
+            </section>
+
+            <!-- Section Calendrier Global -->
+            <section id="calendrier-section" class="content-section">
+                <div class="section-header">
+                    <h2>Calendrier Global</h2>
+                    <div class="year-selector">
+                        <button id="btnPrevYearCal" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span id="anneeCalendrier">2026</span>
+                        <button id="btnNextYearCal" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                
+                <div id="calendrierGlobal" class="calendrier-global">
+                    <!-- Sera rempli dynamiquement -->
+                </div>
+            </section>
+
+            <!-- Section Jours Fériés -->
+            <section id="feries-section" class="content-section">
+                <div class="section-header">
+                    <h2>Gestion des Jours Fériés</h2>
+                    <button id="btnAjouterFerie" class="btn-primary">
+                        <i class="fa-solid fa-plus"></i> Ajouter
+                    </button>
+                </div>
+                
+                <div id="listeFeries" class="liste-feries">
+                    <!-- Sera rempli dynamiquement -->
+                </div>
+            </section>
+
+            <!-- Section RTT Annuels -->
+            <section id="rtt-section" class="content-section">
+                <div class="section-header">
+                    <h2>Tableau RTT Annuels</h2>
+                </div>
+                
+                <div id="tableRTT" class="table-rtt">
+                    <!-- Sera rempli dynamiquement -->
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="../js/dashboard-admin.js"></script>
+</body>
+</html>
