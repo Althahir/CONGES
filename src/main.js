@@ -56,9 +56,15 @@ app.on('window-all-closed', function () {
 // ========== FONCTIONS UTILITAIRES ==========
 
 // Calculer le nombre de jours ouvrés entre deux dates
+// Calculer le nombre de jours ouvrés entre deux dates
 function calculerJoursOuvres(dateDebut, dateFin, joursFeries) {
-    const debut = new Date(dateDebut);
-    const fin = new Date(dateFin);
+    // Parser les dates manuellement pour éviter les problèmes de fuseau horaire
+    const [anneeDebut, moisDebut, jourDebut] = dateDebut.split('-').map(Number);
+    const [anneeFin, moisFin, jourFin] = dateFin.split('-').map(Number);
+    
+    const debut = new Date(anneeDebut, moisDebut - 1, jourDebut);
+    const fin = new Date(anneeFin, moisFin - 1, jourFin);
+    
     let joursOuvres = 0;
     
     // Convertir les jours fériés en tableau de dates ISO
@@ -67,7 +73,12 @@ function calculerJoursOuvres(dateDebut, dateFin, joursFeries) {
     // Parcourir chaque jour entre debut et fin (inclus)
     for (let d = new Date(debut); d <= fin; d.setDate(d.getDate() + 1)) {
         const dayOfWeek = d.getDay();
-        const dateISO = d.toISOString().split('T')[0];
+        
+        // Créer la date ISO manuellement
+        const annee = d.getFullYear();
+        const mois = String(d.getMonth() + 1).padStart(2, '0');
+        const jour = String(d.getDate()).padStart(2, '0');
+        const dateISO = `${annee}-${mois}-${jour}`;
         
         // Exclure samedi (6) et dimanche (0)
         if (dayOfWeek !== 0 && dayOfWeek !== 6) {

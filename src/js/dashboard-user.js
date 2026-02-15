@@ -74,11 +74,15 @@ async function chargerJoursFeries() {
 async function chargerAbsences() {
     try {
         absences = await window.api.getAbsences(user.id);
+        console.log('Absences brutes:', absences);
+        
         // Filtrer pour l'année actuelle
         absences = absences.filter(abs => {
             const annee = new Date(abs.date_debut).getFullYear();
             return annee === anneeActuelle;
         });
+        
+        console.log('Absences filtrées pour', anneeActuelle, ':', absences);
     } catch (error) {
         console.error('Erreur lors du chargement des absences:', error);
         absences = [];
@@ -137,7 +141,8 @@ function genererCalendrier() {
         // Jours du mois
         for (let jour = 1; jour <= nbJours; jour++) {
             const date = new Date(anneeActuelle, mois, jour);
-            const dateISO = date.toISOString().split('T')[0];
+            // Créer la date ISO manuellement pour éviter les problèmes de fuseau horaire
+            const dateISO = `${anneeActuelle}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
             const dayOfWeek = date.getDay();
             
             const jourDiv = document.createElement('div');
@@ -149,30 +154,40 @@ function genererCalendrier() {
                 jourDiv.classList.add('weekend');
             }
             
-            // Jour férié
-            const estFerie = joursFeries.some(f => f.date === dateISO);
-            if (estFerie) {
+           // Jour férié
+            const jourFerie = joursFeries.find(f => f.date === dateISO);
+            if (jourFerie) {
                 jourDiv.classList.add('ferie');
+                jourDiv.setAttribute('data-tooltip', jourFerie.libelle);
             }
-            
+
             // Absence
             const absence = absences.find(abs => {
-                const debut = new Date(abs.date_debut);
-                const fin = new Date(abs.date_fin);
-                return date >= debut && date <= fin;
+                return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
             });
-            
+
             if (absence) {
-                if (absence.type === 'CP' || absence.type === 'CP_N' || absence.type === 'CP_N1') {
+                const type = absence.type.toUpperCase();
+                if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');
-                } else if (absence.type === 'RTT') {
+                    jourDiv.setAttribute('data-tooltip', 'Congés payés');
+                } else if (type === 'RTT') {
                     jourDiv.classList.add('rtt');
-                } else if (absence.type === 'RECUP') {
+                    jourDiv.setAttribute('data-tooltip', 'RTT');
+                } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
-                } else if (absence.type === 'MALADIE') {
+                    jourDiv.setAttribute('data-tooltip', 'Récupération');
+                } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
-                }
+                    jourDiv.setAttribute('data-tooltip', 'Arrêt maladie');
             }
+    
+            // Ajouter le commentaire si présent
+            if (absence.commentaire) {
+                const currentTooltip = jourDiv.getAttribute('data-tooltip');
+                jourDiv.setAttribute('data-tooltip', `${currentTooltip} - ${absence.commentaire}`);
+            }
+        }
             
             joursMoisDiv.appendChild(jourDiv);
         }
@@ -236,9 +251,42 @@ document.getElementById('recupType').addEventListener('change', (e) => {
         document.getElementById('recupHeures').required = false;
     }
 });
-
+// Fonction pour surligner les jours en prévisualisation
+function surlignerJoursPrevisualisation(dateDebut, dateFin) {
+    // Enlever tous les surlignages précédents
+    document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
+    
+    if (!dateDebut || !dateFin) return;
+    
+    const debut = new Date(dateDebut);
+    const fin = new Date(dateFin);
+    
+    // Parcourir chaque jour du calendrier
+    document.querySelectorAll('.jour').forEach(jourDiv => {
+        const jourTexte = jourDiv.textContent.trim();
+        if (!jourTexte || jourDiv.classList.contains('vide')) return;
+        
+        // Récupérer le mois depuis le parent
+        const moisDiv = jourDiv.closest('.mois-calendrier');
+        const moisHeader = moisDiv.querySelector('.mois-header').textContent;
+        const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+        const moisIndex = nomsMois.indexOf(moisHeader);
+        
+        if (moisIndex === -1) return;
+        
+        const jour = parseInt(jourTexte);
+        const dateJour = new Date(anneeActuelle, moisIndex, jour);
+        
+        // Si le jour est dans la plage, le surligner
+        if (dateJour >= debut && dateJour <= fin) {
+            jourDiv.classList.add('preview');
+        }
+    });
+}
 // Bouton "Calculer la durée" (reprise du code existant)
-document.getElementById('btnCalculer').addEventListener('click', async () => {
+// Fonction de calcul (extraite pour être réutilisable)
+async function calculerDureeAbsence() {
     const typeAbsence = document.getElementById('typeAbsence').value;
     const dateDebut = document.getElementById('dateDebut').value;
     const dateFin = document.getElementById('dateFin').value;
@@ -259,39 +307,80 @@ document.getElementById('btnCalculer').addEventListener('click', async () => {
     alerteSolde.textContent = '';
     alertePeriode.textContent = '';
     
-    // Validations
-    if (!typeAbsence) {
-        errorMessage.textContent = 'Veuillez sélectionner un type d\'absence';
-        errorMessage.classList.add('show');
-        return;
-    }
-    
+    // Si pas de dates, masquer le résumé
     if (!dateDebut || !dateFin) {
-        errorMessage.textContent = 'Veuillez saisir les dates';
-        errorMessage.classList.add('show');
-        return;
+        resumeBox.style.display = 'none';
+    return;
     }
     
     if (new Date(dateDebut) > new Date(dateFin)) {
         errorMessage.textContent = 'La date de fin doit être après la date de début';
         errorMessage.classList.add('show');
+        resumeBox.style.display = 'none';
         return;
     }
     
+
     try {
-        let dureeJours = 0;
-        let dureeHeures = 0;
-        
-        // Pour la récup en heures
-        if (typeAbsence === 'RECUP' && recupType === 'heures') {
-            if (!recupHeures || recupHeures <= 0) {
-                errorMessage.textContent = 'Veuillez saisir le nombre d\'heures de récupération';
-                errorMessage.classList.add('show');
-                return;
-            }
-            dureeHeures = parseFloat(recupHeures);
-            dureeJours = dureeHeures / 7;
-        } else {
+    let dureeJours = 0;
+    let dureeHeures = 0;
+    
+    // Calculer la durée d'abord
+    const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+    dureeJours = result.dureeJours;
+    dureeHeures = dureeJours * 7;
+    
+    // Afficher la durée
+    document.getElementById('resumeDuree').textContent = `${dureeJours.toFixed(2)} j`;
+
+    // Surligner les jours dans le calendrier
+    surlignerJoursPrevisualisation(dateDebut, dateFin);
+
+    // Vérifier les chevauchements avec les absences existantes
+    const chevauchement = absences.find(abs => {
+    // Convertir les dates pour comparaison
+    const absDebut = abs.date_debut;
+    const absFin = abs.date_fin;
+    
+    // Chevauchement si :
+    // - dateDebut est entre absDebut et absFin
+    // - OU dateFin est entre absDebut et absFin
+    // - OU l'absence existante est complètement incluse dans la nouvelle période
+    return (dateDebut <= absFin && dateFin >= absDebut);
+});
+
+if (chevauchement) {
+    const typeTexte = {
+        'CP_N': 'CP',
+        'CP_N1': 'CP N-1',
+        'RTT': 'RTT',
+        'RECUP': 'Récupération',
+        'MALADIE': 'Arrêt maladie'
+    }[chevauchement.type] || chevauchement.type;
+    
+    alertePeriode.textContent = `⚠️ Chevauchement avec une absence existante (${typeTexte} du ${chevauchement.date_debut} au ${chevauchement.date_fin})`;
+    alertePeriode.classList.add('show');
+}
+
+// Alerte si période passée
+if (new Date(dateDebut) < new Date()) {
+    const msgExistant = alertePeriode.textContent;
+    if (msgExistant) {
+        alertePeriode.textContent = msgExistant + ' | ⚠️ Période passée';
+    } else {
+        alertePeriode.textContent = '⚠️ Période passée';
+        alertePeriode.classList.add('show');
+    }
+}
+    // Surligner les jours dans le calendrier
+    surlignerJoursPrevisualisation(dateDebut, dateFin);
+    
+    // Si pas de type, juste afficher la durée
+    if (!typeAbsence) {
+        document.getElementById('resumeDecompte').textContent = 'Sélectionnez un type';
+        resumeBox.style.display = 'block';
+        return;
+    }else {
             const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
             dureeJours = result.dureeJours;
             dureeHeures = dureeJours * 7;
@@ -301,14 +390,12 @@ document.getElementById('btnCalculer').addEventListener('click', async () => {
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
         
         // Calcul du décompte selon le type
-        let decompteCP_N1 = 0;
-        let decompteCP_N = 0;
-        let decompteRTT = 0;
-        let decompteRecup = 0;
-        let soldeApres = '';
         let decompteTexte = '';
         
         if (typeAbsence === 'CP') {
+            let decompteCP_N1 = 0;
+            let decompteCP_N = 0;
+            
             if (soldes.cp_n1 >= dureeJours) {
                 decompteCP_N1 = dureeJours;
             } else {
@@ -329,9 +416,8 @@ document.getElementById('btnCalculer').addEventListener('click', async () => {
             }
             
         } else if (typeAbsence === 'RTT') {
-            decompteRTT = dureeJours;
-            const nouveauRTT = soldes.rtt - decompteRTT;
-            decompteTexte = `${decompteRTT.toFixed(2)} j de RTT`;
+            const nouveauRTT = soldes.rtt - dureeJours;
+            decompteTexte = `${dureeJours.toFixed(2)} j de RTT`;
             
             if (nouveauRTT < 0) {
                 alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRTT).toFixed(2)} j`;
@@ -339,9 +425,8 @@ document.getElementById('btnCalculer').addEventListener('click', async () => {
             }
             
         } else if (typeAbsence === 'RECUP') {
-            decompteRecup = dureeHeures;
-            const nouveauRecup = soldes.recup_heures - decompteRecup;
-            decompteTexte = `${decompteRecup.toFixed(1)} h`;
+            const nouveauRecup = soldes.recup_heures - dureeHeures;
+            decompteTexte = `${dureeHeures.toFixed(1)} h`;
             
             if (nouveauRecup < 0) {
                 alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRecup).toFixed(1)} h`;
@@ -372,8 +457,20 @@ document.getElementById('btnCalculer').addEventListener('click', async () => {
         console.error('Erreur lors du calcul:', error);
         errorMessage.textContent = 'Erreur lors du calcul';
         errorMessage.classList.add('show');
+        resumeBox.style.display = 'none';
     }
-});
+}
+
+// Calculer automatiquement quand les champs changent
+document.getElementById('typeAbsence').addEventListener('change', calculerDureeAbsence);
+document.getElementById('dateDebut').addEventListener('change', calculerDureeAbsence);
+document.getElementById('dateFin').addEventListener('change', calculerDureeAbsence);
+document.getElementById('periodeType').addEventListener('change', calculerDureeAbsence);
+document.getElementById('recupType').addEventListener('change', calculerDureeAbsence);
+document.getElementById('recupHeures').addEventListener('input', calculerDureeAbsence);
+
+// Garder le bouton calculer pour forcer un recalcul si besoin
+document.getElementById('btnCalculer').addEventListener('click', calculerDureeAbsence);
 
 // Bouton déconnexion
 document.getElementById('logoutBtn').addEventListener('click', () => {

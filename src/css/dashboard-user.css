@@ -12,7 +12,7 @@ body {
 
 /* ========== HEADER ========== */
 .dashboard-header {
-    background: linear-gradient(90deg, var(--orange) 0%, var(--bleu) 100%);
+    background: linear-gradient(90deg, var(--bleu) 0%,var(--mauve) 25%, var(--rouge) 50%, var(--orange) 75%, var(--jaune) 100%);
     color: white;
     padding: 15px 30px;
     display: flex;
@@ -165,30 +165,34 @@ body {
 }
 
 .jour.ferie {
-    background: #e0e0e0;
+    background: var(--jaune);
     color: #666;
+}
+.jour.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
 }
 
 .jour.cp {
-    background: #3B82F6;
+    background: var(--bleu);
     color: white;
     font-weight: bold;
 }
 
 .jour.rtt {
-    background: #10B981;
+    background:var(--mauve);
     color: white;
     font-weight: bold;
 }
 
 .jour.recup {
-    background: #F59E0B;
+    background: var(--rouge);
     color: white;
     font-weight: bold;
 }
 
 .jour.maladie {
-    background: #EF4444;
+    background: var(--orange);
     color: white;
     font-weight: bold;
 }
@@ -275,23 +279,27 @@ body {
 }
 
 .legende-color.cp {
-    background: #3B82F6;
+    background: var(--bleu);
 }
 
 .legende-color.rtt {
-    background: #10B981;
+    background: var(--mauve);
 }
 
 .legende-color.recup {
-    background: #F59E0B;
+    background: var(--rouge);
 }
 
 .legende-color.maladie {
-    background: #EF4444;
+    background: var(--orange);
 }
 
 .legende-color.ferie {
-    background: #e0e0e0;
+    background: var(--jaune);
+}
+.legende-color.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
 }
 
 /* ========== FORMULAIRE COMPACT ========== */
@@ -361,24 +369,122 @@ body {
     font-style: italic;
 }
 
+/* ========== TOOLTIP ========== */
+.jour {
+    position: relative;
+}
+
+.jour[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgb(233, 232, 232);
+    color: var(--bleu);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 5px;
+}
+
+.jour[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    pointer-events: none;
+}
+
 /* ========== RESPONSIVE ========== */
+@media (max-width: 1400px) {
+    .jour {
+        font-size: 0.7em;
+        height: 28px;
+    }
+    
+    .jours-mois {
+        grid-auto-rows: 28px;
+    }
+}
+
 @media (max-width: 1200px) {
     .calendrier-grid {
         grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .dashboard-content {
+        grid-template-columns: 1fr 320px;
+    }
+}
+
+@media (max-width: 1000px) {
+    .jour {
+        font-size: 0.65em;
+        height: 25px;
+    }
+    
+    .jours-mois {
+        grid-auto-rows: 25px;
+    }
+    
+    .mois-header {
+        font-size: 0.85em;
     }
 }
 
 @media (max-width: 900px) {
     .dashboard-content {
         grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
     }
     
     .sidebar-panel {
         border-left: none;
         border-top: 1px solid #e0e0e0;
+        max-height: 50vh;
     }
     
     .calendrier-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+@media (max-width: 600px) {
+    .header-center h1 {
+        font-size: 1.4em;
+    }
+    
+    .header-logo {
+        height: 30px;
+    }
+    
+    .calendrier-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+    
+    .soldes-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+.jour.preview {
+    background: rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Si déjà une autre classe (ferie, cp, etc), ne pas écraser */
+.jour.ferie.preview {
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+
+#btnCalculer {
+    display: none;
 }
