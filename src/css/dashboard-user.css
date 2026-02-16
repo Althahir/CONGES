@@ -9,6 +9,9 @@ body {
     flex-direction: column;
     height: 100vh;
 }
+#calendrier-section {
+    min-height: 80vh;
+}
 
 /* ========== HEADER ========== */
 .dashboard-header {

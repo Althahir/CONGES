@@ -19,6 +19,8 @@ let anneeCalendrier = new Date().getFullYear();
 const navBtns = document.querySelectorAll('.nav-btn');
 const sections = document.querySelectorAll('.content-section');
 
+
+
 navBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         // Retirer active de tous
@@ -284,8 +286,9 @@ async function chargerCalendrierGlobal() {
             
             moisDiv.appendChild(joursMoisDiv);
             calendrierGrid.appendChild(moisDiv);
-            console.log('=== FIN génération calendrier, nombre de mois ajoutés:', calendrierGrid.children.length);
-        }
+        }  // ← Fin de la boucle for
+        
+        console.log('=== FIN génération calendrier, nombre de mois ajoutés:', calendrierGrid.children.length);
         
     } catch (error) {
     console.error('Erreur chargement calendrier global:', error);

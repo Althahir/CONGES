@@ -231,6 +231,7 @@ body {
     background: white;
     padding: 20px;
     border-radius: 8px;
+    min-height: 600px; /* ← AJOUTE CETTE LIGNE */
 }
 
 /* ========== JOURS FÉRIÉS ========== */
@@ -412,6 +413,31 @@ table tr:hover {
     flex: 1;
     height: 3px;
     border-radius: 1px;
+}
+
+/* Couleurs des absences dans le calendrier global */
+.jour.cp {
+    background: rgb(0, 108, 137);
+    color: white;
+    font-weight: bold;
+}
+
+.jour.rtt {
+    background: rgb(116, 43, 135);
+    color: white;
+    font-weight: bold;
+}
+
+.jour.recup {
+    background: rgb(181, 22, 63);
+    color: white;
+    font-weight: bold;
+}
+
+.jour.maladie {
+    background: rgb(237, 113, 17);
+    color: white;
+    font-weight: bold;
 }
 
 /* Tooltip (déjà présent mais on s'assure qu'il fonctionne) */
@@ -709,3 +735,8 @@ table tr:hover {
         gap: 10px;
     }
 }
+
+
+
+
+
