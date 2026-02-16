@@ -43,6 +43,82 @@
             </button>
         </nav>
 
+        <!-- Modale Ajouter/Modifier Salarié -->
+        <div id="modalSalarie" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Ajouter un salarié</h2>
+                    <button class="modal-close" id="closeModal">&times;</button>
+                </div>
+                
+                <form id="formSalarie">
+                    <input type="hidden" id="salarieId" value="">
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="nom">Nom *</label>
+                            <input type="text" id="nom" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="prenom">Prénom *</label>
+                            <input type="text" id="prenom" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date_embauche">Date d'embauche *</label>
+                            <input type="date" id="date_embauche" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="type_contrat">Type de contrat *</label>
+                            <select id="type_contrat" required>
+                                <option value="CDI">CDI</option>
+                                <option value="CDD">CDD</option>
+                                <option value="Stage">Stage</option>
+                                <option value="Alternance">Alternance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cp_mensuel">CP mensuels (jours) *</label>
+                        <input type="number" id="cp_mensuel" step="0.01" value="2.08333" required>
+                        <small>2.08333 pour un temps plein (25 jours / 12 mois)</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="a_droit_rtt" value="1">
+                                A droit aux RTT
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="a_droit_recup" value="1">
+                                A droit à la récupération
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="errorModalMessage" class="error-message"></div>
+                    <div id="successModalMessage" class="success-message"></div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" id="cancelModal">Annuler</button>
+                        <button type="submit" class="btn-primary">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+  
         <!-- Contenu principal -->
         <div class="admin-content">
             

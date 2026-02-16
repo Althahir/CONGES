@@ -680,3 +680,97 @@ ipcMain.handle('calculerDuree', async (event, dateDebut, dateFin, periodeType) =
         );
     });
 });
+// ========== GESTION DES SALARIÉS (ADMIN) ==========
+
+// Créer un nouveau salarié
+ipcMain.handle('createSalarie', async (event, salarieData) => {
+    return new Promise((resolve, reject) => {
+        const { nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup } = salarieData;
+        
+        db.run(
+            `INSERT INTO salaries (nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup, role, actif, premiere_connexion)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'utilisateur', 1, 1)`,
+            [nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup],
+            function(err) {
+                if (err) {
+                    console.error('Erreur création salarié:', err);
+                    reject(err);
+                } else {
+                    console.log('Salarié créé avec ID:', this.lastID);
+                    
+                    // Créer les soldes pour l'année en cours
+                    const annee = new Date().getFullYear();
+                    db.run(
+                        `INSERT INTO soldes (salarie_id, annee, cp_n, cp_n1, rtt, recup_heures)
+                         VALUES (?, ?, 0, 0, 0, 0)`,
+                        [this.lastID, annee],
+                        (errSoldes) => {
+                            if (errSoldes) {
+                                console.error('Erreur création soldes:', errSoldes);
+                            }
+                        }
+                    );
+                    
+                    resolve({ success: true, id: this.lastID });
+                }
+            }
+        );
+    });
+});
+
+// Modifier un salarié
+ipcMain.handle('updateSalarie', async (event, salarieId, salarieData) => {
+    return new Promise((resolve, reject) => {
+        const { nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup } = salarieData;
+        
+        db.run(
+            `UPDATE salaries 
+             SET nom = ?, prenom = ?, email = ?, date_embauche = ?, type_contrat = ?, 
+                 cp_mensuel = ?, a_droit_rtt = ?, a_droit_recup = ?
+             WHERE id = ?`,
+            [nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup, salarieId],
+            function(err) {
+                if (err) {
+                    console.error('Erreur modification salarié:', err);
+                    reject(err);
+                } else {
+                    resolve({ success: true });
+                }
+            }
+        );
+    });
+});
+
+// Désactiver un salarié (ne pas supprimer pour garder l'historique)
+ipcMain.handle('deactivateSalarie', async (event, salarieId) => {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'UPDATE salaries SET actif = 0 WHERE id = ?',
+            [salarieId],
+            function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({ success: true });
+                }
+            }
+        );
+    });
+});
+
+// Réinitialiser le mot de passe d'un salarié
+ipcMain.handle('resetPassword', async (event, salarieId) => {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'UPDATE salaries SET mot_de_passe = NULL, premiere_connexion = 1 WHERE id = ?',
+            [salarieId],
+            function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({ success: true });
+                }
+            }
+        );
+    });
+});

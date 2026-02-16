@@ -13,10 +13,13 @@ contextBridge.exposeInMainWorld('api', {
     getAllSalaries: () => ipcRenderer.invoke('getAllSalaries'),
     createSalarie: (data) => ipcRenderer.invoke('createSalarie', data),
     updateSalarie: (id, data) => ipcRenderer.invoke('updateSalarie', id, data),
+    deactivateSalarie: (id) => ipcRenderer.invoke('deactivateSalarie', id),
+    resetPassword: (id) => ipcRenderer.invoke('resetPassword', id),
     
     // Gestion des soldes
     getSoldes: (salarieId, annee) => ipcRenderer.invoke('getSoldes', salarieId, annee),
     updateSoldes: (salarieId, annee, soldes) => ipcRenderer.invoke('updateSoldes', salarieId, annee, soldes),
+    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
     
     // Gestion des absences
     createAbsence: (data) => ipcRenderer.invoke('createAbsence', data),
@@ -35,19 +38,9 @@ contextBridge.exposeInMainWorld('api', {
     // Calcul de durée
     calculerDuree: (dateDebut, dateFin, periodeType) => ipcRenderer.invoke('calculerDuree', dateDebut, dateFin, periodeType),
 
-    // Navigation
-    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page),
-    
-    // Création et mise à jour
-    createAbsence: (absenceData) => ipcRenderer.invoke('createAbsence', absenceData),
-    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
-    
-    // Navigation
-    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page),
-
-    // Création et mise à jour
-    createAbsence: (absenceData) => ipcRenderer.invoke('createAbsence', absenceData),
-    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
+    // PDF
     genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),
-    
+
+    // Navigation
+    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page)
 });

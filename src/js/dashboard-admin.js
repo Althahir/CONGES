@@ -107,6 +107,19 @@ async function chargerSalaries() {
                             </div>
                         </div>
                     ` : ''}
+                    <div class="salarie-actions">
+                        <button class="btn-action btn-edit" onclick="editSalarie(${salarie.id})" title="Modifier">
+                            <i class="fa-solid fa-edit"></i>
+                        </button>
+                        <button class="btn-action btn-reset" onclick="resetPassword(${salarie.id}, '${salarie.nom}', '${salarie.prenom}')" title="Réinitialiser mot de passe">
+                            <i class="fa-solid fa-key"></i>
+                        </button>
+                        ${salarie.role !== 'admin' ? `
+                            <button class="btn-action btn-delete" onclick="deactivateSalarie(${salarie.id}, '${salarie.nom}', '${salarie.prenom}')" title="Désactiver">
+                                <i class="fa-solid fa-user-slash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
             `;
         }));
@@ -335,11 +348,139 @@ async function chargerTableauRTT() {
     // TODO: Afficher le tableau des RTT annuels
 }
 
-// ========== BOUTONS ==========
+// ========== GESTION MODALE SALARIÉ ==========
 
+const modal = document.getElementById('modalSalarie');
+const modalTitle = document.getElementById('modalTitle');
+const formSalarie = document.getElementById('formSalarie');
+let editingSalarieId = null;
+
+// Ouvrir la modale pour ajouter
 document.getElementById('btnAjouterSalarie').addEventListener('click', () => {
-    alert('Fonctionnalité "Ajouter un salarié" à implémenter');
+    editingSalarieId = null;
+    modalTitle.textContent = 'Ajouter un salarié';
+    formSalarie.reset();
+    document.getElementById('salarieId').value = '';
+    modal.style.display = 'flex';
 });
+
+// Fermer la modale
+document.getElementById('closeModal').addEventListener('click', () => {
+    modal.style.display = 'none';
+});
+
+document.getElementById('cancelModal').addEventListener('click', () => {
+    modal.style.display = 'none';
+});
+
+// Clic en dehors de la modale pour fermer
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+        modal.style.display = 'none';
+    }
+});
+
+// Soumission du formulaire
+formSalarie.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const errorMsg = document.getElementById('errorModalMessage');
+    const successMsg = document.getElementById('successModalMessage');
+    
+    errorMsg.classList.remove('show');
+    successMsg.classList.remove('show');
+    
+    const salarieData = {
+        nom: document.getElementById('nom').value.trim(),
+        prenom: document.getElementById('prenom').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        date_embauche: document.getElementById('date_embauche').value,
+        type_contrat: document.getElementById('type_contrat').value,
+        cp_mensuel: parseFloat(document.getElementById('cp_mensuel').value),
+        a_droit_rtt: document.getElementById('a_droit_rtt').checked ? 1 : 0,
+        a_droit_recup: document.getElementById('a_droit_recup').checked ? 1 : 0
+    };
+    
+    try {
+        if (editingSalarieId) {
+            // Modification
+            await window.api.updateSalarie(editingSalarieId, salarieData);
+            successMsg.textContent = 'Salarié modifié avec succès !';
+        } else {
+            // Création
+            await window.api.createSalarie(salarieData);
+            successMsg.textContent = 'Salarié créé avec succès !';
+        }
+        
+        successMsg.classList.add('show');
+        
+        // Recharger la liste
+        await chargerSalaries();
+        
+        // Fermer après 1 seconde
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        errorMsg.textContent = 'Erreur lors de l\'enregistrement';
+        errorMsg.classList.add('show');
+    }
+});
+
+// Fonction pour ouvrir la modale en mode édition
+window.editSalarie = async (salarieId) => {
+    try {
+        const salarie = await window.api.getSalarie(salarieId);
+        
+        editingSalarieId = salarieId;
+        modalTitle.textContent = 'Modifier le salarié';
+        
+        document.getElementById('salarieId').value = salarieId;
+        document.getElementById('nom').value = salarie.nom;
+        document.getElementById('prenom').value = salarie.prenom;
+        document.getElementById('email').value = salarie.email;
+        document.getElementById('date_embauche').value = salarie.date_embauche;
+        document.getElementById('type_contrat').value = salarie.type_contrat;
+        document.getElementById('cp_mensuel').value = salarie.cp_mensuel;
+        document.getElementById('a_droit_rtt').checked = salarie.a_droit_rtt === 1;
+        document.getElementById('a_droit_recup').checked = salarie.a_droit_recup === 1;
+        
+        modal.style.display = 'flex';
+    } catch (error) {
+        console.error('Erreur chargement salarié:', error);
+    }
+};
+
+// Fonction pour désactiver un salarié
+window.deactivateSalarie = async (salarieId, nom, prenom) => {
+    if (confirm(`Êtes-vous sûr de vouloir désactiver ${prenom} ${nom} ?\n\nLe salarié ne pourra plus se connecter mais son historique sera conservé.`)) {
+        try {
+            await window.api.deactivateSalarie(salarieId);
+            await chargerSalaries();
+            alert('Salarié désactivé avec succès');
+        } catch (error) {
+            console.error('Erreur désactivation:', error);
+            alert('Erreur lors de la désactivation');
+        }
+    }
+};
+
+// Fonction pour réinitialiser le mot de passe
+window.resetPassword = async (salarieId, nom, prenom) => {
+    if (confirm(`Réinitialiser le mot de passe de ${prenom} ${nom} ?\n\nLe salarié devra créer un nouveau mot de passe à sa prochaine connexion.`)) {
+        try {
+            await window.api.resetPassword(salarieId);
+            alert('Mot de passe réinitialisé avec succès');
+        } catch (error) {
+            console.error('Erreur réinitialisation:', error);
+            alert('Erreur lors de la réinitialisation');
+        }
+    }
+};
+
+// ========== AUTRES BOUTONS ==========
 
 document.getElementById('btnAjouterFerie').addEventListener('click', () => {
     alert('Fonctionnalité "Ajouter un jour férié" à implémenter');
