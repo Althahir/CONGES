@@ -259,6 +259,7 @@ body {
     align-items: center;
     gap: 15px;
     color: var(--bleu);
+    margin-left: 50px;
 }
 
 .year-selector span {

@@ -36,29 +36,45 @@ document.getElementById('btnNextYear').addEventListener('click', () => {
 
 async function loadSoldes() {
     try {
-        const soldes = await window.api.getSoldes(user.id, anneeActuelle);
+        const annee = new Date().getFullYear();
+        const soldes = await window.api.getSoldes(user.id, annee);
+        const salarie = await window.api.getSalarie(user.id);
         
         if (soldes) {
-            document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + ' j';
-            document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + ' j';
-            document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + ' j';
+            document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + 'j';
+            document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
             
-            const recupJours = Math.floor(soldes.recup_heures / 7);
-            const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
-            document.getElementById('solde-recup').innerHTML = 
-                `${soldes.recup_heures.toFixed(1)} h <small class="small-recup">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
-        } else {
-            // Créer les soldes si ils n'existent pas
-            await window.api.updateSoldes(user.id, anneeActuelle, {
-                cp_n: 0,
-                cp_n1: 0,
-                rtt: 0,
-                recup_heures: 0
-            });
-            loadSoldes();
+            // RTT
+            const tuileRTT = document.querySelector('.solde-mini.rtt');
+            if (salarie.a_droit_rtt === 1) {
+                document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
+                if (tuileRTT) tuileRTT.style.opacity = '1';
+            } else {
+                document.getElementById('solde-rtt').textContent = 'N/A';
+                if (tuileRTT) {
+                    tuileRTT.style.opacity = '0.4';
+                    tuileRTT.style.cursor = 'not-allowed';
+                }
+            }
+            
+            // Récup
+            const tuileRecup = document.querySelector('.solde-mini.recup');
+            if (salarie.a_droit_recup === 1) {
+                const recupJours = Math.floor(soldes.recup_heures / 7);
+                const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
+                document.getElementById('solde-recup').innerHTML = 
+                    `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+                if (tuileRecup) tuileRecup.style.opacity = '1';
+            } else {
+                document.getElementById('solde-recup').textContent = 'N/A';
+                if (tuileRecup) {
+                    tuileRecup.style.opacity = '0.4';
+                    tuileRecup.style.cursor = 'not-allowed';
+                }
+            }
         }
     } catch (error) {
-        console.error('Erreur lors du chargement des soldes:', error);
+        console.error('Erreur chargement soldes:', error);
     }
 }
 

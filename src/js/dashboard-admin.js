@@ -536,16 +536,40 @@ async function initMesConges() {
 async function loadSoldesAdmin() {
     try {
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
+        const salarie = await window.api.getSalarie(user.id);
         
         if (soldes) {
             document.getElementById('solde-cp-n1-user').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n-user').textContent = soldes.cp_n.toFixed(2) + 'j';
-            document.getElementById('solde-rtt-user').textContent = soldes.rtt.toFixed(2) + 'j';
             
-            const recupJours = Math.floor(soldes.recup_heures / 7);
-            const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
-            document.getElementById('solde-recup-user').innerHTML = 
-                `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+            // RTT
+            const tuileRTT = document.querySelector('#mes-conges-section .solde-mini.rtt');
+            if (salarie.a_droit_rtt === 1) {
+                document.getElementById('solde-rtt-user').textContent = soldes.rtt.toFixed(2) + 'j';
+                if (tuileRTT) tuileRTT.style.opacity = '1';
+            } else {
+                document.getElementById('solde-rtt-user').textContent = 'N/A';
+                if (tuileRTT) {
+                    tuileRTT.style.opacity = '0.4';
+                    tuileRTT.style.cursor = 'not-allowed';
+                }
+            }
+            
+            // Récup
+            const tuileRecup = document.querySelector('#mes-conges-section .solde-mini.recup');
+            if (salarie.a_droit_recup === 1) {
+                const recupJours = Math.floor(soldes.recup_heures / 7);
+                const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
+                document.getElementById('solde-recup-user').innerHTML = 
+                    `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+                if (tuileRecup) tuileRecup.style.opacity = '1';
+            } else {
+                document.getElementById('solde-recup-user').textContent = 'N/A';
+                if (tuileRecup) {
+                    tuileRecup.style.opacity = '0.4';
+                    tuileRecup.style.cursor = 'not-allowed';
+                }
+            }
         }
     } catch (error) {
         console.error('Erreur chargement soldes:', error);
@@ -707,31 +731,245 @@ async function initFormAbsenceAdmin() {
         console.error('Erreur init formulaire:', error);
     }
     
-    // Événements formulaire
+    // ========== ÉVÉNEMENTS DU FORMULAIRE ==========
+    
     const typeSelect = document.getElementById('typeAbsenceUser');
     const recupFields = document.getElementById('recupFieldsUser');
     const recupTypeSelect = document.getElementById('recupTypeUser');
     const recupHeuresGroup = document.getElementById('recupHeuresGroupUser');
+    const dateDebut = document.getElementById('dateDebutUser');
+    const dateFin = document.getElementById('dateFinUser');
+    const periodeType = document.getElementById('periodeTypeUser');
+    const recupHeures = document.getElementById('recupHeuresUser');
     
+    // Afficher/masquer champs Récup
     if (typeSelect) {
         typeSelect.addEventListener('change', (e) => {
             if (recupFields) {
                 recupFields.style.display = e.target.value === 'RECUP' ? 'block' : 'none';
             }
+            calculerDureeAbsenceAdmin();
         });
     }
     
+    // Afficher/masquer champ heures
     if (recupTypeSelect) {
         recupTypeSelect.addEventListener('change', (e) => {
             if (recupHeuresGroup) {
                 recupHeuresGroup.style.display = e.target.value === 'heures' ? 'block' : 'none';
-                const recupHeuresInput = document.getElementById('recupHeuresUser');
-                if (recupHeuresInput) {
-                    recupHeuresInput.required = e.target.value === 'heures';
+                if (recupHeures) {
+                    recupHeures.required = e.target.value === 'heures';
                 }
+            }
+            calculerDureeAbsenceAdmin();
+        });
+    }
+    
+    // Calcul automatique sur changement de dates
+    if (dateDebut) {
+        dateDebut.addEventListener('change', () => {
+            calculerDureeAbsenceAdmin();
+            if (dateFin.value) {
+                surlignerJoursPrevisualisation(dateDebut.value, dateFin.value);
             }
         });
     }
+    
+    if (dateFin) {
+        dateFin.addEventListener('change', () => {
+            calculerDureeAbsenceAdmin();
+            if (dateDebut.value) {
+                surlignerJoursPrevisualisation(dateDebut.value, dateFin.value);
+            }
+        });
+    }
+    
+    if (periodeType) {
+        periodeType.addEventListener('change', calculerDureeAbsenceAdmin);
+    }
+    
+    if (recupHeures) {
+        recupHeures.addEventListener('input', calculerDureeAbsenceAdmin);
+    }
+}
+
+// ========== CALCUL ET VALIDATION DES ABSENCES (ADMIN) ==========
+
+// Fonction pour calculer la durée automatiquement
+async function calculerDureeAbsenceAdmin() {
+    const typeAbsence = document.getElementById('typeAbsenceUser').value;
+    const dateDebut = document.getElementById('dateDebutUser').value;
+    const dateFin = document.getElementById('dateFinUser').value;
+    const periodeType = document.getElementById('periodeTypeUser').value;
+    const recupType = document.getElementById('recupTypeUser')?.value;
+    const recupHeures = document.getElementById('recupHeuresUser')?.value;
+    
+    const resumeDiv = document.getElementById('resumeAbsenceUser');
+    const resumeDuree = document.getElementById('resumeDureeUser');
+    const resumeDecompte = document.getElementById('resumeDecompteUser');
+    const alerteSolde = document.getElementById('alerteSoldeUser');
+    const alertePeriode = document.getElementById('alertePeriodeUser');
+    
+    // Réinitialiser les alertes
+    alerteSolde.textContent = '';
+    alertePeriode.textContent = '';
+    
+    if (!dateDebut || !dateFin) {
+        resumeDiv.style.display = 'none';
+        return;
+    }
+    
+    // Vérifier si la période est dans le passé
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    const debut = new Date(dateDebut);
+    
+    if (debut < aujourdhui) {
+        alertePeriode.textContent = '⚠️ La période commence dans le passé';
+    }
+    
+    if (!typeAbsence) {
+        resumeDiv.style.display = 'block';
+        try {
+            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            resumeDuree.textContent = `${result.dureeJours.toFixed(2)} jour(s)`;
+            resumeDecompte.textContent = 'Sélectionnez un type d\'absence';
+        } catch (error) {
+            console.error('Erreur calcul durée:', error);
+        }
+        return;
+    }
+    
+    try {
+        let dureeJours = 0;
+        let dureeHeures = 0;
+        
+        // Calcul selon le type
+        if (typeAbsence === 'RECUP' && recupType === 'heures') {
+            if (!recupHeures || recupHeures <= 0) {
+                resumeDiv.style.display = 'none';
+                return;
+            }
+            dureeHeures = parseFloat(recupHeures);
+            dureeJours = dureeHeures / 7;
+        } else {
+            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            dureeJours = result.dureeJours;
+            dureeHeures = dureeJours * 7;
+        }
+        
+        // Récupérer les soldes actuels
+        const soldes = await window.api.getSoldes(user.id, anneeActuelle);
+        
+        // Afficher la durée
+        resumeDuree.textContent = typeAbsence === 'RECUP' && recupType === 'heures' 
+            ? `${dureeHeures.toFixed(1)} heure(s)` 
+            : `${dureeJours.toFixed(2)} jour(s)`;
+        
+        // Calculer et afficher le décompte selon le type
+        let decompteText = '';
+        let soldeNegatif = false;
+        
+        if (typeAbsence === 'CP') {
+            const cpN1Utilise = Math.min(dureeJours, soldes.cp_n1);
+            const cpNUtilise = Math.max(0, dureeJours - soldes.cp_n1);
+            const nouveauCPN1 = soldes.cp_n1 - cpN1Utilise;
+            const nouveauCPN = soldes.cp_n - cpNUtilise;
+            
+            if (cpN1Utilise > 0) {
+                decompteText = `CP N-1: ${cpN1Utilise.toFixed(2)}j`;
+                if (cpNUtilise > 0) {
+                    decompteText += ` + CP N: ${cpNUtilise.toFixed(2)}j`;
+                }
+            } else {
+                decompteText = `CP N: ${dureeJours.toFixed(2)}j`;
+            }
+            
+            decompteText += ` (reste: ${nouveauCPN1.toFixed(2)}j N-1 + ${nouveauCPN.toFixed(2)}j N)`;
+            
+            if (nouveauCPN < 0) {
+                soldeNegatif = true;
+            }
+            
+        } else if (typeAbsence === 'RTT') {
+            const nouveauRTT = soldes.rtt - dureeJours;
+            decompteText = `RTT: ${dureeJours.toFixed(2)}j (reste: ${nouveauRTT.toFixed(2)}j)`;
+            if (nouveauRTT < 0) {
+                soldeNegatif = true;
+            }
+            
+        } else if (typeAbsence === 'RECUP') {
+            const nouvelleRecup = soldes.recup_heures - dureeHeures;
+            decompteText = `Récup: ${dureeHeures.toFixed(1)}h (reste: ${nouvelleRecup.toFixed(1)}h)`;
+            if (nouvelleRecup < 0) {
+                soldeNegatif = true;
+            }
+            
+        } else if (typeAbsence === 'MALADIE') {
+            decompteText = 'Arrêt maladie (pas de décompte)';
+        }
+        
+        resumeDecompte.textContent = decompteText;
+        
+        // Alerte si solde négatif
+        if (soldeNegatif) {
+            alerteSolde.textContent = '⚠️ Cette absence mettra votre solde en négatif';
+        }
+        
+        // Vérifier les chevauchements
+        const absences = await window.api.getAbsences(user.id);
+        const chevauchement = absences.some(abs => {
+            return (dateDebut >= abs.date_debut && dateDebut <= abs.date_fin) ||
+                   (dateFin >= abs.date_debut && dateFin <= abs.date_fin) ||
+                   (dateDebut <= abs.date_debut && dateFin >= abs.date_fin);
+        });
+        
+        if (chevauchement) {
+            alertePeriode.textContent = '⚠️ Cette période chevauche une absence existante';
+        }
+        
+        resumeDiv.style.display = 'block';
+        
+    } catch (error) {
+        console.error('Erreur calcul:', error);
+    }
+}
+
+// Fonction de surlignage des jours (copie de dashboard-user.js)
+function surlignerJoursPrevisualisation(dateDebut, dateFin) {
+    // Enlever tous les surlignages précédents
+    document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
+    
+    if (!dateDebut || !dateFin) return;
+    
+    // Parser les dates manuellement en ISO
+    const [anneeDebut, moisDebut, jourDebut] = dateDebut.split('-').map(Number);
+    const [anneeFin, moisFin, jourFin] = dateFin.split('-').map(Number);
+    
+    // Parcourir chaque jour du calendrier
+    document.querySelectorAll('#calendrierAnnuelUser .jour').forEach(jourDiv => {
+        const jourTexte = jourDiv.textContent.trim();
+        if (!jourTexte || jourDiv.classList.contains('vide')) return;
+        
+        // Récupérer le mois depuis le parent
+        const moisDiv = jourDiv.closest('.mois-calendrier');
+        const moisHeader = moisDiv.querySelector('.mois-header').textContent;
+        const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+        const moisIndex = nomsMois.indexOf(moisHeader);
+        
+        if (moisIndex === -1) return;
+        
+        const jour = parseInt(jourTexte);
+        
+        // Créer la date ISO du jour du calendrier
+        const dateJourISO = `${anneeActuelle}-${String(moisIndex + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+        
+        // Si le jour est dans la plage, le surligner
+        if (dateJourISO >= dateDebut && dateJourISO <= dateFin) {
+            jourDiv.classList.add('preview');
+        }
+    });
 }
 
 async function afficherHistoriqueAdmin() {
@@ -790,3 +1028,139 @@ async function init() {
 }
 
 init();
+
+// ========== SOUMISSION DU FORMULAIRE ADMIN "MES CONGÉS" ==========
+
+const formAbsenceUser = document.getElementById('formAbsenceUser');
+
+if (formAbsenceUser) {
+    formAbsenceUser.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const errorMsg = document.getElementById('errorMessageUser');
+        const successMsg = document.getElementById('successMessageUser');
+        
+        errorMsg.textContent = '';
+        errorMsg.classList.remove('show');
+        successMsg.textContent = '';
+        successMsg.classList.remove('show');
+        
+        const typeAbsence = document.getElementById('typeAbsenceUser').value;
+        const dateDebut = document.getElementById('dateDebutUser').value;
+        const dateFin = document.getElementById('dateFinUser').value;
+        const periodeType = document.getElementById('periodeTypeUser').value;
+        const commentaire = document.getElementById('commentaireUser').value;
+        const recupType = document.getElementById('recupTypeUser')?.value;
+        const recupHeures = document.getElementById('recupHeuresUser')?.value;
+        
+        if (!typeAbsence || !dateDebut || !dateFin) {
+            errorMsg.textContent = 'Veuillez remplir tous les champs obligatoires';
+            errorMsg.classList.add('show');
+            return;
+        }
+        
+        try {
+            // Calculer la durée
+            let dureeJours = 0;
+            let dureeHeures = 0;
+            
+            if (typeAbsence === 'RECUP' && recupType === 'heures') {
+                dureeHeures = parseFloat(recupHeures);
+                dureeJours = dureeHeures / 7;
+            } else {
+                const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+                dureeJours = result.dureeJours;
+                dureeHeures = dureeJours * 7;
+            }
+            
+            // Mapper le type CP vers CP_N (la base n'accepte que CP_N ou CP_N1)
+            let typeAbsenceFinal = typeAbsence;
+            if (typeAbsence === 'CP') {
+                typeAbsenceFinal = 'CP_N';
+            }
+
+            // Préparer les données
+            const absenceData = {
+                salarie_id: user.id,
+                type: typeAbsenceFinal,
+                date_debut: dateDebut,
+                date_fin: dateFin,
+                duree_jours: dureeJours,
+                duree_heures: dureeHeures,
+                commentaire: commentaire || null,
+                statut: 'valide'
+            };
+            
+            // Créer l'absence
+            const result = await window.api.createAbsence(absenceData);
+            
+            if (result.success) {
+                // Mettre à jour les soldes
+                if (typeAbsence !== 'MALADIE') {
+                    await window.api.updateSoldesAfterAbsence(
+                        user.id, 
+                        anneeActuelle, 
+                        typeAbsenceFinal, 
+                        dureeJours, 
+                        dureeHeures
+                    );
+                }
+                
+                // Récupérer les infos complètes du salarié pour le PDF
+                const salarieInfo = await window.api.getSalarie(user.id);
+
+                // Récupérer les soldes mis à jour
+                const soldesApres = await window.api.getSoldes(user.id, anneeActuelle);
+
+                // Générer le PDF avec la structure attendue par main.js
+                const pdfData = {
+                    salarie: {
+                        nom: salarieInfo.nom,
+                        prenom: salarieInfo.prenom
+                    },
+                    absence: {
+                        type: typeAbsenceFinal,
+                        date_debut: dateDebut,
+                        date_fin: dateFin,
+                        duree_jours: dureeJours,
+                        duree_heures: dureeHeures,
+                        commentaire: commentaire || ''
+                    },
+                    soldes: {
+                        cp_n1: soldesApres.cp_n1,
+                        cp_n: soldesApres.cp_n,
+                        rtt: soldesApres.rtt,
+                        recup_heures: soldesApres.recup_heures
+                    }
+                };
+
+await window.api.genererPDF(pdfData);
+                
+                // Afficher succès
+                successMsg.textContent = '✅ Absence enregistrée avec succès ! Le PDF a été généré.';
+                successMsg.classList.add('show');
+                
+                // Réinitialiser le formulaire
+                formAbsenceUser.reset();
+                document.getElementById('resumeAbsenceUser').style.display = 'none';
+                document.getElementById('recupFieldsUser').style.display = 'none';
+                
+                // Rafraîchir les données
+                await loadSoldesAdmin();
+                await chargerCalendrierUser();
+                await afficherHistoriqueAdmin();
+                
+                // Enlever le surlignage
+                document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
+                
+            } else {
+                throw new Error('Erreur lors de la création');
+            }
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            errorMsg.textContent = 'Erreur lors de l\'enregistrement de l\'absence';
+            errorMsg.classList.add('show');
+        }
+    });
+}

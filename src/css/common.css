@@ -114,12 +114,12 @@ body {
     background: none;
     border: none;
     cursor: pointer;
-    color: #666;
+    color: #bebbbb;
     font-size: 1.2em;
     padding: 5px;
     transition: color 0.3s;
 }
 
 .toggle-password:hover {
-    color: var(--bleu);
+    color: var(--rouge);
 }

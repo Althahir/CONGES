@@ -1,3 +1,4 @@
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const os = require('os');
@@ -614,13 +615,31 @@ ipcMain.handle('genererPDF', async (event, absenceData) => {
             doc.end();
             
             stream.on('finish', () => {
-                // Ouvrir automatiquement le PDF pour impression
+                // Ouvrir le PDF généré
                 shell.openPath(filePath).then(() => {
-                    console.log('PDF ouvert pour impression:', filePath);
+                    console.log('PDF ouvert:', filePath);
                 });
+    
+                // Proposer l'enregistrement via dialogue
+                const { dialog } = require('electron');
                 
-                resolve({ success: true, filePath });
-            });
+                setTimeout(() => {
+                    dialog.showSaveDialog(mainWindow, {
+                    title: 'Enregistrer ou imprimer le PDF',
+                    defaultPath: path.join(require('os').homedir(), 'Documents', fileName),
+                    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+                    }).then(result => {
+                        if (!result.canceled && result.filePath) {
+                            fs.copyFileSync(filePath, result.filePath);
+                            console.log('PDF sauvegardé à:', result.filePath);
+                            // Ouvrir le PDF sauvegardé
+                            shell.openPath(result.filePath);
+                        }
+                    });
+                }, 500); // Petit délai pour que le premier PDF s'ouvre d'abord
+    
+    resolve({ success: true, filePath });
+});
             
             stream.on('error', (err) => {
                 reject(err);
