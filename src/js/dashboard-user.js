@@ -95,7 +95,7 @@ function genererCalendrier() {
     const calendrierContainer = document.getElementById('calendrierAnnuel');
     calendrierContainer.innerHTML = '';
     
-    const nomsJoursCourts = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+    const nomsJoursCourts = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
     const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
                       'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
     
@@ -129,7 +129,9 @@ function genererCalendrier() {
         const premierJour = new Date(anneeActuelle, mois, 1);
         const dernierJour = new Date(anneeActuelle, mois + 1, 0);
         const nbJours = dernierJour.getDate();
-        const premierJourSemaine = premierJour.getDay();
+        // Adapter pour commencer le lundi (0 = lundi, 6 = dimanche)
+        let premierJourSemaine = premierJour.getDay() - 1;
+        if (premierJourSemaine === -1) premierJourSemaine = 6; // Si dimanche, mettre à la fin
         
         // Jours vides avant le début du mois
         for (let i = 0; i < premierJourSemaine; i++) {
@@ -149,7 +151,7 @@ function genererCalendrier() {
             jourDiv.className = 'jour';
             jourDiv.textContent = jour;
             
-            // Weekend
+            // Weekend (samedi = 6, dimanche = 0)
             if (dayOfWeek === 0 || dayOfWeek === 6) {
                 jourDiv.classList.add('weekend');
             }

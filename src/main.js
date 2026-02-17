@@ -24,23 +24,19 @@ function connectDatabase() {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 1024,
-        height: 768,
-        minWidth: 800,
-        minHeight: 600,
+        fullscreen: false,
+        icon: path.join(__dirname, 'assets/logo.png'),
         webPreferences: {
-            nodeIntegration: false,
+            preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js')
+            nodeIntegration: false
         }
     });
 
     mainWindow.loadFile(path.join(__dirname, 'pages', 'login.html'));
-    // mainWindow.webContents.openDevTools();
-
-    mainWindow.on('closed', function () {
-        mainWindow = null;
-    });
+    
+    // Maximiser la fenêtre au démarrage (s'adapte à la taille de l'écran)
+    mainWindow.maximize();
 }
 
 app.whenReady().then(() => {

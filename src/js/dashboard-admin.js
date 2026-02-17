@@ -192,10 +192,11 @@ async function chargerCalendrierGlobal() {
             <div class="legende-salaries">
                 ${salaries.map(sal => `
                     <div class="legende-salarie">
-                        <span class="legende-color" style="background: ${couleursSalaries[sal.id]}"></span>
                         <span>${sal.prenom} ${sal.nom}</span>
+                        <span class="legende-color" style="background: ${couleursSalaries[sal.id]}"></span>
+                        
                     </div>
-                `).join('')}
+                `).join('|')}
             </div>
             <div class="calendrier-grid-global" id="calendrierGridGlobal"></div>
         `;
@@ -553,7 +554,7 @@ function genererCalendrierUser() {
     
     calendrierContainer.innerHTML = '';
     
-    const nomsJoursCourts = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+    const nomsJoursCourts = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
     const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
                       'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
     
@@ -582,8 +583,9 @@ function genererCalendrierUser() {
         const premierJour = new Date(anneeActuelle, mois, 1);
         const dernierJour = new Date(anneeActuelle, mois + 1, 0);
         const nbJours = dernierJour.getDate();
-        const premierJourSemaine = premierJour.getDay();
-        
+        // Adapter pour commencer le lundi (0 = lundi, 6 = dimanche)
+        let premierJourSemaine = premierJour.getDay() - 1;
+        if (premierJourSemaine === -1) premierJourSemaine = 6; // Si dimanche, mettre à la fin        
         for (let i = 0; i < premierJourSemaine; i++) {
             const jourVide = document.createElement('div');
             jourVide.className = 'jour vide';
