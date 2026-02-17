@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LaCiotatEntrprendre - Connexion</title>
     <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../css/login.css"></head>
 <body class="login-page">
     <div class="login-container">
@@ -17,10 +18,15 @@
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" required autocomplete="email">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="password">Mot de passe</label>
-                    <input type="password" id="password" name="password" autocomplete="current-password">
+                    <div class="password-wrapper">
+                        <input type="password" id="password" name="password" autocomplete="current-password">
+                            <button type="button" class="toggle-password" id="togglePassword">
+                                <i class="fa-solid fa-eye" id="eyeIcon"></i>
+                            </button>
+                    </div>
                 </div>
                 
                 <div id="errorMessage" class="error-message"></div>

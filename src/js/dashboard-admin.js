@@ -151,162 +151,188 @@ async function chargerCalendrierGlobal() {
     console.log('=== DÉBUT chargerCalendrierGlobal ===');
     try {
         const container = document.getElementById('calendrierGlobal');
-        console.log('Container trouvé:', container);
+        
         // Récupérer tous les salariés et toutes les absences
         const salaries = await window.api.getAllSalaries();
-        console.log('Salariés:', salaries);
         const toutesAbsences = await window.api.getAllAbsences();
-        console.log('Toutes absences:', toutesAbsences);
         const joursFeries = await window.api.getJoursFeries(anneeCalendrier);
-        console.log('Jours fériés:', joursFeries);
+        
         // Filtrer les absences pour l'année sélectionnée
         const absencesAnnee = toutesAbsences.filter(abs => {
             const annee = new Date(abs.date_debut).getFullYear();
             return annee === anneeCalendrier;
         });
         
-        // Créer une couleur par salarié (couleurs de l'asso en priorité)
-        const couleursSalaries = {};
-        const couleursDisponibles = [
-            'rgb(0, 108, 137)', 
-            'rgb(116, 43, 135)', 
-            'rgb(181, 22, 63)',   // Bleu
-            'rgb(237, 113, 17)',   // Orange
-            'rgb(249, 198, 73)',   // Jaune
-            // Couleurs supplémentaires si besoin
-            '#10B981',             // Vert
-            '#8B5CF6',             // Violet
-            '#EC4899',             // Rose
-            '#14B8A6',             // Turquoise
-            '#06B6D4',             // Cyan
-            '#84CC16'              // Lime
-        ];
-        
-        
-        salaries.forEach((sal, index) => {
-            couleursSalaries[sal.id] = couleursDisponibles[index % couleursDisponibles.length];
+        // Déterminer quels salariés ont au moins une absence cette année
+        const salariesAvecAbsences = new Set();
+        absencesAnnee.forEach(abs => {
+            salariesAvecAbsences.add(abs.salarie_id);
         });
         
-        // Générer le calendrier
-        container.innerHTML = `
+        // Filtrer et trier les salariés qui ont des absences (par ordre alphabétique)
+        const salariesActifs = salaries
+            .filter(sal => salariesAvecAbsences.has(sal.id))
+            .sort((a, b) => {
+                const nomA = `${a.nom} ${a.prenom}`.toLowerCase();
+                const nomB = `${b.nom} ${b.prenom}`.toLowerCase();
+                return nomA.localeCompare(nomB);
+            });
+        
+        // Palette de couleurs (8 couleurs max)
+        const couleursDisponibles = [
+        'rgb(0, 108, 137)',    // 1. Bleu
+        'rgb(116, 43, 135)',   // 2. Mauve
+        'rgb(181, 22, 63)',    // 3. Rouge
+        'rgb(237, 113, 17)',   // 4. Orange
+        'rgb(249, 198, 73)',   // 5. Jaune
+        '#10B981',             // 6. Vert émeraude
+        '#8B5CF6',             // 7. Violet
+        '#14B8A6'              // 8. Turquoise
+        ];
+        
+        // Attribuer une couleur et une position à chaque salarié actif
+        const couleursSalaries = {};
+        const positionsSalaries = {};
+        salariesActifs.forEach((sal, index) => {
+            couleursSalaries[sal.id] = couleursDisponibles[index % 8];
+            positionsSalaries[sal.id] = index % 8; // Position 0-7
+        });
+        
+        // Générer la légende
+        const legendeHTML = `
             <div class="legende-salaries">
-                ${salaries.map(sal => `
+                ${salariesActifs.map(sal => `
                     <div class="legende-salarie">
-                        <span>${sal.prenom} ${sal.nom}</span>
                         <span class="legende-color" style="background: ${couleursSalaries[sal.id]}"></span>
-                        
+                        <span>${sal.prenom} ${sal.nom}</span>
                     </div>
-                `).join('|')}
+                `).join('')}
             </div>
-            <div class="calendrier-grid-global" id="calendrierGridGlobal"></div>
         `;
         
-        const calendrierGrid = document.getElementById('calendrierGridGlobal');
-        console.log('calendrierGrid trouvé:', calendrierGrid);
+        // Générer le tableau
         const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
                           'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        const nomsJoursCourts = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
         
-        // Générer les 12 mois
-        for (let mois = 0; mois < 12; mois++) {
-            const moisDiv = document.createElement('div');
-            moisDiv.className = 'mois-calendrier';
+        let tableHTML = '<div class="calendrier-lineaire"><table class="calendrier-table">';
+        
+        // En-tête des mois
+        tableHTML += '<thead><tr>';
+        nomsMois.forEach(mois => {
+            tableHTML += `<th>${mois}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+        
+        // Générer les lignes (jours 1 à 31)
+        for (let jour = 1; jour <= 31; jour++) {
+            tableHTML += '<tr>';
             
-            // Header du mois
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'mois-header';
-            headerDiv.textContent = nomsMois[mois];
-            moisDiv.appendChild(headerDiv);
-            
-            // Jours de la semaine
-            const joursSemaineDiv = document.createElement('div');
-            joursSemaineDiv.className = 'jours-semaine';
-            nomsJoursCourts.forEach(jour => {
-                const jourDiv = document.createElement('div');
-                jourDiv.className = 'jour-semaine';
-                jourDiv.textContent = jour;
-                joursSemaineDiv.appendChild(jourDiv);
-            });
-            moisDiv.appendChild(joursSemaineDiv);
-            
-            // Jours du mois
-            const joursMoisDiv = document.createElement('div');
-            joursMoisDiv.className = 'jours-mois';
-            
-            const premierJour = new Date(anneeCalendrier, mois, 1);
-            const dernierJour = new Date(anneeCalendrier, mois + 1, 0);
-            const nbJours = dernierJour.getDate();
-            const premierJourSemaine = premierJour.getDay();
-            
-            // Jours vides avant le début du mois
-            for (let i = 0; i < premierJourSemaine; i++) {
-                const jourVide = document.createElement('div');
-                jourVide.className = 'jour vide';
-                joursMoisDiv.appendChild(jourVide);
-            }
-            
-            // Jours du mois
-            for (let jour = 1; jour <= nbJours; jour++) {
-                const annee = anneeCalendrier;
-                const dateISO = `${annee}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
-                const date = new Date(annee, mois, jour);
-                const dayOfWeek = date.getDay();
+            for (let mois = 0; mois < 12; mois++) {
+                // Vérifier si ce jour existe dans ce mois
+                const dernierJourDuMois = new Date(anneeCalendrier, mois + 1, 0).getDate();
                 
-                const jourDiv = document.createElement('div');
-                jourDiv.className = 'jour';
-                jourDiv.textContent = jour;
-                
-                // Weekend
-                if (dayOfWeek === 0 || dayOfWeek === 6) {
-                    jourDiv.classList.add('weekend');
-                }
-                
-                // Jour férié
-                const estFerie = joursFeries.some(f => f.date === dateISO);
-                if (estFerie) {
-                    jourDiv.classList.add('ferie');
+                if (jour > dernierJourDuMois) {
+                    // Jour inexistant, cellule vide
+                    tableHTML += '<td></td>';
+                } else {
+                    // Construire la date
+                    const dateISO = `${anneeCalendrier}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+                    const date = new Date(anneeCalendrier, mois, jour);
+                    const dayOfWeek = date.getDay();
+                    
+                    // Vérifier si c'est un jour férié
+                    const estFerie = joursFeries.some(f => f.date === dateISO);
                     const ferie = joursFeries.find(f => f.date === dateISO);
-                    jourDiv.setAttribute('data-tooltip', ferie.libelle);
-                }
-                
-                // Absences - chercher toutes les absences pour ce jour
-                const absencesJour = absencesAnnee.filter(abs => {
-                    return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
-                });
-                
-                if (absencesJour.length > 0) {
-                    // S'il y a plusieurs absences, afficher des barres colorées
-                    if (absencesJour.length === 1) {
-                        const abs = absencesJour[0];
-                        jourDiv.style.background = couleursSalaries[abs.salarie_id];
-                        jourDiv.style.color = 'white';
-                        jourDiv.style.fontWeight = 'bold';
-                        jourDiv.setAttribute('data-tooltip', `${abs.prenom} ${abs.nom}`);
-                    } else {
-                        // Plusieurs absences : afficher des barres
-                        jourDiv.classList.add('multi-absences');
-                        const barres = absencesJour.map(abs => 
-                            `<div class="barre-absence" style="background: ${couleursSalaries[abs.salarie_id]}"></div>`
-                        ).join('');
-                        jourDiv.innerHTML = `<span>${jour}</span><div class="barres-container">${barres}</div>`;
-                        
-                        const noms = absencesJour.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
-                        jourDiv.setAttribute('data-tooltip', noms);
+                    
+                    // Vérifier si c'est un weekend
+                    const estWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                    
+                    // Trouver tous les absents ce jour
+                    const absentsJour = absencesAnnee.filter(abs => {
+                        return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
+                    });
+                    
+                    // Classes CSS
+                    let cellClass = '';
+                    if (estFerie) cellClass += 'jour-ferie ';
+                    if (estWeekend) cellClass += 'jour-weekend ';
+                    
+                    // Tooltip
+                    let tooltip = '';
+                    if (estFerie) {
+                        tooltip = ferie.libelle;
                     }
+                    if (absentsJour.length > 0) {
+                        const noms = absentsJour.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
+                        tooltip = tooltip ? `${tooltip} - ${noms}` : noms;
+                    }
+                    
+                    tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
+                    
+                    if (absentsJour.length > 8) {
+                        // Plus de 8 absents : afficher "8+"
+                        const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                        let jourSemaineIndex = dayOfWeek - 1;
+                        if (jourSemaineIndex === -1) jourSemaineIndex = 6;
+                        const lettreJour = lettresJours[jourSemaineIndex];
+                        tableHTML += `<div class="jour-cell"><span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span><span class="surcharge">8+</span></div>`;
+                    } else {
+                        // Calculer la lettre du jour de la semaine (format français : L-D)
+                        const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                        let jourSemaineIndex = dayOfWeek - 1;
+                        if (jourSemaineIndex === -1) jourSemaineIndex = 6;
+                        const lettreJour = lettresJours[jourSemaineIndex];
+                        const jourCellClass = estFerie ? 'jour-cell jour-ferie-cell' : 'jour-cell';
+                        tableHTML += `<div class="${jourCellClass}">`;
+                        tableHTML += `<span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
+                        tableHTML += '<div class="indicateurs-wrapper">';
+    
+                        // Créer un tableau de 8 indicateurs
+                        const indicateurs = new Array(8).fill(null);
+
+                        // Remplir les indicateurs selon les absents
+                        absentsJour.forEach(abs => {
+                            const position = positionsSalaries[abs.salarie_id];
+                            if (position !== undefined && position < 8) {
+                                indicateurs[position] = couleursSalaries[abs.salarie_id];
+                            }
+                        });
+    
+                         // Afficher les 8 indicateurs
+                        indicateurs.forEach(couleur => {
+                        if (couleur) {
+                            tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};"></div>`;
+                        } else {
+                            tableHTML += '<div class="indicateur-colonne"></div>';
+                        }
+                    });
+                        
+                        tableHTML += '</div>'; // fin indicateurs-wrapper
+                        
+                        // Ajouter le drapeau pour les jours fériés (à droite)
+                        if (estFerie) {
+                            tableHTML += '<span class="drapeau-ferie">🚩</span>';
+                        }
+                        
+                        tableHTML += '</div>'; // fin jour-cell
+                    
+                    }
+                    
+                    tableHTML += '</td>';
                 }
-                
-                joursMoisDiv.appendChild(jourDiv);
             }
             
-            moisDiv.appendChild(joursMoisDiv);
-            calendrierGrid.appendChild(moisDiv);
-        }  // ← Fin de la boucle for
+            tableHTML += '</tr>';
+        }
         
-        console.log('=== FIN génération calendrier, nombre de mois ajoutés:', calendrierGrid.children.length);
+        tableHTML += '</tbody></table></div>';
+        
+        // Injecter dans le DOM
+        container.innerHTML = legendeHTML + tableHTML;
         
     } catch (error) {
-    console.error('Erreur chargement calendrier global:', error);
-}
+        console.error('Erreur chargement calendrier global:', error);
+    }
 }
 
 // ========== JOURS FÉRIÉS ==========

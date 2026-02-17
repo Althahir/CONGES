@@ -44,3 +44,26 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         errorMessage.classList.add('show');
     }
 });
+
+// ========== AFFICHER/MASQUER MOT DE PASSE ==========
+
+const togglePassword = document.getElementById('togglePassword');
+const passwordInput = document.getElementById('password');
+const eyeIcon = document.getElementById('eyeIcon');
+
+if (togglePassword) {
+    togglePassword.addEventListener('click', () => {
+        // Basculer le type de l'input
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        
+        // Changer l'icône
+        if (type === 'text') {
+            eyeIcon.classList.remove('fa-eye');
+            eyeIcon.classList.add('fa-eye-slash');
+        } else {
+            eyeIcon.classList.remove('fa-eye-slash');
+            eyeIcon.classList.add('fa-eye');
+        }
+    });
+}
