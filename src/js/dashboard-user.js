@@ -15,7 +15,6 @@ document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
 let anneeActuelle = new Date().getFullYear();
 let joursFeries = [];
 let absences = [];
-
 // ========== GESTION DE L'ANNÉE ==========
 
 document.getElementById('anneeActuelle').textContent = anneeActuelle;
@@ -36,7 +35,7 @@ document.getElementById('btnNextYear').addEventListener('click', () => {
 
 async function loadSoldes() {
     try {
-        const annee = new Date().getFullYear();
+        const annee = anneeActuelle;
         const soldes = await window.api.getSoldes(user.id, annee);
         const salarie = await window.api.getSalarie(user.id);
         
@@ -91,11 +90,15 @@ async function chargerAbsences() {
     try {
         absences = await window.api.getAbsences(user.id);
         console.log('Absences brutes:', absences);
+        console.log('Chargement absences pour année:', anneeActuelle); // ← AJOUTE
+
         
-        // Filtrer pour l'année actuelle
+        // Filtrer pour l'année actuelle (inclure les absences qui touchent l'année)
         absences = absences.filter(abs => {
-            const annee = new Date(abs.date_debut).getFullYear();
-            return annee === anneeActuelle;
+            const anneeDebut = new Date(abs.date_debut).getFullYear();
+            const anneeFin = new Date(abs.date_fin).getFullYear();
+            // Garder si l'absence commence OU finit dans l'année affichée
+            return anneeDebut === anneeActuelle || anneeFin === anneeActuelle;
         });
         
         console.log('Absences filtrées pour', anneeActuelle, ':', absences);

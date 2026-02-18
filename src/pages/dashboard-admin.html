@@ -12,17 +12,24 @@
     <div class="dashboard-container">
         <!-- Header -->
         <header class="dashboard-header">
-            <div class="header-left">
-                <img src="../assets/logo_vert.png" alt="Logo" class="header-logo">
-            </div>
-            <div class="header-center">
-                <h1>Administration</h1>
-            </div>
-            <div class="header-right">
-                <span id="userName" class="user-name">Admin</span>
-                <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
-            </div>
-        </header>
+    <div class="header-left">
+        <img src="../assets/logo_horiz_fdBlanc.png" alt="Logo" class="header-logo">
+    </div>
+    <div class="header-center">
+        <div id="headerAdminDefault">
+            <h1>Administration</h1>
+        </div>
+        <div id="headerAdminMesConges" style="display: none;">
+            <button id="btnPrevYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
+            <h1 id="anneeAdmin">2026</h1>
+            <button id="btnNextYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+    </div>
+    <div class="header-right">
+        <span id="userName" class="user-name">Admin</span>
+        <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
+    </div>
+</header>
 
         <!-- Navigation -->
         <nav class="admin-nav">
@@ -124,10 +131,12 @@
             
             <!-- Section Mes Congés (identique au dashboard user) -->
             <section id="mes-conges-section" class="content-section active">
+                
                 <div class="user-dashboard-wrapper">
                     <!-- Calendrier annuel (gauche) -->
                     <div class="calendar-section">
-                        <div id="calendrierAnnuelUser" class="calendrier-grid">
+                        
+                    <div id="calendrierAnnuelUser" class="calendrier-grid">
                             <!-- Les 12 mois seront générés dynamiquement ici -->
                         </div>
                     </div>

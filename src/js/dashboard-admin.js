@@ -32,6 +32,18 @@ navBtns.forEach(btn => {
         
         const sectionName = btn.getAttribute('data-section');
         document.getElementById(`${sectionName}-section`).classList.add('active');
+
+        // Basculer le header selon la section
+        const headerDefault = document.getElementById('headerAdminDefault');
+        const headerMesConges = document.getElementById('headerAdminMesConges');
+
+        if (sectionName === 'mes-conges') {
+            headerDefault.style.display = 'none';
+            headerMesConges.style.display = 'flex';
+        } else {
+            headerDefault.style.display = 'block';
+            headerMesConges.style.display = 'none';
+        }
         
         // Charger les données selon la section
         switch(sectionName) {
@@ -157,10 +169,12 @@ async function chargerCalendrierGlobal() {
         const toutesAbsences = await window.api.getAllAbsences();
         const joursFeries = await window.api.getJoursFeries(anneeCalendrier);
         
-        // Filtrer les absences pour l'année sélectionnée
+        // Filtrer les absences pour l'année sélectionnée (inclure celles qui touchent l'année)
+        // Filtrer les absences pour l'année sélectionnée (inclure celles qui touchent l'année)
         const absencesAnnee = toutesAbsences.filter(abs => {
-            const annee = new Date(abs.date_debut).getFullYear();
-            return annee === anneeCalendrier;
+            const anneeDebut = new Date(abs.date_debut).getFullYear();
+            const anneeFin = new Date(abs.date_fin).getFullYear();
+            return anneeDebut === anneeCalendrier || anneeFin === anneeCalendrier;
         });
         
         // Déterminer quels salariés ont au moins une absence cette année
@@ -180,11 +194,15 @@ async function chargerCalendrierGlobal() {
         
         // Palette de couleurs (8 couleurs max)
         const couleursDisponibles = [
+            'rgb(249, 198, 73)',   // 5. Jaune
+            'rgb(237, 113, 17)',   // 4. Orange
+            'rgb(181, 22, 63)',    // 3. Rouge
+            'rgb(116, 43, 135)',   // 2. Mauve
         'rgb(0, 108, 137)',    // 1. Bleu
-        'rgb(116, 43, 135)',   // 2. Mauve
-        'rgb(181, 22, 63)',    // 3. Rouge
-        'rgb(237, 113, 17)',   // 4. Orange
-        'rgb(249, 198, 73)',   // 5. Jaune
+        
+        
+        
+        
         '#10B981',             // 6. Vert émeraude
         '#8B5CF6',             // 7. Violet
         '#14B8A6'              // 8. Turquoise
@@ -524,12 +542,43 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 let anneeActuelle = new Date().getFullYear();
 let joursFeriesUser = [];
 let absencesUser = [];
+// Variable pour savoir si les événements sont déjà attachés
+let evenementsAnneesAttaches = false;
 
 async function initMesConges() {
     await loadSoldesAdmin();
     await initFormAbsenceAdmin();
     await chargerCalendrierUser();
     await afficherHistoriqueAdmin();
+    
+    // Navigation année pour "Mes congés" - N'attacher qu'une seule fois !
+    if (!evenementsAnneesAttaches) {
+        const anneeDisplay = document.getElementById('anneeAdmin');
+        const btnPrev = document.getElementById('btnPrevYearAdmin');
+        const btnNext = document.getElementById('btnNextYearAdmin');
+        
+        if (anneeDisplay) {
+            anneeDisplay.textContent = anneeActuelle;
+        }
+        
+        if (btnPrev) {
+            btnPrev.addEventListener('click', () => {
+                anneeActuelle--;
+                anneeDisplay.textContent = anneeActuelle;
+                chargerCalendrierUser();
+            });
+        }
+        
+        if (btnNext) {
+            btnNext.addEventListener('click', () => {
+                anneeActuelle++;
+                anneeDisplay.textContent = anneeActuelle;
+                chargerCalendrierUser();
+            });
+        }
+        
+        evenementsAnneesAttaches = true;
+    }
 }
 
 // Charger les soldes de l'admin
@@ -587,10 +636,11 @@ async function chargerJoursFeriesUser() {
 
 async function chargerAbsencesUser() {
     try {
-        absencesUser = await window.api.getAbsences(user.id);
+        absencesUser = await window.api.getAbsences(user.id);  // ← AJOUTE cette ligne !
         absencesUser = absencesUser.filter(abs => {
-            const annee = new Date(abs.date_debut).getFullYear();
-            return annee === anneeActuelle;
+            const anneeDebut = new Date(abs.date_debut).getFullYear();
+            const anneeFin = new Date(abs.date_fin).getFullYear();
+            return anneeDebut === anneeActuelle || anneeFin === anneeActuelle;
         });
     } catch (error) {
         console.error('Erreur chargement absences:', error);
@@ -1024,7 +1074,23 @@ async function afficherHistoriqueAdmin() {
 // ========== INITIALISATION ==========
 
 async function init() {
-    await initMesConges(); // ← Ajoute cette ligne
+    await initMesConges();
+    
+    // Initialiser le header selon la section active au chargement
+    const activeSection = document.querySelector('.nav-btn.active');
+    if (activeSection) {
+        const sectionName = activeSection.getAttribute('data-section');
+        const headerDefault = document.getElementById('headerAdminDefault');
+        const headerMesConges = document.getElementById('headerAdminMesConges');
+        
+        if (sectionName === 'mes-conges') {
+            headerDefault.style.display = 'none';
+            headerMesConges.style.display = 'flex';
+        } else {
+            headerDefault.style.display = 'block';
+            headerMesConges.style.display = 'none';
+        }
+    }
 }
 
 init();
