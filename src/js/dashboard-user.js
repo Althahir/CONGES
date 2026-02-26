@@ -187,7 +187,8 @@ function genererCalendrier() {
                 return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
             });
 
-            if (absence) {
+            // Ne colorer que si ce n'est PAS un jour chômé
+            if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !jourFerie) {
                 const type = absence.type.toUpperCase();
                 if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');

@@ -46,7 +46,7 @@
                 <i class="fa-solid fa-flag"></i> Jours Fériés
             </button>
             <button class="nav-btn" data-section="rtt">
-                <i class="fa-solid fa-calculator"></i> RTT Annuels
+                <i class="fa-solid fa-calculator"></i> Planning des traitements
             </button>
         </nav>
 
@@ -315,19 +315,157 @@
                 </div>
             </section>
 
-            <!-- Section RTT Annuels -->
-            <section id="rtt-section" class="content-section">
-                <div class="section-header">
-                    <h2>Tableau RTT Annuels</h2>
+            <!-- Section Gestion des Types de Congés -->
+<section id="rtt-section" class="content-section">
+    <h2>Gestion des Types de Congés</h2>
+    
+    <!-- Configuration des traitements -->
+    <div class="config-traitements">
+        <h3><i class="fa-solid fa-cog"></i> Configuration des dates de traitement automatique</h3>
+        
+        <div class="config-card">
+            <div class="config-header">
+                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des CP</h4>
+                <p>Transfert CP N → CP N-1 puis crédit des nouveaux CP N en fonction du taux de CP renseigné dans la fiche salarié</p>
+            </div>
+            <div class="config-body">
+                <div class="config-date">
+                    <label>Date de traitement :</label>
+                    <select id="cpJour" class="select-jour">
+                        <!-- Options générées en JS -->
+                    </select>
+                    <select id="cpMois" class="select-mois">
+                        <option value="1" selected>Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6">Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12">Décembre</option>
+                    </select>
                 </div>
-                
-                <div id="tableRTT" class="table-rtt">
-                    <!-- Sera rempli dynamiquement -->
+                <div class="config-historique">
+                    <strong>Dernier traitement :</strong> <span id="cpDernierTraitement">Chargement...</span>
                 </div>
-            </section>
+            </div>
+        </div>
+        
+        <div class="config-card">
+            <div class="config-header">
+                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
+                <p>Ajout des RTT annuels à chaque salariés eligible</p>
+            </div>
+            <div class="config-body">
+                <div class="config-date">
+                    <label>Date de traitement :</label>
+                    <select id="rttJour" class="select-jour">
+                        <!-- Options générées en JS -->
+                    </select>
+                    <select id="rttMois" class="select-mois">
+                        <option value="1">Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6" selected>Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12">Décembre</option>
+                    </select>
+                </div>
+                <div class="config-historique">
+                    <strong>Dernier traitement :</strong> <span id="rttDernierTraitement">Chargement...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="config-actions">
+            <button id="btnEnregistrerConfig" class="btn-primary btn-large">
+                <i class="fa-solid fa-save"></i> Enregistrer la configuration
+            </button>
+        </div>
+        
+        <div class="config-note">
+            <i class="fa-solid fa-info-circle"></i>
+            <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine 
+            si le traitement a déjà été effectué cette année.
+        </div>
+    </div>
+    
+    <!-- Historique des traitements -->
+    <div class="historique-traitements">
+        <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>
+        <div id="tableHistorique" class="table-historique">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Date d'exécution</th>
+                        <th>Année</th>
+                        <th>Salariés traités</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody id="historiqueBody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 20px;">
+                            Chargement...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+            
 
         </div>
     </div>
+    <!-- Modale de test des traitements -->
+<div id="modalTest" class="modal-test" style="display: none;">
+    <div class="modal-test-content">
+        <div class="modal-test-header">
+            <h3>🧪 Mode Test - Traitements Automatiques</h3>
+            <button id="closeModalTest" class="close-modal-test">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-test-body">
+            <div class="test-annee">
+                <label>Année de test :</label>
+                <select id="anneeTest" class="select-annee">
+                    <option value="2024">2024</option>
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                    <option value="2027">2027</option>
+                </select>
+            </div>
+            
+            <div class="test-buttons">
+                <button id="btnTestCP" class="btn-test">
+                    <i class="fa-solid fa-flask"></i> Tester traitement CP
+                </button>
+                <button id="btnTestRTT" class="btn-test">
+                    <i class="fa-solid fa-flask"></i> Tester traitement RTT
+                </button>
+            </div>
+            
+            <div id="resultatTest" class="resultat-test" style="display: none;">
+                <h4 id="resultatTestTitre"></h4>
+                <div id="resultatTestDetails"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
     <script src="../js/dashboard-admin.js"></script>
 </body>

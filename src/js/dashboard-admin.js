@@ -199,10 +199,6 @@ async function chargerCalendrierGlobal() {
             'rgb(181, 22, 63)',    // 3. Rouge
             'rgb(116, 43, 135)',   // 2. Mauve
         'rgb(0, 108, 137)',    // 1. Bleu
-        
-        
-        
-        
         '#10B981',             // 6. Vert émeraude
         '#8B5CF6',             // 7. Violet
         '#14B8A6'              // 8. Turquoise
@@ -265,12 +261,11 @@ async function chargerCalendrierGlobal() {
                     // Vérifier si c'est un weekend
                     const estWeekend = dayOfWeek === 0 || dayOfWeek === 6;
                     
-                    // Trouver tous les absents ce jour
+                    // Trouver tous les absents ce jour (en excluant les jours chômés)
                     const absentsJour = absencesAnnee.filter(abs => {
                         return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
                     });
-                    
-                    // Classes CSS
+                                        // Classes CSS
                     let cellClass = '';
                     if (estFerie) cellClass += 'jour-ferie ';
                     if (estWeekend) cellClass += 'jour-weekend ';
@@ -284,7 +279,36 @@ async function chargerCalendrierGlobal() {
                         const noms = absentsJour.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
                         tooltip = tooltip ? `${tooltip} - ${noms}` : noms;
                     }
-                    
+                    // Si c'est un weekend ou jour férié, ne pas afficher d'absences
+                    if (estWeekend || estFerie) {
+                        tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
+                        
+                        // Calculer la lettre du jour
+                        const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                        let jourSemaineIndex = dayOfWeek - 1;
+                        if (jourSemaineIndex === -1) jourSemaineIndex = 6;
+                        const lettreJour = lettresJours[jourSemaineIndex];
+
+                        const jourCellClass = estFerie ? 'jour-cell jour-ferie-cell' : 'jour-cell';
+                        tableHTML += `<div class="${jourCellClass}">`;
+                        tableHTML += `<span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
+                        tableHTML += '<div class="indicateurs-wrapper">';
+    
+                        // 8 colonnes vides
+                        for (let i = 0; i < 8; i++) {
+                            tableHTML += '<div class="indicateur-colonne"></div>';
+                        }
+    
+                        tableHTML += '</div>'; // fin indicateurs-wrapper
+    
+                        if (estFerie) {
+                            tableHTML += '<span class="drapeau-ferie">🚩</span>';
+                        }
+    
+                        tableHTML += '</div></td>'; // fin jour-cell et td
+                        continue; // Passer au jour suivant
+                    }
+                                        
                     tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
                     
                     if (absentsJour.length > 8) {
@@ -388,9 +412,8 @@ async function chargerJoursFeries() {
 // ========== TABLE RTT ==========
 
 async function chargerTableauRTT() {
-    const container = document.getElementById('tableRTT');
-    container.innerHTML = '<p>Tableau RTT annuels - En cours de développement...</p>';
-    // TODO: Afficher le tableau des RTT annuels
+    genererOptionsJours();
+    await chargerConfigTraitements();
 }
 
 // ========== GESTION MODALE SALARIÉ ==========
@@ -714,8 +737,9 @@ function genererCalendrierUser() {
             const absence = absencesUser.find(abs => {
                 return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
             });
-            
-            if (absence) {
+
+            // Ne colorer que si ce n'est PAS un jour chômé
+            if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !jourFerie) {
                 const type = absence.type.toUpperCase();
                 if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');
@@ -1071,6 +1095,395 @@ async function afficherHistoriqueAdmin() {
         console.error('Erreur affichage historique:', error);
     }
 }
+// ========== GESTION DES TYPES DE CONGÉS ==========
+
+async function chargerConfigTraitements() {
+    try {
+        const config = await window.api.getConfigTraitements();
+        
+        // CP Annuel
+        const cpConfig = config.find(c => c.type === 'CP_ANNUEL');
+        if (cpConfig) {
+            document.getElementById('cpJour').value = cpConfig.jour;
+            document.getElementById('cpMois').value = cpConfig.mois;
+        }
+        
+        // RTT Annuel
+        const rttConfig = config.find(c => c.type === 'RTT_ANNUEL');
+        if (rttConfig) {
+            document.getElementById('rttJour').value = rttConfig.jour;
+            document.getElementById('rttMois').value = rttConfig.mois;
+        }
+        
+        // Charger l'historique
+        await chargerHistoriqueTraitements();
+        
+    } catch (error) {
+        console.error('Erreur chargement config:', error);
+    }
+}
+
+async function chargerHistoriqueTraitements() {
+    try {
+        const historique = await window.api.getHistoriqueTraitements();
+        const tbody = document.getElementById('historiqueBody');
+        
+        if (historique.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">Aucun traitement effectué</td></tr>';
+            document.getElementById('cpDernierTraitement').textContent = 'Jamais effectué';
+            document.getElementById('rttDernierTraitement').textContent = 'Jamais effectué';
+            return;
+        }
+        
+        // Afficher l'historique dans le tableau
+        tbody.innerHTML = historique.map(h => {
+            // Ajouter 'Z' pour forcer l'interprétation en UTC si pas déjà présent
+            const dateStr = h.date_execution.includes('Z') ? h.date_execution : h.date_execution + 'Z';
+            const date = new Date(dateStr);
+            const dateFormatee = date.toLocaleString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Europe/Paris'
+            });
+            
+            const typeLabel = h.type === 'CP_ANNUEL' ? 'CP Annuel' : 'RTT Annuel';
+            const statutClass = `statut-${h.statut}`;
+            const statutLabel = {
+                'success': '✅ Réussi',
+                'error': '❌ Erreur',
+                'partial': '⚠️ Partiel'
+            }[h.statut] || h.statut;
+            
+            return `
+                <tr>
+                    <td><strong>${typeLabel}</strong></td>
+                    <td>${dateFormatee}</td>
+                    <td>${h.annee}</td>
+                    <td>${h.nb_salaries_traites} salarié(s)</td>
+                    <td><span class="statut-badge ${statutClass}">${statutLabel}</span></td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Mettre à jour les derniers traitements
+        const dernierCP = historique.find(h => h.type === 'CP_ANNUEL');
+        const dernierRTT = historique.find(h => h.type === 'RTT_ANNUEL');
+        
+        if (dernierCP) {
+            const date = new Date(dernierCP.date_execution).toLocaleDateString('fr-FR');
+            document.getElementById('cpDernierTraitement').innerHTML = 
+                `${date} - ${dernierCP.nb_salaries_traites} salarié(s) - <span class="statut-badge statut-${dernierCP.statut}">${dernierCP.statut}</span>`;
+        } else {
+            document.getElementById('cpDernierTraitement').textContent = 'Jamais effectué';
+        }
+        
+        if (dernierRTT) {
+            const date = new Date(dernierRTT.date_execution).toLocaleDateString('fr-FR');
+            document.getElementById('rttDernierTraitement').innerHTML = 
+                `${date} - ${dernierRTT.nb_salaries_traites} salarié(s) - <span class="statut-badge statut-${dernierRTT.statut}">${dernierRTT.statut}</span>`;
+        } else {
+            document.getElementById('rttDernierTraitement').textContent = 'Jamais effectué';
+        }
+        
+    } catch (error) {
+        console.error('Erreur chargement historique:', error);
+    }
+}
+
+// Générer les options de jours (1-31)
+function genererOptionsJours() {
+    const selects = document.querySelectorAll('.select-jour');
+    const options = Array.from({length: 31}, (_, i) => 
+        `<option value="${i + 1}">${i + 1}</option>`
+    ).join('');
+    
+    selects.forEach(select => {
+        select.innerHTML = options;
+    });
+}
+
+// Enregistrer la configuration
+document.getElementById('btnEnregistrerConfig').addEventListener('click', async () => {
+    const cpJour = parseInt(document.getElementById('cpJour').value);
+    const cpMois = parseInt(document.getElementById('cpMois').value);
+    const rttJour = parseInt(document.getElementById('rttJour').value);
+    const rttMois = parseInt(document.getElementById('rttMois').value);
+    
+    if (!confirm('Voulez-vous enregistrer cette configuration ?\n\nLes modifications seront prises en compte pour les prochains traitements automatiques.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('btnEnregistrerConfig');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enregistrement...';
+    
+    try {
+        await window.api.updateConfigTraitement('CP_ANNUEL', cpJour, cpMois);
+        await window.api.updateConfigTraitement('RTT_ANNUEL', rttJour, rttMois);
+        
+        alert('✅ Configuration enregistrée avec succès !');
+        await chargerConfigTraitements();
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('❌ Erreur lors de l\'enregistrement de la configuration');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-save"></i> Enregistrer la configuration';
+    }
+});
+
+// Fonction pour afficher une notification persistante
+function afficherNotificationPersistante(type, titre, message) {
+    afficherNotificationPersistanteAvecId(null, type, titre, message);
+}
+
+// TEST NOTIFICATION
+// setTimeout(() => {
+//     afficherNotificationPersistante(
+//         'success',
+//         '✅ Traitement CP Annuel effectué',
+//         '8 salarié(s) traité(s) avec succès'
+//     );
+// }, 2000);
+// ========== MODE TEST (Ctrl+Shift+T) ==========
+
+// ========== CODE SECRET POUR OUVRIR LA MODALE TEST ==========
+// Séquence : Ctrl + DEBUG
+
+let sequence = [];
+const secretCode = ['d', 'e', 'b', 'u', 'g'];
+let sequenceTimeout;
+
+document.addEventListener('keydown', (e) => {
+    // Détecter Ctrl + une lettre
+    if (e.ctrlKey && e.key.length === 1) {
+        const letter = e.key.toLowerCase();
+        
+        // Ajouter la lettre à la séquence
+        sequence.push(letter);
+        
+        // Garder seulement les 4 dernières touches
+        if (sequence.length > 5) {
+            sequence.shift();
+        }
+        
+        // Vérifier si la séquence correspond
+        if (sequence.join('') === secretCode.join('')) {
+            e.preventDefault();
+            document.getElementById('modalTest').style.display = 'flex';
+            sequence = []; // Réinitialiser
+            clearTimeout(sequenceTimeout);
+        }
+        
+        // Réinitialiser la séquence après 2 secondes d'inactivité
+        clearTimeout(sequenceTimeout);
+        sequenceTimeout = setTimeout(() => {
+            sequence = [];
+        }, 2000);
+    }
+});
+
+// Fermer la modale de test
+document.getElementById('closeModalTest').addEventListener('click', () => {
+    document.getElementById('modalTest').style.display = 'none';
+});
+
+// Clic en dehors pour fermer
+document.getElementById('modalTest').addEventListener('click', (e) => {
+    if (e.target.id === 'modalTest') {
+        document.getElementById('modalTest').style.display = 'none';
+    }
+});
+
+// Tester traitement CP
+document.getElementById('btnTestCP').addEventListener('click', async () => {
+    const annee = parseInt(document.getElementById('anneeTest').value);
+    
+    
+    const btn = document.getElementById('btnTestCP');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test en cours...';
+    
+    try {
+
+        const result = await window.api.executerTraitementCP(annee);
+        
+        afficherResultatTest(
+            `✅ Test traitement CP ${annee}`,
+            result.details.map(d => ({
+                titre: d.nom,
+                details: `CP transférés: ${d.cp_transferes}j → CP N-1: ${d.nouveau_cp_n1}j | Nouveaux CP N: ${d.nouveaux_cp_n}j`
+            }))
+        );
+        
+        // Recharger l'historique
+        await chargerHistoriqueTraitements();
+        
+    } catch (error) {
+        console.error('Erreur test CP:', error);
+        alert('❌ Erreur lors du test : ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-flask"></i> Tester traitement CP';
+    }
+});
+
+// Tester traitement RTT
+document.getElementById('btnTestRTT').addEventListener('click', async () => {
+    const annee = parseInt(document.getElementById('anneeTest').value);
+    
+    const btn = document.getElementById('btnTestRTT');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test en cours...';
+    
+    try {
+        
+        
+        const result = await window.api.executerTraitementRTT(annee);
+        
+        afficherResultatTest(
+            `✅ Test traitement RTT ${annee}`,
+            result.details.map(d => ({
+                titre: d.nom,
+                details: `RTT ajoutés: ${d.rtt_ajoutes}j → Nouveau solde: ${d.nouveau_solde}j`
+            }))
+        );
+        
+        // Recharger l'historique
+        await chargerHistoriqueTraitements();
+        
+    } catch (error) {
+        console.error('Erreur test RTT:', error);
+        alert('❌ Erreur lors du test : ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-flask"></i> Tester traitement RTT';
+    }
+});
+
+function afficherResultatTest(titre, details) {
+    const resultatDiv = document.getElementById('resultatTest');
+    const titreDiv = document.getElementById('resultatTestTitre');
+    const detailsDiv = document.getElementById('resultatTestDetails');
+    
+    titreDiv.textContent = titre;
+    
+    detailsDiv.innerHTML = details.map(item => `
+        <div class="resultat-test-item">
+            <strong>${item.titre}</strong>
+            <small>${item.details}</small>
+        </div>
+    `).join('');
+    
+    resultatDiv.style.display = 'block';
+}
+
+// Écouter les traitements automatiques depuis le main process
+if (window.api.onTraitementAutomatique) {
+    window.api.onTraitementAutomatique((data) => {
+        console.log('Traitement automatique reçu:', data);
+        
+        const typeLabel = data.type === 'CP_ANNUEL' ? 'CP Annuel' : 'RTT Annuel';
+        
+        if (data.statut === 'success') {
+            afficherNotificationPersistante(
+                'success',
+                `Traitement ${typeLabel} effectué`,
+                `${data.nbSalaries} salarié(s) traité(s) avec succès`
+            );
+        } else {
+            afficherNotificationPersistante(
+                'error',
+                `Erreur traitement ${typeLabel}`,
+                data.erreurs ? data.erreurs.join(', ') : 'Une erreur est survenue'
+            );
+        }
+        
+        // Recharger l'historique
+        chargerHistoriqueTraitements();
+    });
+}
+
+// ========== CHARGEMENT DES NOTIFICATIONS NON LUES ==========
+
+async function chargerNotificationsNonLues() {
+    try {
+        const notifications = await window.api.getNotificationsNonLues(user.id);
+        
+        console.log('📬 Notifications non lues:', notifications.length);
+        
+        // Afficher chaque notification
+        for (const notif of notifications) {
+            afficherNotificationPersistanteAvecId(
+                notif.id,
+                notif.statut,
+                notif.titre,
+                notif.message,
+                notif.date_creation
+            );
+        }
+        
+    } catch (error) {
+        console.error('Erreur chargement notifications:', error);
+    }
+}
+
+// Fonction modifiée pour inclure l'ID de la notification
+function afficherNotificationPersistanteAvecId(notificationId, type, titre, message, dateCreation) {
+    const notification = document.createElement('div');
+    notification.className = `notification-persistante ${type}`;
+    notification.dataset.notificationId = notificationId;
+    
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    // Formater la date si fournie
+    let dateFormatee = '';
+    if (dateCreation) {
+        const dateStr = dateCreation.includes('Z') ? dateCreation : dateCreation + 'Z';
+        const date = new Date(dateStr);
+        dateFormatee = date.toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Europe/Paris'
+        });
+    }
+    
+    notification.innerHTML = `
+        <div class="notification-icon">
+            <i class="fa-solid ${icon}"></i>
+        </div>
+        <div class="notification-content">
+            <h4>${titre}</h4>
+            <p>${message}</p>
+            ${dateFormatee ? `<small style="color: grey; font-size: 0.85em;">fait le ${dateFormatee}</small>` : ''}
+        </div>
+        <button class="notification-close">
+            <i class="fa-solid fa-times"></i>
+        </button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Fermer au clic et marquer comme lue
+    notification.querySelector('.notification-close').addEventListener('click', async () => {
+        try {
+            await window.api.marquerNotificationLue(notificationId);
+            notification.remove();
+            console.log('✅ Notification marquée comme lue:', notificationId);
+        } catch (error) {
+            console.error('Erreur marquage notification:', error);
+            notification.remove();
+        }
+    });
+}
+
 // ========== INITIALISATION ==========
 
 async function init() {
@@ -1091,6 +1504,9 @@ async function init() {
             headerMesConges.style.display = 'none';
         }
     }
+    
+    // Charger les notifications non lues
+    await chargerNotificationsNonLues();
 }
 
 init();

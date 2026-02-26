@@ -41,6 +41,23 @@ contextBridge.exposeInMainWorld('api', {
     // PDF
     genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),
 
+    // Gestion des traitements automatiques
+    getConfigTraitements: () => ipcRenderer.invoke('getConfigTraitements'),
+    updateConfigTraitement: (type, jour, mois) => ipcRenderer.invoke('updateConfigTraitement', type, jour, mois),
+    getHistoriqueTraitements: () => ipcRenderer.invoke('getHistoriqueTraitements'),
+    executerTraitementCP: (annee) => ipcRenderer.invoke('executerTraitementCP', annee),
+    executerTraitementRTT: (annee) => ipcRenderer.invoke('executerTraitementRTT', annee),
+    
+    // Gestion des notifications persistantes
+    getNotificationsNonLues: (userId) => ipcRenderer.invoke('getNotificationsNonLues', userId),
+    marquerNotificationLue: (notificationId) => ipcRenderer.invoke('marquerNotificationLue', notificationId),
+    creerNotification: (notificationData) => ipcRenderer.invoke('creerNotification', notificationData),
+
+    // Écouter les notifications de traitements automatiques
+    onTraitementAutomatique: (callback) => {
+        ipcRenderer.on('traitement-automatique', (event, data) => callback(data));
+    },
+    
     // Navigation
     navigateTo: (page) => ipcRenderer.invoke('navigateTo', page)
 });

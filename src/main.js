@@ -40,9 +40,594 @@ function createWindow() {
     mainWindow.maximize();
 }
 
+// ========== GESTION CONFIGURATION TRAITEMENTS ==========
+
+ipcMain.handle('getConfigTraitements', async (event) => {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM config_traitements ORDER BY type', (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+});
+
+ipcMain.handle('updateConfigTraitement', async (event, type, jour, mois) => {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'UPDATE config_traitements SET jour = ?, mois = ?, derniere_maj = CURRENT_TIMESTAMP WHERE type = ?',
+            [jour, mois, type],
+            (err) => {
+                if (err) reject(err);
+                else resolve({ success: true });
+            }
+        );
+    });
+});
+
+ipcMain.handle('getHistoriqueTraitements', async (event) => {
+    return new Promise((resolve, reject) => {
+        db.all(
+            'SELECT * FROM historique_traitements ORDER BY date_execution DESC LIMIT 20',
+            (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            }
+        );
+    });
+});
+
+// ========== GESTION DES NOTIFICATIONS ==========
+
+ipcMain.handle('getNotificationsNonLues', async (event, userId) => {
+    return new Promise((resolve, reject) => {
+        // Récupérer les notifications non lues pour cet admin (ou pour tous si user_id IS NULL)
+        db.all(
+            `SELECT * FROM notifications 
+             WHERE lue = 0 AND (user_id IS NULL OR user_id = ?) 
+             ORDER BY date_creation DESC`,
+            [userId],
+            (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            }
+        );
+    });
+});
+
+ipcMain.handle('marquerNotificationLue', async (event, notificationId) => {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'UPDATE notifications SET lue = 1 WHERE id = ?',
+            [notificationId],
+            (err) => {
+                if (err) reject(err);
+                else resolve({ success: true });
+            }
+        );
+    });
+});
+
+ipcMain.handle('creerNotification', async (event, notificationData) => {
+    return new Promise((resolve, reject) => {
+        const { type, titre, message, details, statut } = notificationData;
+        
+        db.run(
+            `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
+             VALUES (?, ?, ?, ?, ?, NULL)`,
+            [type, titre, message, details, statut],
+            function(err) {
+                if (err) reject(err);
+                else resolve({ success: true, id: this.lastID });
+            }
+        );
+    });
+});
+// ========== TRAITEMENTS AUTOMATIQUES ==========
+
+// Traitement CP Annuel (transfert + crédit)
+ipcMain.handle('executerTraitementCP', async (event, annee) => {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+            
+            let nbMisAJour = 0;
+            let details = [];
+            let erreurs = [];
+            
+            for (const salarie of salaries) {
+                try {
+                    const dateEmbauche = new Date(salarie.date_embauche);
+                    const anneeEmbauche = dateEmbauche.getFullYear();
+                    
+                    // Calculer les CP à créditer pour la nouvelle année
+                    let cpNouveaux = salarie.cp_mensuel * 12; // 100% même si embauché en cours d'année précédente
+                    
+                    // Récupérer soldes actuels
+                    const soldes = await new Promise((res, rej) => {
+                        db.get(
+                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                            [salarie.id, annee],
+                            (err, row) => {
+                                if (err) rej(err);
+                                else res(row);
+                            }
+                        );
+                    });
+                    
+                    if (soldes) {
+                        // Transfert CP N → CP N-1 et crédit nouveaux CP N
+                        const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
+                        const nouveauCPN = cpNouveaux;
+                        
+                        await new Promise((res, rej) => {
+                            db.run(
+                                'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                [nouveauCPN1, nouveauCPN, salarie.id, annee],
+                                (err) => {
+                                    if (err) rej(err);
+                                    else res();
+                                }
+                            );
+                        });
+                        
+                        nbMisAJour++;
+                        details.push({
+                            salarie_id: salarie.id,
+                            nom: `${salarie.prenom} ${salarie.nom}`,
+                            cp_transferes: soldes.cp_n.toFixed(2),
+                            nouveau_cp_n1: nouveauCPN1.toFixed(2),
+                            nouveaux_cp_n: nouveauCPN.toFixed(2)
+                        });
+                    }
+                    
+                } catch (error) {
+                    console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
+                    erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                }
+            }
+            
+            // Enregistrer dans l'historique
+            const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+            
+            db.run(
+                'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                (err) => {
+                    if (err) console.error('Erreur enregistrement historique:', err);
+                }
+            );
+            
+            resolve({
+                success: statut !== 'error',
+                statut,
+                nbMisAJour,
+                details,
+                erreurs
+            });
+        });
+    });
+});
+
+// Traitement RTT Annuel
+ipcMain.handle('executerTraitementRTT', async (event, annee) => {
+    return new Promise((resolve, reject) => {
+        console.log('🔍 Recherche RTT pour annee:', annee, 'type:', typeof annee);
+        db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
+            console.log('🔍 Erreur DB:', err);
+            console.log('🔍 Résultat DB:', rttAnnuel);
+            if (err) {
+                reject(err);
+                return;
+            }
+            
+            if (!rttAnnuel) {
+                reject(new Error(`Aucun paramètre RTT trouvé pour l'année ${annee}`));
+                return;
+            }
+            
+            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
+            
+            db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                
+                let nbMisAJour = 0;
+                let details = [];
+                let erreurs = [];
+                
+                for (const salarie of salaries) {
+                    try {
+                        const dateEmbauche = new Date(salarie.date_embauche);
+                        const anneeEmbauche = dateEmbauche.getFullYear();
+                        
+                        let rttAjouter = nbRTT;
+                        
+                        // Prorata si embauché en cours d'année
+                        if (anneeEmbauche === annee) {
+                            const dateDebut = new Date(annee, 0, 1);
+                            const dateFin = new Date(annee, 11, 31);
+                            const joursAnneeTravailles = Math.ceil((dateFin - dateEmbauche) / (1000 * 60 * 60 * 24));
+                            const joursAnnee = Math.ceil((dateFin - dateDebut) / (1000 * 60 * 60 * 24));
+                            rttAjouter = (nbRTT * joursAnneeTravailles) / joursAnnee;
+                        }
+                        
+                        const soldes = await new Promise((res, rej) => {
+                            db.get(
+                                'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                                [salarie.id, annee],
+                                (err, row) => {
+                                    if (err) rej(err);
+                                    else res(row);
+                                }
+                            );
+                        });
+                        
+                        if (soldes) {
+                            const nouveauRTT = soldes.rtt + rttAjouter;
+                            
+                            await new Promise((res, rej) => {
+                                db.run(
+                                    'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                    [nouveauRTT, salarie.id, annee],
+                                    (err) => {
+                                        if (err) rej(err);
+                                        else res();
+                                    }
+                                );
+                            });
+                            
+                            nbMisAJour++;
+                            details.push({
+                                salarie_id: salarie.id,
+                                nom: `${salarie.prenom} ${salarie.nom}`,
+                                rtt_ajoutes: rttAjouter.toFixed(2),
+                                nouveau_solde: nouveauRTT.toFixed(2)
+                            });
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
+                        erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                    }
+                }
+                
+                const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+                
+                db.run(
+                    'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                    ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                    (err) => {
+                        if (err) console.error('Erreur enregistrement historique:', err);
+                    }
+                );
+                
+                resolve({
+                    success: statut !== 'error',
+                    statut,
+                    nbMisAJour,
+                    details,
+                    erreurs
+                });
+            });
+        });
+    });
+});
+
+// ========== VÉRIFICATION AUTOMATIQUE DES TRAITEMENTS ==========
+
+async function verifierTraitementsAutomatiques() {
+    console.log('🔍 Vérification des traitements automatiques...');
+    
+    const aujourdhui = new Date();
+    const annee = aujourdhui.getFullYear();
+    const mois = aujourdhui.getMonth() + 1; // 1-12
+    const jour = aujourdhui.getDate();
+    
+    try {
+        // Récupérer la configuration
+        const config = await new Promise((resolve, reject) => {
+            db.all('SELECT * FROM config_traitements WHERE actif = 1', (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+        
+        for (const conf of config) {
+            // Vérifier si on est à la date de traitement
+            if (conf.jour === jour && conf.mois === mois) {
+                console.log(`📅 Date de traitement ${conf.type} atteinte !`);
+                
+                // Vérifier si déjà fait cette année
+                const dejaFait = await new Promise((resolve, reject) => {
+                    db.get(
+                        'SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = "success"',
+                        [conf.type, annee],
+                        (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row);
+                        }
+                    );
+                });
+                
+                if (!dejaFait) {
+                    console.log(`✅ Exécution du traitement ${conf.type}...`);
+                    
+                    // Exécuter le traitement
+                    if (conf.type === 'CP_ANNUEL') {
+                        await executerTraitementCPAuto(annee);
+                    } else if (conf.type === 'RTT_ANNUEL') {
+                        await executerTraitementRTTAuto(annee);
+                    }
+                } else {
+                    console.log(`⏭️ Traitement ${conf.type} déjà effectué cette année`);
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur vérification traitements:', error);
+    }
+}
+
+// Fonction pour exécuter le traitement CP automatiquement
+async function executerTraitementCPAuto(annee) {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
+            if (err) {
+                console.error('Erreur récupération salariés:', err);
+                reject(err);
+                return;
+            }
+            
+            let nbMisAJour = 0;
+            let details = [];
+            let erreurs = [];
+            
+            for (const salarie of salaries) {
+                try {
+                    const cpNouveaux = salarie.cp_mensuel * 12;
+                    
+                    const soldes = await new Promise((res, rej) => {
+                        db.get(
+                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                            [salarie.id, annee],
+                            (err, row) => {
+                                if (err) rej(err);
+                                else res(row);
+                            }
+                        );
+                    });
+                    
+                    if (soldes) {
+                        const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
+                        const nouveauCPN = cpNouveaux;
+                        
+                        await new Promise((res, rej) => {
+                            db.run(
+                                'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                [nouveauCPN1, nouveauCPN, salarie.id, annee],
+                                (err) => {
+                                    if (err) rej(err);
+                                    else res();
+                                }
+                            );
+                        });
+                        
+                        nbMisAJour++;
+                        details.push({
+                            salarie_id: salarie.id,
+                            nom: `${salarie.prenom} ${salarie.nom}`,
+                            cp_transferes: soldes.cp_n.toFixed(2),
+                            nouveau_cp_n1: nouveauCPN1.toFixed(2),
+                            nouveaux_cp_n: nouveauCPN.toFixed(2)
+                        });
+                    }
+                    db.run(
+                        'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                        ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                        (err) => {
+                            if (err) console.error('Erreur enregistrement historique:', err);
+                        }
+                    );
+
+                    // AJOUTE ICI : Créer une notification pour les admins
+                    db.run(
+                        `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
+                        VALUES (?, ?, ?, ?, ?, NULL)`,
+                        [
+                            'CP_ANNUEL',
+                            statut === 'success' ? '✅ Traitement CP Annuel effectué' : '❌ Erreur traitement CP Annuel',
+                            `${nbMisAJour} salarié(s) traité(s)`,
+                            JSON.stringify(details),
+                            statut
+                        ],
+                    (err) => {
+                        if (err) console.error('Erreur création notification:', err);
+                    }
+                );
+                } catch (error) {
+                    console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
+                    erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                }
+            }
+            
+            const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+            
+            // Enregistrer dans l'historique
+            db.run(
+                'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                (err) => {
+                    if (err) console.error('Erreur enregistrement historique:', err);
+                }
+            );
+            
+            // Envoyer notification au renderer
+            if (mainWindow && mainWindow.webContents) {
+                mainWindow.webContents.send('traitement-automatique', {
+                    type: 'CP_ANNUEL',
+                    statut,
+                    nbSalaries: nbMisAJour,
+                    details,
+                    erreurs
+                });
+            }
+            
+            console.log(`✅ Traitement CP terminé: ${nbMisAJour} salariés traités`);
+            resolve({ success: statut !== 'error', nbMisAJour, statut });
+        });
+    });
+}
+
+// Fonction pour exécuter le traitement RTT automatiquement
+async function executerTraitementRTTAuto(annee) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
+            if (err) {
+                console.error('Erreur récupération RTT:', err);
+                reject(err);
+                return;
+            }
+            
+            if (!rttAnnuel) {
+                console.error(`Aucun paramètre RTT pour ${annee}`);
+                reject(new Error(`Aucun paramètre RTT pour ${annee}`));
+                return;
+            }
+            
+            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
+            
+            db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
+                if (err) {
+                    console.error('Erreur récupération salariés RTT:', err);
+                    reject(err);
+                    return;
+                }
+                
+                let nbMisAJour = 0;
+                let details = [];
+                let erreurs = [];
+                
+                for (const salarie of salaries) {
+                    try {
+                        const dateEmbauche = new Date(salarie.date_embauche);
+                        const anneeEmbauche = dateEmbauche.getFullYear();
+                        
+                        let rttAjouter = nbRTT;
+                        
+                        if (anneeEmbauche === annee) {
+                            const dateDebut = new Date(annee, 0, 1);
+                            const dateFin = new Date(annee, 11, 31);
+                            const joursAnneeTravailles = Math.ceil((dateFin - dateEmbauche) / (1000 * 60 * 60 * 24));
+                            const joursAnnee = Math.ceil((dateFin - dateDebut) / (1000 * 60 * 60 * 24));
+                            rttAjouter = (nbRTT * joursAnneeTravailles) / joursAnnee;
+                        }
+                        
+                        const soldes = await new Promise((res, rej) => {
+                            db.get(
+                                'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                                [salarie.id, annee],
+                                (err, row) => {
+                                    if (err) rej(err);
+                                    else res(row);
+                                }
+                            );
+                        });
+                        
+                        if (soldes) {
+                            const nouveauRTT = soldes.rtt + rttAjouter;
+                            
+                            await new Promise((res, rej) => {
+                                db.run(
+                                    'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                    [nouveauRTT, salarie.id, annee],
+                                    (err) => {
+                                        if (err) rej(err);
+                                        else res();
+                                    }
+                                );
+                            });
+                            
+                            nbMisAJour++;
+                            details.push({
+                                salarie_id: salarie.id,
+                                nom: `${salarie.prenom} ${salarie.nom}`,
+                                rtt_ajoutes: rttAjouter.toFixed(2),
+                                nouveau_solde: nouveauRTT.toFixed(2)
+                            });
+                        }
+                        // Enregistrer dans l'historique
+                        db.run(
+                            'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                            ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                            (err) => {
+                                if (err) console.error('Erreur enregistrement historique:', err);
+                            }
+                        );
+
+                        // AJOUTE ICI : Créer une notification pour les admins
+                        db.run(
+                            `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
+                            VALUES (?, ?, ?, ?, ?, NULL)`,
+                                [
+                                    'RTT_ANNUEL',
+                                    statut === 'success' ? '✅ Traitement RTT Annuel effectué' : '❌ Erreur traitement RTT Annuel',
+                                    `${nbMisAJour} salarié(s) traité(s)`,
+                                    JSON.stringify(details),
+                                    statut
+                                ],                          
+                            (err) => {
+                                if (err) console.error('Erreur création notification:', err);
+                            }
+                        );
+                        
+                    } catch (error) {
+                        console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
+                        erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                    }
+                }
+                
+                const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+                
+                db.run(
+                    'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                    ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                    (err) => {
+                        if (err) console.error('Erreur enregistrement historique:', err);
+                    }
+                );
+                
+                // Envoyer notification au renderer
+                if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('traitement-automatique', {
+                        type: 'RTT_ANNUEL',
+                        statut,
+                        nbSalaries: nbMisAJour,
+                        details,
+                        erreurs
+                    });
+                }
+                
+                console.log(`✅ Traitement RTT terminé: ${nbMisAJour} salariés traités`);
+                resolve({ success: statut !== 'error', nbMisAJour, statut });
+            });
+        });
+    });
+}
+
 app.whenReady().then(() => {
     connectDatabase();
     createWindow();
+    
+    // Vérifier les traitements automatiques après création de la fenêtre
+    setTimeout(() => {
+        verifierTraitementsAutomatiques();
+    }, 2000); // Attendre 2 secondes que l'app soit bien lancée
 
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
