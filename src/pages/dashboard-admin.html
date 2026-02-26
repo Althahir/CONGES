@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="../css/common.css">
     <link rel="stylesheet" href="../css/dashboard-admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 </head>
 <body>
     <div class="dashboard-container">
@@ -462,6 +464,65 @@
             <div id="resultatTest" class="resultat-test" style="display: none;">
                 <h4 id="resultatTestTitre"></h4>
                 <div id="resultatTestDetails"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modale Import Excel -->
+<div id="modalImport" class="modal-import" style="display: none;">
+    <div class="modal-import-content">
+        <div class="modal-import-header">
+            <h3>📊 Import Historique Excel</h3>
+            <button id="closeModalImport" class="close-modal-import">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-import-body">
+            <!-- Étape 1 : Sélection fichier -->
+            <div id="importStep1" class="import-step">
+                <div class="import-info">
+                    <p><strong>Fichier attendu :</strong></p>
+                    <ul>
+                        <li>Format : .xlsm ou .xlsx</li>
+                        <li>Onglet : "Archives"</li>
+                        <li>Colonnes : PERSONNE, Date d'absence, Nature d'absence, etc.</li>
+                    </ul>
+                </div>
+                
+                <input type="file" id="fileImportExcel" accept=".xlsm,.xlsx" style="display: none;">
+                <button id="btnSelectFileImport" class="btn-primary btn-large">
+                    <i class="fa-solid fa-folder-open"></i> Sélectionner le fichier
+                </button>
+                
+                <div id="fileSelectedImport" class="file-selected-info" style="display: none;">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <span id="fileNameImport"></span>
+                </div>
+            </div>
+            
+            <!-- Étape 2 : Prévisualisation -->
+            <div id="importStep2" class="import-step" style="display: none;">
+                <h4>📋 Prévisualisation</h4>
+                <div id="previewStatsImport" class="preview-stats-import"></div>
+                <div id="previewTableImport" class="preview-table-import"></div>
+                
+                <div class="import-actions">
+                    <button id="btnCancelImportModal" class="btn-secondary">
+                        <i class="fa-solid fa-arrow-left"></i> Retour
+                    </button>
+                    <button id="btnConfirmImportModal" class="btn-primary btn-large">
+                        <i class="fa-solid fa-check"></i> Confirmer l'import
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Étape 3 : Résultat -->
+            <div id="importStep3" class="import-step" style="display: none;">
+                <div id="importResultModal" class="import-result-modal"></div>
+                <button id="btnCloseImportResult" class="btn-primary">
+                    <i class="fa-solid fa-check"></i> Fermer
+                </button>
             </div>
         </div>
     </div>

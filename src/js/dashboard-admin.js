@@ -1381,7 +1381,514 @@ function afficherResultatTest(titre, details) {
     
     resultatDiv.style.display = 'block';
 }
+// ========== CODE SECRET POUR IMPORT EXCEL ==========
+// Séquence : Ctrl+I, Ctrl+M, Ctrl+P, Ctrl+O, Ctrl+R, Ctrl+T
 
+let sequenceImport = [];
+const secretCodeImport = ['l', 'o', 'a', 'd'];
+let sequenceTimeoutImport;
+
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key.length === 1) {
+        const letter = e.key.toLowerCase();
+        
+        sequenceImport.push(letter);
+        
+        if (sequenceImport.length > 4) {
+            sequenceImport.shift();
+        }
+        
+        if (sequenceImport.join('') === secretCodeImport.join('')) {
+            e.preventDefault();
+            document.getElementById('modalImport').style.display = 'flex';
+            sequenceImport = [];
+            clearTimeout(sequenceTimeoutImport);
+        }
+        
+        clearTimeout(sequenceTimeoutImport);
+        sequenceTimeoutImport = setTimeout(() => {
+            sequenceImport = [];
+        }, 2000);
+    }
+});
+
+// ========== GESTION MODALE IMPORT ==========
+
+// Fermer la modale
+document.getElementById('closeModalImport').addEventListener('click', () => {
+    document.getElementById('modalImport').style.display = 'none';
+    resetImportModal();
+});
+
+// Clic en dehors pour fermer
+document.getElementById('modalImport').addEventListener('click', (e) => {
+    if (e.target.id === 'modalImport') {
+        document.getElementById('modalImport').style.display = 'none';
+        resetImportModal();
+    }
+});
+
+// Sélection du fichier
+document.getElementById('btnSelectFileImport').addEventListener('click', () => {
+    document.getElementById('fileImportExcel').click();
+});
+
+// Lecture du fichier
+document.getElementById('fileImportExcel').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    document.getElementById('fileNameImport').textContent = file.name;
+    document.getElementById('fileSelectedImport').style.display = 'flex';
+    
+    // Lire le fichier
+    try {
+        const btn = document.getElementById('btnSelectFileImport');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Lecture en cours...';
+        
+        const data = await lireExcelImport(file);
+        
+        // Afficher la prévisualisation
+        afficherPreviewImport(data);
+        
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-folder-open"></i> Sélectionner un autre fichier';
+        
+    } catch (error) {
+        console.error('Erreur lecture fichier:', error);
+        alert('❌ Erreur lors de la lecture du fichier : ' + error.message);
+        
+        document.getElementById('btnSelectFileImport').disabled = false;
+        document.getElementById('btnSelectFileImport').innerHTML = '<i class="fa-solid fa-folder-open"></i> Sélectionner le fichier';
+    }
+});
+
+// Retour à l'étape 1
+document.getElementById('btnCancelImportModal').addEventListener('click', () => {
+    document.getElementById('importStep2').style.display = 'none';
+    document.getElementById('importStep1').style.display = 'block';
+});
+
+// Confirmer l'import
+document.getElementById('btnConfirmImportModal').addEventListener('click', async () => {
+    const btn = document.getElementById('btnConfirmImportModal');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Import en cours...';
+    
+    try {
+        await executerImport();
+    } catch (error) {
+        console.error('Erreur import:', error);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Confirmer l\'import';
+    }
+});
+
+// Fermer le résultat
+document.getElementById('btnCloseImportResult').addEventListener('click', () => {
+    document.getElementById('modalImport').style.display = 'none';
+    resetImportModal();
+});
+
+// Réinitialiser la modale
+function resetImportModal() {
+    document.getElementById('importStep1').style.display = 'block';
+    document.getElementById('importStep2').style.display = 'none';
+    document.getElementById('importStep3').style.display = 'none';
+    document.getElementById('fileImportExcel').value = '';
+    document.getElementById('fileSelectedImport').style.display = 'none';
+    document.getElementById('btnSelectFileImport').disabled = false;
+    document.getElementById('btnSelectFileImport').innerHTML = '<i class="fa-solid fa-folder-open"></i> Sélectionner le fichier';
+}
+
+// Variable globale pour stocker les données
+let dataImportGlobal = null;
+
+// Fonction pour lire le fichier Excel
+async function lireExcelImport(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            try {
+                // Utiliser la librairie XLSX (déjà disponible)
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                // Chercher l'onglet "Archives"
+                if (!workbook.SheetNames.includes('Archives')) {
+                    reject(new Error('Onglet "Archives" introuvable dans le fichier'));
+                    return;
+                }
+                
+                const worksheet = workbook.Sheets['Archives'];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                // Parser les données
+                const parsed = parseDataExcel(jsonData);
+                
+                resolve(parsed);
+                
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.onerror = () => reject(new Error('Erreur lecture fichier'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// Parser les données Excel
+function parseDataExcel(jsonData) {
+    // Trouver la ligne d'en-tête (chercher "PERSONNE")
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+        if (jsonData[i].some(cell => cell && cell.toString().includes('PERSONNE'))) {
+            headerRow = i;
+            break;
+        }
+    }
+    
+    if (headerRow === -1) {
+        throw new Error('En-tête introuvable (colonne PERSONNE non trouvée)');
+    }
+    
+    const headers = jsonData[headerRow];
+    const data = [];
+    
+    // Parser chaque ligne
+for (let i = headerRow + 1; i < jsonData.length; i++) {
+    const row = jsonData[i];
+    
+    // Ignorer les lignes vides
+    if (!row || row.length === 0 || !row[0]) continue; // Index 0 = PERSONNE
+    
+    const personne = row[0] ? row[0].toString().trim() : '';
+    if (!personne) continue;
+    
+    // Extraire les données
+    const ligne = {
+        personne: personne,
+        date: row[1] ? row[1] : '', // Date Excel (nombre)
+        nature: row[2] ? row[2].toString().trim() : '', // Nature d'absence
+        jour: row[3] ? parseInt(row[3]) : 0,
+        mois: row[4] ? parseInt(row[4]) : 0,
+        annee: row[5] ? parseInt(row[5]) : 0,
+        duree: row[6] ? parseFloat(row[6]) : 1, // Journée entière ou demi
+        periode: row[7] ? row[7].toString().trim() : 'Journée'
+    };
+    
+    data.push(ligne);
+}
+    
+    return data;
+}
+
+// Afficher la prévisualisation
+function afficherPreviewImport(data) {
+    dataImportGlobal = data;
+    
+    // Statistiques
+    const nbLignes = data.length;
+    const personnes = [...new Set(data.map(d => d.personne))];
+    const annees = [...new Set(data.map(d => d.annee))];
+    
+    document.getElementById('previewStatsImport').innerHTML = `
+        <p><strong>${nbLignes}</strong> lignes trouvées</p>
+        <p><strong>${personnes.length}</strong> personnes distinctes</p>
+        <p><strong>Années :</strong> ${annees.sort().join(', ')}</p>
+    `;
+    
+    // Tableau (5 premières lignes)
+    const preview = data.slice(0, 10);
+    let tableHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Personne</th>
+                    <th>Date</th>
+                    <th>Nature</th>
+                    <th>Durée</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    preview.forEach(ligne => {
+        tableHTML += `
+            <tr>
+                <td>${ligne.personne}</td>
+                <td>${ligne.jour}/${ligne.mois}/${ligne.annee}</td>
+                <td>${ligne.nature}</td>
+                <td>${ligne.duree}j</td>
+            </tr>
+        `;
+    });
+    
+    tableHTML += '</tbody></table>';
+    
+    if (data.length > 10) {
+        tableHTML += `<p style="text-align: center; color: #999; margin-top: 10px;">... et ${data.length - 10} autres lignes</p>`;
+    }
+    
+    document.getElementById('previewTableImport').innerHTML = tableHTML;
+    
+    // Passer à l'étape 2
+    document.getElementById('importStep1').style.display = 'none';
+    document.getElementById('importStep2').style.display = 'block';
+}
+
+// Fonction pour exécuter l'import (on va la coder après)
+// Fonction pour exécuter l'import
+async function executerImport() {
+    try {
+        // Passer à l'étape 3
+        document.getElementById('importStep2').style.display = 'none';
+        document.getElementById('importStep3').style.display = 'block';
+        
+        document.getElementById('importResultModal').innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 3em; color: var(--bleu);"></i>
+                <p style="margin-top: 20px; font-size: 1.1em;">Import en cours...</p>
+            </div>
+        `;
+        
+        // Regrouper les données par personne
+        const parPersonne = {};
+        dataImportGlobal.forEach(ligne => {
+            if (!parPersonne[ligne.personne]) {
+                parPersonne[ligne.personne] = [];
+            }
+            parPersonne[ligne.personne].push(ligne);
+        });
+        
+        // Statistiques
+        let nbAbsencesCreees = 0;
+        let nbErreursPersonne = 0;
+        let nbErreursLignes = 0;
+        const details = [];
+        const erreurs = [];
+        
+        // Pour chaque personne
+        for (const [nomComplet, lignes] of Object.entries(parPersonne)) {
+            try {
+                // Chercher le salarié dans la base
+                const salarie = await trouverSalarie(nomComplet);
+                
+                if (!salarie) {
+                    nbErreursPersonne++;
+                    erreurs.push(`❌ ${nomComplet} : Salarié introuvable dans la base`);
+                    continue;
+                }
+                
+                // Trier par date
+                lignes.sort((a, b) => {
+                    const dateA = new Date(a.annee, a.mois - 1, a.jour);
+                    const dateB = new Date(b.annee, b.mois - 1, b.jour);
+                    return dateA - dateB;
+                });
+                
+                // Regrouper les jours consécutifs
+                const absences = regrouperAbsencesConsecutives(lignes);
+                
+                // Créer les absences
+                for (const absence of absences) {
+                    try {
+                        await creerAbsenceImport(salarie.id, absence);
+                        nbAbsencesCreees++;
+                    } catch (error) {
+                        nbErreursLignes++;
+                        erreurs.push(`❌ ${nomComplet} (${absence.date_debut} - ${absence.date_fin}) : ${error.message}`);
+                    }
+                }
+                
+                details.push(`✅ ${nomComplet} : ${absences.length} absence(s) créée(s)`);
+                
+            } catch (error) {
+                nbErreursPersonne++;
+                erreurs.push(`❌ ${nomComplet} : ${error.message}`);
+            }
+        }
+        
+        // Afficher le résultat
+        let resultHTML = '';
+        
+        if (nbErreursPersonne === 0 && nbErreursLignes === 0) {
+            resultHTML += `
+                <div class="import-success">
+                    <h4>✅ Import réussi !</h4>
+                    <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s) pour <strong>${Object.keys(parPersonne).length}</strong> personne(s)</p>
+                </div>
+            `;
+        } else {
+            resultHTML += `
+                <div class="import-error">
+                    <h4>⚠️ Import terminé avec des erreurs</h4>
+                    <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s)</p>
+                    <p><strong>${nbErreursPersonne}</strong> personne(s) non trouvée(s)</p>
+                    <p><strong>${nbErreursLignes}</strong> ligne(s) en erreur</p>
+                </div>
+            `;
+        }
+        
+        // Détails
+        resultHTML += '<div class="import-details">';
+        
+        if (details.length > 0) {
+            resultHTML += '<h5>✅ Succès :</h5>';
+            details.forEach(d => {
+                resultHTML += `<div class="import-detail-item">${d}</div>`;
+            });
+        }
+        
+        if (erreurs.length > 0) {
+            resultHTML += '<h5 style="margin-top: 15px;">❌ Erreurs :</h5>';
+            erreurs.forEach(e => {
+                resultHTML += `<div class="import-detail-item" style="border-left-color: #dc3545;">${e}</div>`;
+            });
+        }
+        
+        resultHTML += '</div>';
+        
+        document.getElementById('importResultModal').innerHTML = resultHTML;
+        
+    } catch (error) {
+        console.error('Erreur import:', error);
+        document.getElementById('importResultModal').innerHTML = `
+            <div class="import-error">
+                <h4>❌ Erreur critique</h4>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// Fonction pour trouver un salarié par nom complet
+async function trouverSalarie(nomComplet) {
+    const salaries = await window.api.getAllSalaries();
+    
+    // Essayer différents formats
+    const formats = [
+        nomComplet.toUpperCase(),
+        nomComplet.toLowerCase(),
+        // "NOM Prenom" -> chercher par nom et prénom
+    ];
+    
+    // Extraire nom et prénom
+    const parts = nomComplet.split(' ');
+    
+    for (const salarie of salaries) {
+        const nomSalarie = `${salarie.nom} ${salarie.prenom}`;
+        const nomSalarieInverse = `${salarie.prenom} ${salarie.nom}`;
+        
+        if (nomSalarie.toUpperCase() === nomComplet.toUpperCase() ||
+            nomSalarieInverse.toUpperCase() === nomComplet.toUpperCase()) {
+            return salarie;
+        }
+        
+        // Essayer avec juste le nom
+        if (parts.length >= 2) {
+            const nom = parts[0];
+            const prenom = parts.slice(1).join(' ');
+            
+            if (salarie.nom.toUpperCase() === nom.toUpperCase() &&
+                salarie.prenom.toUpperCase() === prenom.toUpperCase()) {
+                return salarie;
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Fonction pour regrouper les absences consécutives
+function regrouperAbsencesConsecutives(lignes) {
+    const absences = [];
+    let absenceCourante = null;
+    
+    lignes.forEach((ligne, index) => {
+        const dateJour = new Date(ligne.annee, ligne.mois - 1, ligne.jour);
+        
+        // Mapper le type
+        let type = 'CP_N';
+        if (ligne.nature.toLowerCase().includes('recup')) type = 'RECUP';
+        else if (ligne.nature.toLowerCase().includes('rtt')) type = 'RTT';
+        else if (ligne.nature.toLowerCase().includes('anticipé')) type = 'CP_N';
+        else if (ligne.nature.toLowerCase().includes('cp')) type = 'CP_N';
+        
+        if (!absenceCourante) {
+            // Première absence
+            absenceCourante = {
+                type,
+                date_debut: formatDateISO(dateJour),
+                date_fin: formatDateISO(dateJour),
+                duree_jours: ligne.duree,
+                duree_heures: ligne.duree * 7
+            };
+        } else {
+            // Vérifier si c'est le jour suivant et même type
+            const dateFinCourante = new Date(absenceCourante.date_fin);
+            const jourSuivant = new Date(dateFinCourante);
+            jourSuivant.setDate(jourSuivant.getDate() + 1);
+            
+            // Ignorer les weekends
+            while (jourSuivant.getDay() === 0 || jourSuivant.getDay() === 6) {
+                jourSuivant.setDate(jourSuivant.getDate() + 1);
+            }
+            
+            if (formatDateISO(dateJour) === formatDateISO(jourSuivant) && type === absenceCourante.type) {
+                // Prolonger l'absence courante
+                absenceCourante.date_fin = formatDateISO(dateJour);
+                absenceCourante.duree_jours += ligne.duree;
+                absenceCourante.duree_heures += ligne.duree * 7;
+            } else {
+                // Nouvelle absence
+                absences.push(absenceCourante);
+                absenceCourante = {
+                    type,
+                    date_debut: formatDateISO(dateJour),
+                    date_fin: formatDateISO(dateJour),
+                    duree_jours: ligne.duree,
+                    duree_heures: ligne.duree * 7
+                };
+            }
+        }
+        
+        // Dernière ligne
+        if (index === lignes.length - 1 && absenceCourante) {
+            absences.push(absenceCourante);
+        }
+    });
+    
+    return absences;
+}
+
+// Fonction pour formater une date en ISO
+function formatDateISO(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Fonction pour créer une absence
+async function creerAbsenceImport(salarieId, absence) {
+    const absenceData = {
+        salarie_id: salarieId,
+        type: absence.type,
+        date_debut: absence.date_debut,
+        date_fin: absence.date_fin,
+        duree_jours: absence.duree_jours,
+        duree_heures: absence.duree_heures,
+        commentaire: 'Import historique',
+        statut: 'valide'
+    };
+    
+    return await window.api.createAbsence(absenceData);
+}
 // Écouter les traitements automatiques depuis le main process
 if (window.api.onTraitementAutomatique) {
     window.api.onTraitementAutomatique((data) => {

@@ -1567,3 +1567,186 @@ table tr:hover {
 .resultat-test-item small {
     color: #666;
 }
+
+
+/* ========== MODALE IMPORT EXCEL ========== */
+
+.modal-import {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-import-content {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.modal-import-header {
+    background: var(--bleu);
+    color: white;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 8px 8px 0 0;
+}
+
+.modal-import-header h3 {
+    margin: 0;
+    font-size: 1.3em;
+}
+
+.close-modal-import {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-modal-import:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.modal-import-body {
+    padding: 20px;
+}
+
+.import-step {
+    min-height: 200px;
+}
+
+.import-info {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.import-info ul {
+    margin: 10px 0 0 20px;
+    color: #666;
+}
+
+.file-selected-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+    padding: 12px;
+    background: #e8f5e9;
+    border-radius: 4px;
+    color: #2e7d32;
+}
+
+.file-selected-info i {
+    font-size: 1.5em;
+}
+
+.preview-stats-import {
+    background: #e3f2fd;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.preview-stats-import p {
+    margin: 5px 0;
+    color: #0d47a1;
+}
+
+.preview-table-import {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.preview-table-import table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.preview-table-import th {
+    background: var(--bleu);
+    color: white;
+    padding: 10px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+}
+
+.preview-table-import td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.preview-table-import tbody tr:hover {
+    background: #f5f5f5;
+}
+
+.import-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.import-result-modal {
+    padding: 20px;
+}
+
+.import-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.import-error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.import-details {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.import-detail-item {
+    padding: 8px;
+    margin-bottom: 5px;
+    background: white;
+    border-radius: 3px;
+    border-left: 3px solid var(--bleu);
+}
