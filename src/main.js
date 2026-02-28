@@ -2,31 +2,57 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const os = require('os');
-
-
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
-
+if (require('electron-squirrel-startup')) {
+  app.quit();
+  return; // Arrête l'exécution si Squirrel est en train d'installer/configurer
+}
 let mainWindow;
 let db;
 
 // Connexion à la base de données
+
+
 function connectDatabase() {
-    const dbPath = path.join(__dirname, '../database/conges.db');
-    db = new sqlite3.Database(dbPath, (err) => {
-        if (err) {
-            console.error('Erreur de connexion à la base de données:', err);
-        } else {
-            console.log('Connecté à la base de données SQLite');
-        }
-    });
+    // 1. Déterminer le chemin vers le dossier de données utilisateur (AppData)
+    // C'est ici que la base doit vivre pour être modifiable
+    const userDataPath = app.getPath('userData'); 
+const dbPath = path.join(userDataPath, 'conges.db');
+
+// 1. Vérifier si le dossier dans AppData existe, sinon le créer
+if (!fs.existsSync(userDataPath)) {
+    fs.mkdirSync(userDataPath, { recursive: true });
+}
+
+// 2. Si la DB n'est pas encore dans AppData, on la copie depuis le dossier de l'app
+if (!fs.existsSync(dbPath)) {
+    // __dirname pointe vers l'intérieur du ASAR en production
+    const templatePath = path.join(__dirname, 'conges.db'); 
+    
+    try {
+        fs.copyFileSync(templatePath, dbPath);
+        console.log("Première installation : Base de données copiée dans AppData.");
+    } catch (err) {
+        console.error("Erreur lors de la copie de la base :", err);
+    }
+}
+
+// 3. Connexion à la base "extérieure" (celle que vous pourrez modifier)
+db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error("Erreur de connexion SQLite :", err);
+    } else {
+        console.log("Base de données active : " + dbPath);
+    }
+});
 }
 
 function createWindow() {
     mainWindow = new BrowserWindow({
         fullscreen: false,
-        icon: path.join(__dirname, 'assets/logo.png'),
+        icon: path.join(__dirname, 'assets/favicon2.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -210,7 +236,133 @@ ipcMain.handle('executerTraitementCP', async (event, annee) => {
         });
     });
 });
+// ========== SUPPRESSION D'ABSENCE AVEC RECALCUL ==========
 
+ipcMain.handle('deleteAbsence', async (event, absenceId) => {
+    return new Promise((resolve, reject) => {
+        // 1. Récupérer l'absence avant de la supprimer
+        db.get('SELECT * FROM absences WHERE id = ?', [absenceId], async (err, absence) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+            
+            if (!absence) {
+                reject(new Error('Absence introuvable'));
+                return;
+            }
+            
+            const salarieId = absence.salarie_id;
+            const type = absence.type;
+            const dureeJours = absence.duree_jours || 0;
+            const dureeHeures = absence.duree_heures || 0;
+            
+            // CORRECTION ICI : Toujours utiliser l'année en cours pour les soldes
+            const anneeEnCours = new Date().getFullYear();
+            
+            try {
+                // 2. Supprimer l'absence
+                await new Promise((res, rej) => {
+                    db.run('DELETE FROM absences WHERE id = ?', [absenceId], (err) => {
+                        if (err) rej(err);
+                        else res();
+                    });
+                });
+                
+                // 3. Recréditer les soldes de l'année en cours si ce n'est pas une maladie
+                if (type !== 'MALADIE') {
+                    await new Promise((res, rej) => {
+                        db.get(
+                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                            [salarieId, anneeEnCours],
+                            (err, soldes) => {
+                                if (err) {
+                                    rej(err);
+                                    return;
+                                }
+                                
+                                if (!soldes) {
+                                    rej(new Error('Soldes introuvables pour l\'année en cours'));
+                                    return;
+                                }
+                                
+                                // Recréditer selon le type
+                                let nouveauCPN1 = soldes.cp_n1;
+                                let nouveauCPN = soldes.cp_n;
+                                let nouveauRTT = soldes.rtt;
+                                let nouvelleRecup = soldes.recup_heures;
+                                
+                                if (type === 'CP_N' || type === 'CP_N1' || type === 'CP') {
+                                    nouveauCPN = soldes.cp_n + dureeJours;
+                                } else if (type === 'RTT') {
+                                    nouveauRTT = soldes.rtt + dureeJours;
+                                } else if (type === 'RECUP') {
+                                    nouvelleRecup = soldes.recup_heures + dureeHeures;
+                                }
+                                
+                                // Mettre à jour
+                                db.run(
+                                    `UPDATE soldes 
+                                     SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP 
+                                     WHERE salarie_id = ? AND annee = ?`,
+                                    [nouveauCPN1, nouveauCPN, nouveauRTT, nouvelleRecup, salarieId, anneeEnCours],
+                                    (err) => {
+                                        if (err) rej(err);
+                                        else res();
+                                    }
+                                );
+                            }
+                        );
+                    });
+                }
+                
+                resolve({ 
+                    success: true, 
+                    absence,
+                    message: 'Absence supprimée et soldes recalculés'
+                });
+                
+            } catch (error) {
+                reject(error);
+            }
+        });
+    });
+});
+
+
+// Modifier une absence
+ipcMain.handle('updateAbsence', async (event, absenceId, updates) => {
+    return new Promise((resolve, reject) => {
+        const fields = [];
+        const values = [];
+        
+        if (updates.date_debut !== undefined) {
+            fields.push('date_debut = ?');
+            values.push(updates.date_debut);
+        }
+        if (updates.date_fin !== undefined) {
+            fields.push('date_fin = ?');
+            values.push(updates.date_fin);
+        }
+        if (updates.duree_jours !== undefined) {
+            fields.push('duree_jours = ?');
+            values.push(updates.duree_jours);
+        }
+        if (updates.duree_heures !== undefined) {
+            fields.push('duree_heures = ?');
+            values.push(updates.duree_heures);
+        }
+        
+        values.push(absenceId);
+        
+        const sql = `UPDATE absences SET ${fields.join(', ')} WHERE id = ?`;
+        
+        db.run(sql, values, (err) => {
+            if (err) reject(err);
+            else resolve({ success: true });
+        });
+    });
+});
 // Traitement RTT Annuel
 ipcMain.handle('executerTraitementRTT', async (event, annee) => {
     return new Promise((resolve, reject) => {

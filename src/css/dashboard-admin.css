@@ -613,8 +613,441 @@ table tr:hover {
     pointer-events: none;
 }
 
+/* ========== SECTION HISTORIQUE - CALENDRIER ========== */
+
+.historique-header {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.historique-header h2 {
+    margin: 0 0 20px 0;
+}
+
+.historique-controls {
+    display: flex;
+    gap: 30px;
+    align-items: end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-group label {
+    font-weight: 600;
+    color: #333;
+}
+
+.select-control {
+    padding: 10px 15px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 1em;
+    min-width: 250px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.select-control:focus {
+    outline: none;
+    border-color: var(--bleu);
+}
+
+.annee-navigation {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.btn-year {
+    background: var(--bleu);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-year:hover {
+    background: var(--mauve);
+    transform: scale(1.1);
+}
+
+.annee-display {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: var(--bleu);
+    min-width: 80px;
+    text-align: center;
+}
+
+.message-selection {
+    background: white;
+    padding: 60px 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.message-selection p {
+    margin: 15px 0 0 0;
+    color: #999;
+    font-size: 1.1em;
+}
+
+/* Layout Calendrier + Soldes (comme Mes congés) */
+.historique-content-layout {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 20px;
+    align-items: start;
+}
+
+.soldes-historique {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 25px;
+    border-radius: 8px;
+    color: white;
+    position: sticky;
+    top: 20px;
+}
+
+.soldes-historique h3 {
+    margin: 0 0 20px 0;
+    font-size: 1.3em;
+}
+
+.soldes-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.solde-card {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    padding: 15px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.solde-label {
+    font-size: 0.9em;
+    opacity: 0.9;
+    font-weight: 600;
+}
+
+.solde-value {
+    font-size: 1.5em;
+    font-weight: 700;
+}
+
+.calendrier-historique {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.mois-historique {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.mois-historique:hover {
+    border-color: var(--bleu);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.mois-header-historique {
+    font-weight: 700;
+    color: var(--bleu);
+    text-align: center;
+    padding: 8px 0;
+    border-bottom: 2px solid var(--bleu);
+    margin-bottom: 10px;
+    font-size: 0.95em;
+}
+
+.jours-semaine-historique {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 5px;
+}
+
+.jour-semaine-historique {
+    font-size: 0.7em;
+    text-align: center;
+    color: #666;
+    font-weight: 600;
+}
+
+.jours-mois-historique {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+
+.jour-historique {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    border-radius: 4px;
+    cursor: default;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.jour-historique.vide {
+    cursor: default;
+}
+
+.jour-historique.weekend {
+    background: #e9ecef;
+    color: #999;
+}
+
+.jour-historique.ferie {
+    background: var(--jaune);
+    color: #856404;
+    font-weight: 600;
+}
+.jour-historique.ferie::after {
+        content: " 🚩";
+    font-size: 0.9em;
+}
 
 
+.jour-historique.cp {
+    background: var(--bleu);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.jour-historique.rtt {
+    background: var(--mauve);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.jour-historique.recup {
+    background: var(--orange);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.jour-historique.maladie {
+    background: var(--rouge);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.jour-historique.cp:hover,
+.jour-historique.rtt:hover,
+.jour-historique.recup:hover,
+.jour-historique.maladie:hover {
+    transform: scale(1.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+/* ========== MODAL SUPPRESSION ABSENCE ========== */
+
+#modalSuppressionAbsence .modal-content {
+    max-width: 550px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#modalSuppressionAbsence .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    flex-shrink: 0;
+}
+
+#modalSuppressionAbsence .modal-header h3 {
+    margin: 0;
+    color: var(--bleu);
+    font-size: 1.3em;
+}
+
+#modalSuppressionAbsence .close-modal {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: #999;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#modalSuppressionAbsence .close-modal:hover {
+    color: #333;
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+#modalSuppressionAbsence .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.info-absence-suppression {
+    background: #e3f2fd;
+    border-left: 4px solid var(--bleu);
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.info-absence-suppression p {
+    margin: 5px 0;
+    font-size: 0.95em;
+}
+
+.info-absence-suppression strong {
+    color: var(--bleu);
+}
+
+.options-suppression {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.option-radio {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: white;
+}
+
+.option-radio:hover {
+    border-color: var(--bleu);
+    background: #f8f9fa;
+}
+
+.option-radio input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.option-radio span {
+    flex: 1;
+    font-size: 0.95em;
+}
+
+.option-radio input[type="radio"]:checked + span {
+    font-weight: 600;
+    color: var(--bleu);
+}
+
+.warning-suppression {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    padding: 15px;
+    display: flex;
+    align-items: start;
+    gap: 12px;
+}
+
+.warning-suppression i {
+    color: #ffc107;
+    font-size: 1.3em;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.warning-suppression p {
+    margin: 0;
+    color: #856404;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+#modalSuppressionAbsence .modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #e0e0e0;
+    background: #f8f9fa;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+#modalSuppressionAbsence .btn-secondary {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+#modalSuppressionAbsence .btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-danger {
+    background: var(--rouge);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-danger:hover {
+    background: #b01845;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
 @media (max-width: 1200px) {
     .calendrier-grid-global {
         grid-template-columns: repeat(3, 1fr);

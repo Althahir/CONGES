@@ -3,3 +3,4 @@ database/*.db
 database/*.sqbpro
 *.log
 .DS_Store
+out/

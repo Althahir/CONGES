@@ -15,7 +15,7 @@
         <!-- Header -->
         <header class="dashboard-header">
     <div class="header-left">
-        <img src="../assets/logo_horiz_fdBlanc.png" alt="Logo" class="header-logo">
+        <img src="../assets/logo_vert.png" alt="Logo" class="header-logo">
     </div>
     <div class="header-center">
         <div id="headerAdminDefault">
@@ -38,17 +38,20 @@
             <button class="nav-btn active" data-section="mes-conges">
                 <i class="fa-solid fa-user"></i> Mes congés
             </button>
+            <button class="nav-btn" data-section="calendrier">
+                <i class="fa-regular fa-calendar"></i> Calendrier Global
+            </button>
+            <button class="nav-btn" data-section="historique">
+                <i class="fa-solid fa-clock-rotate-left"></i> Historique
+            </button>
             <button class="nav-btn" data-section="salaries">
                 <i class="fa-solid fa-users"></i> Salariés
             </button>
-            <button class="nav-btn" data-section="calendrier">
-                <i class="fa-solid fa-calendar"></i> Calendrier Global
-            </button>
             <button class="nav-btn" data-section="feries">
-                <i class="fa-solid fa-flag"></i> Jours Fériés
+                <i class="fa-regular fa-flag"></i> Jours Fériés
             </button>
             <button class="nav-btn" data-section="rtt">
-                <i class="fa-solid fa-calculator"></i> Planning des traitements
+                <i class="fa-regular fa-clock"></i> Planning des traitements
             </button>
         </nav>
 
@@ -145,28 +148,6 @@
 
                     <!-- Panneau latéral (droite) -->
                     <aside class="sidebar-panel">
-                        <!-- Soldes -->
-                        <div class="panel-section soldes-section">
-                            <h2><i class="fa-solid fa-chart-bar"></i> Mes soldes</h2>
-                            <div class="soldes-grid">
-                                <div class="solde-mini cp-n1">
-                                    <div class="solde-label">CP N-1</div>
-                                    <div class="solde-value" id="solde-cp-n1-user">-</div>
-                                </div>
-                                <div class="solde-mini cp-n">
-                                    <div class="solde-label">CP N</div>
-                                    <div class="solde-value" id="solde-cp-n-user">-</div>
-                                </div>
-                                <div class="solde-mini rtt">
-                                    <div class="solde-label">RTT</div>
-                                    <div class="solde-value" id="solde-rtt-user">-</div>
-                                </div>
-                                <div class="solde-mini recup">
-                                    <div class="solde-label">Récup</div>
-                                    <div class="solde-value" id="solde-recup-user">-</div>
-                                </div>
-                            </div>
-                        </div>
 
                         <!-- Légende -->
                         <div class="panel-section legende-section">
@@ -192,7 +173,28 @@
                                 <span>Jour férié</span>
                             </div>
                         </div>
-
+                        <!-- Soldes -->
+                        <div class="panel-section soldes-section">
+                            <h2><i class="fa-solid fa-chart-bar"></i> Mes soldes</h2>
+                            <div class="soldes-grid">
+                                <div class="solde-mini cp-n1">
+                                    <div class="solde-label">CP N-1</div>
+                                    <div class="solde-value" id="solde-cp-n1-user">-</div>
+                                </div>
+                                <div class="solde-mini cp-n">
+                                    <div class="solde-label">CP N</div>
+                                    <div class="solde-value" id="solde-cp-n-user">-</div>
+                                </div>
+                                <div class="solde-mini rtt">
+                                    <div class="solde-label">RTT</div>
+                                    <div class="solde-value" id="solde-rtt-user">-</div>
+                                </div>
+                                <div class="solde-mini recup">
+                                    <div class="solde-label">Récup</div>
+                                    <div class="solde-value" id="solde-recup-user">-</div>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Formulaire poser absence -->
                         <div class="panel-section form-section">
                             <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>
@@ -318,7 +320,7 @@
             </section>
 
             <!-- Section Gestion des Types de Congés -->
-<section id="rtt-section" class="content-section">
+            <section id="rtt-section" class="content-section">
     <h2>Gestion des Types de Congés</h2>
     
     <!-- Configuration des traitements -->
@@ -426,8 +428,106 @@
             </table>
         </div>
     </div>
-</section>
+            </section>
+           
+            <!-- Section Historique -->
+            <section id="historique-section" class="content-section">
+    <div class="historique-header">
+        <h2>Gestion des absences</h2>
+        
+        <div class="historique-controls">
+            <div class="control-group">
+                <label>Salarié :</label>
+                <select id="selectSalarieHistorique" class="select-control">
+                    <option value="">Sélectionnez un salarié</option>
+                </select>
+            </div>
             
+            <div class="control-group">
+                <label>Année :</label>
+                <div class="annee-navigation">
+                    <button id="btnPrevYearHistorique" class="btn-year">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <span id="anneeHistorique" class="annee-display">2026</span>
+                    <button id="btnNextYearHistorique" class="btn-year">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message si aucun salarié sélectionné -->
+    <div id="messageSelectionneSalarie" class="message-selection">
+        <i class="fa-solid fa-user-circle" style="font-size: 3em; color: #ccc;"></i>
+        <p>Sélectionnez un salarié pour voir ses absences</p>
+    </div>
+   
+    <!-- Layout Calendrier + Soldes -->
+<div class="historique-content-layout">
+    <!-- Calendrier -->
+    <div id="calendrierHistorique" class="calendrier-historique" style="display: none;"></div>
+    
+    <!-- Soldes du salarié -->
+    <div id="soldesHistorique" class="soldes-historique" style="display: none;">
+        <h3 id="nomSalarieHistorique"></h3>
+        <div class="soldes-grid">
+            <div class="solde-card">
+                <div class="solde-label">CP N-1</div>
+                <div class="solde-value" id="soldeCPN1Historique">0j</div>
+            </div>
+            <div class="solde-card">
+                <div class="solde-label">CP N</div>
+                <div class="solde-value" id="soldeCPNHistorique">0j</div>
+            </div>
+            <div class="solde-card">
+                <div class="solde-label">RTT</div>
+                <div class="solde-value" id="soldeRTTHistorique">0j</div>
+            </div>
+            <div class="solde-card">
+                <div class="solde-label">Récupération</div>
+                <div class="solde-value" id="soldeRecupHistorique">0h</div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Suppression Absence -->
+<div id="modalSuppressionAbsence" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>Supprimer une absence</h3>
+            <button id="closeModalSuppression" class="close-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-body">
+            <div id="infoAbsenceSuppression" class="info-absence-suppression"></div>
+            
+            <div class="options-suppression">
+                <label class="option-radio">
+                    <input type="radio" name="typeSuppression" value="complete" checked>
+                    <span>Supprimer toute l'absence</span>
+                </label>
+                <label class="option-radio">
+                    <input type="radio" name="typeSuppression" value="jour">
+                    <span>Supprimer uniquement le <strong id="jourSelectionne"></strong></span>
+                </label>
+            </div>
+            
+            <div class="warning-suppression">
+                <i class="fa-solid fa-exclamation-triangle"></i>
+                <p>Les soldes seront automatiquement recalculés après la suppression.</p>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button id="btnAnnulerSuppression" class="btn-secondary">Annuler</button>
+            <button id="btnConfirmerSuppression" class="btn-danger">Confirmer la suppression</button>
+        </div>
+    </div>
+</div>
 
         </div>
     </div>

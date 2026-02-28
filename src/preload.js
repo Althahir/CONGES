@@ -25,8 +25,8 @@ contextBridge.exposeInMainWorld('api', {
     createAbsence: (data) => ipcRenderer.invoke('createAbsence', data),
     getAbsences: (salarieId) => ipcRenderer.invoke('getAbsences', salarieId),
     getAllAbsences: () => ipcRenderer.invoke('getAllAbsences'),
-    deleteAbsence: (id) => ipcRenderer.invoke('deleteAbsence', id),
-    
+    deleteAbsence: (absenceId) => ipcRenderer.invoke('deleteAbsence', absenceId),
+    updateAbsence: (absenceId, updates) => ipcRenderer.invoke('updateAbsence', absenceId, updates),
     // Jours fériés
     getJoursFeries: (annee) => ipcRenderer.invoke('getJoursFeries', annee),
     addJourFerie: (data) => ipcRenderer.invoke('addJourFerie', data),

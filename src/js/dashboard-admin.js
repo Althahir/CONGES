@@ -54,8 +54,10 @@ navBtns.forEach(btn => {
                 chargerSalaries();
                 break;
             case 'calendrier':
-                console.log('Chargement calendrier global...');
                 chargerCalendrierGlobal();
+                break;
+            case 'historique':
+                chargerHistoriqueComplet();
                 break;
             case 'feries':
                 chargerJoursFeries();
@@ -63,7 +65,7 @@ navBtns.forEach(btn => {
             case 'rtt':
                 chargerTableauRTT();
                 break;
-        }
+            }
     });
 });
 
@@ -1244,7 +1246,7 @@ function afficherNotificationPersistante(type, titre, message) {
 // TEST NOTIFICATION
 // setTimeout(() => {
 //     afficherNotificationPersistante(
-//         'success',
+//         'error',
 //         '✅ Traitement CP Annuel effectué',
 //         '8 salarié(s) traité(s) avec succès'
 //     );
@@ -1542,47 +1544,56 @@ async function lireExcelImport(file) {
 }
 
 // Parser les données Excel
+// Parser les données Excel
 function parseDataExcel(jsonData) {
     // Trouver la ligne d'en-tête (chercher "PERSONNE")
     let headerRow = -1;
+    let colonnePersonne = -1;
+    
     for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-        if (jsonData[i].some(cell => cell && cell.toString().includes('PERSONNE'))) {
-            headerRow = i;
-            break;
+        for (let j = 0; j < jsonData[i].length; j++) {
+            if (jsonData[i][j] && jsonData[i][j].toString().includes('PERSONNE')) {
+                headerRow = i;
+                colonnePersonne = j;
+                break;
+            }
         }
+        if (headerRow !== -1) break;
     }
     
     if (headerRow === -1) {
         throw new Error('En-tête introuvable (colonne PERSONNE non trouvée)');
     }
     
-    const headers = jsonData[headerRow];
+    console.log(`📌 En-tête trouvé ligne ${headerRow}, colonne PERSONNE à l'index ${colonnePersonne}`);
+    
     const data = [];
     
     // Parser chaque ligne
-for (let i = headerRow + 1; i < jsonData.length; i++) {
-    const row = jsonData[i];
-    
-    // Ignorer les lignes vides
-    if (!row || row.length === 0 || !row[0]) continue; // Index 0 = PERSONNE
-    
-    const personne = row[0] ? row[0].toString().trim() : '';
-    if (!personne) continue;
-    
-    // Extraire les données
-    const ligne = {
-        personne: personne,
-        date: row[1] ? row[1] : '', // Date Excel (nombre)
-        nature: row[2] ? row[2].toString().trim() : '', // Nature d'absence
-        jour: row[3] ? parseInt(row[3]) : 0,
-        mois: row[4] ? parseInt(row[4]) : 0,
-        annee: row[5] ? parseInt(row[5]) : 0,
-        duree: row[6] ? parseFloat(row[6]) : 1, // Journée entière ou demi
-        periode: row[7] ? row[7].toString().trim() : 'Journée'
-    };
-    
-    data.push(ligne);
-}
+    for (let i = headerRow + 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        
+        // Ignorer les lignes vides
+        if (!row || row.length === 0) continue;
+        
+        // Lire PERSONNE à l'index détecté
+        const personne = row[colonnePersonne] ? row[colonnePersonne].toString().trim() : '';
+        if (!personne || personne === '') continue;
+        
+        // Les autres colonnes sont décalées selon colonnePersonne
+        const ligne = {
+            personne: personne,
+            date: row[colonnePersonne + 1] ? row[colonnePersonne + 1] : '', // Date d'absence
+            nature: row[colonnePersonne + 2] ? row[colonnePersonne + 2].toString().trim() : '', // Nature
+            jour: row[colonnePersonne + 3] ? parseInt(row[colonnePersonne + 3]) : 0,
+            mois: row[colonnePersonne + 4] ? parseInt(row[colonnePersonne + 4]) : 0,
+            annee: row[colonnePersonne + 5] ? parseInt(row[colonnePersonne + 5]) : 0,
+            duree: row[colonnePersonne + 6] ? parseFloat(row[colonnePersonne + 6]) : 1,
+            periode: row[colonnePersonne + 7] ? row[colonnePersonne + 7].toString().trim() : 'Journée'
+        };
+        
+        data.push(ligne);
+    }
     
     return data;
 }
@@ -1914,7 +1925,216 @@ if (window.api.onTraitementAutomatique) {
         chargerHistoriqueTraitements();
     });
 }
+// ========== CODE SECRET POUR EXPORT EXCEL ==========
+// Séquence : Ctrl+S, Ctrl+A, Ctrl+V, Ctrl+E
 
+let sequenceExport = [];
+const secretCodeExport = ['s', 'a', 'v', 'e'];
+let sequenceTimeoutExport;
+
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key.length === 1) {
+        const letter = e.key.toLowerCase();
+        
+        sequenceExport.push(letter);
+        
+        if (sequenceExport.length > 4) {
+            sequenceExport.shift();
+        }
+        
+        if (sequenceExport.join('') === secretCodeExport.join('')) {
+            e.preventDefault();
+            executerExport();
+            sequenceExport = [];
+            clearTimeout(sequenceTimeoutExport);
+        }
+        
+        clearTimeout(sequenceTimeoutExport);
+        sequenceTimeoutExport = setTimeout(() => {
+            sequenceExport = [];
+        }, 2000);
+    }
+});
+// ========== FONCTION EXPORT EXCEL ==========
+
+// ========== FONCTION EXPORT EXCEL ==========
+
+async function executerExport() {
+    try {
+        afficherNotificationPersistante('success', '📊 Export en cours...', 'Génération du fichier Excel');
+        
+        // Récupérer toutes les données
+        const salaries = await window.api.getAllSalaries();
+        const annee = new Date().getFullYear();
+        
+        // Créer un nouveau workbook
+        const wb = XLSX.utils.book_new();
+        
+        // ========== ONGLET 1 : SOLDES ==========
+        const dataSoldes = [
+            ['Nom', 'Prénom', 'Email', 'Type Contrat', 'CP/mois', 'RTT', 'Récup', 'CP N-1', 'CP N', 'RTT', 'Récup (h)']
+        ];
+        
+        for (const salarie of salaries) {
+            if (salarie.actif !== 1) continue;
+            
+            const soldes = await window.api.getSoldes(salarie.id, annee);
+            
+            dataSoldes.push([
+                salarie.nom,
+                salarie.prenom,
+                salarie.email,
+                salarie.type_contrat,
+                salarie.cp_mensuel,
+                salarie.a_droit_rtt ? 'Oui' : 'Non',
+                salarie.a_droit_recup ? 'Oui' : 'Non',
+                soldes ? soldes.cp_n1 : 0,
+                soldes ? soldes.cp_n : 0,
+                soldes ? soldes.rtt : 0,
+                soldes ? soldes.recup_heures : 0
+            ]);
+        }
+        
+        const wsSoldes = XLSX.utils.aoa_to_sheet(dataSoldes);
+        
+        // Largeur des colonnes
+        wsSoldes['!cols'] = [
+            { wch: 15 }, // Nom
+            { wch: 15 }, // Prénom
+            { wch: 25 }, // Email
+            { wch: 12 }, // Contrat
+            { wch: 10 }, // CP/mois
+            { wch: 8 },  // RTT
+            { wch: 8 },  // Récup
+            { wch: 10 }, // CP N-1
+            { wch: 10 }, // CP N
+            { wch: 10 }, // RTT solde
+            { wch: 12 }  // Récup h
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, wsSoldes, 'Soldes');
+        
+        // ========== ONGLET : ARCHIVES (FORMAT EXACT IMPORT) ==========
+const dataArchives = [
+    ['', '', '', 'PERSONNE', 'Date d\'absence', 'Nature d\'absence', 'jour', 'mois', 'année', 'journée entiere ou demi journée', 'matin / apres-midi ou Journée']
+];
+
+// Pour chaque salarié, récupérer toutes les absences
+for (const salarie of salaries) {
+    const absences = await window.api.getAbsences(salarie.id);
+    
+    for (const absence of absences) {
+        // Mapper le type vers le format import
+        let natureAbsence = 'CP anticipé';
+        if (absence.type === 'RTT') natureAbsence = 'RTT';
+        else if (absence.type === 'RECUP') natureAbsence = 'RECUP';
+        else if (absence.type === 'CP_N1') natureAbsence = 'CP anticipé';
+        else if (absence.type === 'CP_N') natureAbsence = 'CP anticipé';
+        else if (absence.type === 'MALADIE') natureAbsence = 'MALADIE';
+        
+        // Décomposer l'absence en jours individuels
+        const dateDebut = new Date(absence.date_debut);
+        const dateFin = new Date(absence.date_fin);
+        
+        // Si c'est une demi-journée unique
+        if (absence.duree_jours < 1 && dateDebut.getTime() === dateFin.getTime()) {
+            const jour = dateDebut.getDate();
+            const mois = dateDebut.getMonth() + 1;
+            const anneeAbs = dateDebut.getFullYear();
+            
+            // Date Excel (nombre de jours depuis 1900)
+            const dateExcel = new Date(anneeAbs, mois - 1, jour);
+            
+            dataArchives.push([
+                '', '', '', // Colonnes A, B, C vides
+                `${salarie.nom} ${salarie.prenom}`,
+                dateExcel,
+                natureAbsence,
+                jour,
+                mois,
+                anneeAbs,
+                0.5,
+                'AM'
+            ]);
+        } else {
+            // Décomposer en jours
+            let currentDate = new Date(dateDebut);
+            
+           while (currentDate <= dateFin) {
+                const jour = currentDate.getDate();
+                    const mois = currentDate.getMonth() + 1;
+                    const anneeAbs = currentDate.getFullYear();
+                    
+                    dataArchives.push([
+                        '', '', '', // Colonnes A, B, C vides
+                        `${salarie.nom} ${salarie.prenom}`,
+                        new Date(anneeAbs, mois - 1, jour),
+                        natureAbsence,
+                        jour,
+                        mois,
+                        anneeAbs,
+                        1,
+                        'Journée'
+                    ]);
+                
+                
+                // Jour suivant
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        }
+}
+}
+
+const wsArchives = XLSX.utils.aoa_to_sheet(dataArchives);
+
+// Largeur des colonnes
+wsArchives['!cols'] = [
+    { wch: 5 },  // A vide
+    { wch: 5 },  // B vide
+    { wch: 5 },  // C vide
+    { wch: 25 }, // D PERSONNE
+    { wch: 15 }, // E Date
+    { wch: 20 }, // F Nature
+    { wch: 8 },  // G jour
+    { wch: 8 },  // H mois
+    { wch: 8 },  // I année
+    { wch: 12 }, // J durée
+    { wch: 30 }  // K période
+];
+
+// Formater les dates en format date Excel
+const range = XLSX.utils.decode_range(wsArchives['!ref']);
+for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    const cellAddress = XLSX.utils.encode_cell({ r: R, c: 4 }); // Colonne E
+    if (wsArchives[cellAddress] && wsArchives[cellAddress].v instanceof Date) {
+        wsArchives[cellAddress].t = 'd';
+        wsArchives[cellAddress].z = 'dd/mm/yyyy';
+    }
+}
+
+XLSX.utils.book_append_sheet(wb, wsArchives, 'Archives');
+        
+        // ========== GÉNÉRATION ET TÉLÉCHARGEMENT ==========
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        
+        // Créer un lien de téléchargement
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Export_Conges_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        afficherNotificationPersistante('success', '✅ Export réussi !', 'Le fichier a été téléchargé');
+        
+    } catch (error) {
+        console.error('Erreur export:', error);
+        afficherNotificationPersistante('error', '❌ Erreur export', error.message);
+    }
+}
 // ========== CHARGEMENT DES NOTIFICATIONS NON LUES ==========
 
 async function chargerNotificationsNonLues() {
@@ -2015,7 +2235,363 @@ async function init() {
     // Charger les notifications non lues
     await chargerNotificationsNonLues();
 }
+// ========== SECTION HISTORIQUE COMPLET ==========
 
+let toutesLesAbsences = [];
+let tousSalaries = [];
+
+// ========== SECTION HISTORIQUE - CALENDRIER ==========
+
+let anneeHistorique = new Date().getFullYear();
+let salarieHistoriqueSelectionne = null;
+let absencesHistorique = [];
+let joursFeriesHistorique = [];
+let absenceCliquee = null;
+let jourClique = null;
+
+async function chargerHistoriqueComplet() {
+    try {
+        // Charger tous les salariés
+        const salaries = await window.api.getAllSalaries();
+        const select = document.getElementById('selectSalarieHistorique');
+        
+        select.innerHTML = '<option value="">Sélectionnez un salarié</option>';
+        salaries
+            .filter(s => s.actif === 1)
+            .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
+            .forEach(sal => {
+                select.innerHTML += `<option value="${sal.id}">${sal.prenom} ${sal.nom}</option>`;
+            });
+        
+        // Afficher l'année
+        document.getElementById('anneeHistorique').textContent = anneeHistorique;
+        
+        // Événements
+        select.addEventListener('change', (e) => {
+            salarieHistoriqueSelectionne = e.target.value ? parseInt(e.target.value) : null;
+            chargerCalendrierHistorique();
+        });
+        
+        document.getElementById('btnPrevYearHistorique').addEventListener('click', () => {
+            anneeHistorique--;
+            document.getElementById('anneeHistorique').textContent = anneeHistorique;
+            chargerCalendrierHistorique();
+        });
+        
+        document.getElementById('btnNextYearHistorique').addEventListener('click', () => {
+            anneeHistorique++;
+            document.getElementById('anneeHistorique').textContent = anneeHistorique;
+            chargerCalendrierHistorique();
+        });
+        
+    } catch (error) {
+        console.error('Erreur chargement historique:', error);
+    }
+}
+
+async function chargerCalendrierHistorique() {
+    const messageDiv = document.getElementById('messageSelectionneSalarie');
+    const soldesDiv = document.getElementById('soldesHistorique');
+    const calendrierDiv = document.getElementById('calendrierHistorique');
+    
+    if (!salarieHistoriqueSelectionne) {
+        messageDiv.style.display = 'block';
+        soldesDiv.style.display = 'none';
+        calendrierDiv.style.display = 'none';
+        return;
+    }
+    
+    messageDiv.style.display = 'none';
+    
+    try {
+        // Charger les données
+        const salarie = await window.api.getSalarie(salarieHistoriqueSelectionne);
+        
+        // MODIFICATION ICI : Toujours afficher les soldes de l'année en cours
+        const anneeEnCours = new Date().getFullYear();
+        const soldes = await window.api.getSoldes(salarieHistoriqueSelectionne, anneeEnCours);
+        
+        absencesHistorique = await window.api.getAbsences(salarieHistoriqueSelectionne);
+        joursFeriesHistorique = await window.api.getJoursFeries(anneeHistorique);
+        
+        // Filtrer les absences pour l'année sélectionnée (pour le calendrier)
+        absencesHistorique = absencesHistorique.filter(abs => {
+            const anneeDebut = new Date(abs.date_debut).getFullYear();
+            const anneeFin = new Date(abs.date_fin).getFullYear();
+            return anneeDebut === anneeHistorique || anneeFin === anneeHistorique;
+        });
+        
+        // Afficher les soldes (toujours année en cours)
+        document.getElementById('nomSalarieHistorique').textContent = `${salarie.prenom} ${salarie.nom}`;
+        document.getElementById('soldeCPN1Historique').textContent = soldes ? `${soldes.cp_n1.toFixed(1)}j` : '0j';
+        document.getElementById('soldeCPNHistorique').textContent = soldes ? `${soldes.cp_n.toFixed(1)}j` : '0j';
+        document.getElementById('soldeRTTHistorique').textContent = soldes ? `${soldes.rtt.toFixed(1)}j` : '0j';
+        document.getElementById('soldeRecupHistorique').textContent = soldes ? `${soldes.recup_heures.toFixed(1)}h` : '0h';
+        
+        soldesDiv.style.display = 'block';
+        
+        // Générer le calendrier
+        genererCalendrierHistorique();
+        calendrierDiv.style.display = 'grid';
+        
+    } catch (error) {
+        console.error('Erreur chargement calendrier historique:', error);
+    }
+}
+
+function genererCalendrierHistorique() {
+    const calendrierDiv = document.getElementById('calendrierHistorique');
+    calendrierDiv.innerHTML = '';
+    
+    const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const nomsJoursCourts = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    
+    for (let mois = 0; mois < 12; mois++) {
+        const moisDiv = document.createElement('div');
+        moisDiv.className = 'mois-historique';
+        
+        // Header du mois
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'mois-header-historique';
+        headerDiv.textContent = nomsMois[mois];
+        moisDiv.appendChild(headerDiv);
+        
+        // Jours de la semaine
+        const joursSemaineDiv = document.createElement('div');
+        joursSemaineDiv.className = 'jours-semaine-historique';
+        nomsJoursCourts.forEach(jour => {
+            const jourDiv = document.createElement('div');
+            jourDiv.className = 'jour-semaine-historique';
+            jourDiv.textContent = jour;
+            joursSemaineDiv.appendChild(jourDiv);
+        });
+        moisDiv.appendChild(joursSemaineDiv);
+        
+        // Jours du mois
+        const joursMoisDiv = document.createElement('div');
+        joursMoisDiv.className = 'jours-mois-historique';
+        
+        const premierJour = new Date(anneeHistorique, mois, 1);
+        const dernierJour = new Date(anneeHistorique, mois + 1, 0);
+        const nbJours = dernierJour.getDate();
+        
+        let premierJourSemaine = premierJour.getDay() - 1;
+        if (premierJourSemaine === -1) premierJourSemaine = 6;
+        
+        // Jours vides au début
+        for (let i = 0; i < premierJourSemaine; i++) {
+            const jourVide = document.createElement('div');
+            jourVide.className = 'jour-historique vide';
+            joursMoisDiv.appendChild(jourVide);
+        }
+        
+        // Jours du mois
+        for (let jour = 1; jour <= nbJours; jour++) {
+            const dateISO = `${anneeHistorique}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+            const date = new Date(anneeHistorique, mois, jour);
+            const dayOfWeek = date.getDay();
+            
+            const jourDiv = document.createElement('div');
+            jourDiv.className = 'jour-historique';
+            jourDiv.textContent = jour;
+            
+            // Weekend
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                jourDiv.classList.add('weekend');
+            }
+            
+            // Jour férié
+            const ferie = joursFeriesHistorique.find(f => f.date === dateISO);
+            if (ferie) {
+                jourDiv.classList.add('ferie');
+                jourDiv.setAttribute('data-tooltip', ferie.libelle);
+            }
+            
+            // Absence
+            const absence = absencesHistorique.find(abs => {
+                return dateISO >= abs.date_debut && dateISO <= abs.date_fin;
+            });
+            
+            if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !ferie) {
+                const type = absence.type.toUpperCase();
+                if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
+                    jourDiv.classList.add('cp');
+                } else if (type === 'RTT') {
+                    jourDiv.classList.add('rtt');
+                } else if (type === 'RECUP') {
+                    jourDiv.classList.add('recup');
+                } else if (type === 'MALADIE') {
+                    jourDiv.classList.add('maladie');
+                }
+                
+                // Événement clic
+                jourDiv.addEventListener('click', () => {
+                    ouvrirModalSuppression(absence, dateISO);
+                });
+            }
+            
+            joursMoisDiv.appendChild(jourDiv);
+        }
+        
+        moisDiv.appendChild(joursMoisDiv);
+        calendrierDiv.appendChild(moisDiv);
+    }
+}
+
+// ========== MODAL SUPPRESSION ==========
+
+function ouvrirModalSuppression(absence, dateISO) {
+    absenceCliquee = absence;
+    jourClique = dateISO;
+    
+    const modal = document.getElementById('modalSuppressionAbsence');
+    const infoDiv = document.getElementById('infoAbsenceSuppression');
+    
+    const dateDebut = new Date(absence.date_debut).toLocaleDateString('fr-FR');
+    const dateFin = new Date(absence.date_fin).toLocaleDateString('fr-FR');
+    const dateCliquee = new Date(dateISO).toLocaleDateString('fr-FR');
+    const duree = absence.duree_jours ? `${absence.duree_jours.toFixed(1)} jour(s)` : `${absence.duree_heures.toFixed(1)} heure(s)`;
+    
+    const typeLabels = {
+        'CP_N': 'CP N',
+        'CP_N1': 'CP N-1',
+        'RTT': 'RTT',
+        'RECUP': 'Récupération',
+        'MALADIE': 'Arrêt maladie'
+    };
+    
+    infoDiv.innerHTML = `
+        <p><strong>Type :</strong> ${typeLabels[absence.type]}</p>
+        <p><strong>Période :</strong> ${dateDebut} → ${dateFin}</p>
+        <p><strong>Durée :</strong> ${duree}</p>
+        ${absence.commentaire ? `<p><strong>Commentaire :</strong> ${absence.commentaire}</p>` : ''}
+    `;
+    
+    document.getElementById('jourSelectionne').textContent = dateCliquee;
+    
+    // Afficher/masquer l'option "jour seul"
+    const optionJour = document.querySelector('input[value="jour"]').parentElement;
+    if (absence.date_debut === absence.date_fin) {
+        // Absence d'un seul jour : cacher l'option
+        optionJour.style.display = 'none';
+        document.querySelector('input[value="complete"]').checked = true;
+    } else {
+        optionJour.style.display = 'flex';
+    }
+    
+    modal.style.display = 'flex';
+}
+
+// Fermer la modal
+document.getElementById('closeModalSuppression').addEventListener('click', () => {
+    document.getElementById('modalSuppressionAbsence').style.display = 'none';
+});
+
+document.getElementById('btnAnnulerSuppression').addEventListener('click', () => {
+    document.getElementById('modalSuppressionAbsence').style.display = 'none';
+});
+
+// Confirmer la suppression
+document.getElementById('btnConfirmerSuppression').addEventListener('click', async () => {
+    const typeSuppression = document.querySelector('input[name="typeSuppression"]:checked').value;
+    
+    try {
+        if (typeSuppression === 'complete') {
+            // Supprimer toute l'absence
+            await window.api.deleteAbsence(absenceCliquee.id);
+            alert('✅ Absence supprimée avec succès !\nLes soldes ont été recalculés.');
+        } else {
+            // Supprimer uniquement le jour cliqué
+            await supprimerUnJour(absenceCliquee, jourClique);
+        }
+        
+        // Fermer la modal et recharger
+        document.getElementById('modalSuppressionAbsence').style.display = 'none';
+        await chargerCalendrierHistorique();
+        
+    } catch (error) {
+        console.error('Erreur suppression:', error);
+        alert('❌ Erreur lors de la suppression : ' + error.message);
+    }
+});
+
+// Fonction pour supprimer un seul jour
+async function supprimerUnJour(absence, dateISO) {
+    const dateDebut = new Date(absence.date_debut);
+    const dateFin = new Date(absence.date_fin);
+    const dateASupprimer = new Date(dateISO);
+    
+    // Cas 1 : Supprimer le premier jour
+    if (dateISO === absence.date_debut) {
+        const nouvelleDateDebut = new Date(dateASupprimer);
+        nouvelleDateDebut.setDate(nouvelleDateDebut.getDate() + 1);
+        
+        // Modifier l'absence existante
+        await window.api.updateAbsence(absence.id, {
+            date_debut: formatDateISO(nouvelleDateDebut),
+            duree_jours: absence.duree_jours - 1,
+            duree_heures: absence.duree_heures - 7
+        });
+        
+        alert('✅ Premier jour supprimé !\nLes soldes ont été recalculés.');
+        return;
+    }
+    
+    // Cas 2 : Supprimer le dernier jour
+    if (dateISO === absence.date_fin) {
+        const nouvelleDateFin = new Date(dateASupprimer);
+        nouvelleDateFin.setDate(nouvelleDateFin.getDate() - 1);
+        
+        await window.api.updateAbsence(absence.id, {
+            date_fin: formatDateISO(nouvelleDateFin),
+            duree_jours: absence.duree_jours - 1,
+            duree_heures: absence.duree_heures - 7
+        });
+        
+        alert('✅ Dernier jour supprimé !\nLes soldes ont été recalculés.');
+        return;
+    }
+    
+    // Cas 3 : Supprimer un jour au milieu (couper en 2)
+    const jourAvant = new Date(dateASupprimer);
+    jourAvant.setDate(jourAvant.getDate() - 1);
+    
+    const jourApres = new Date(dateASupprimer);
+    jourApres.setDate(jourApres.getDate() + 1);
+    
+    // Calculer les durées
+    const joursPartie1 = Math.ceil((jourAvant - dateDebut) / (1000 * 60 * 60 * 24)) + 1;
+    const joursPartie2 = Math.ceil((dateFin - jourApres) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Modifier l'absence existante (première partie)
+    await window.api.updateAbsence(absence.id, {
+        date_fin: formatDateISO(jourAvant),
+        duree_jours: joursPartie1,
+        duree_heures: joursPartie1 * 7
+    });
+    
+    // Créer une nouvelle absence (deuxième partie)
+    await window.api.createAbsence({
+        salarie_id: absence.salarie_id,
+        type: absence.type,
+        date_debut: formatDateISO(jourApres),
+        date_fin: absence.date_fin,
+        duree_jours: joursPartie2,
+        duree_heures: joursPartie2 * 7,
+        commentaire: absence.commentaire,
+        statut: 'valide'
+    });
+    
+    alert('✅ Jour supprimé !\nL\'absence a été coupée en 2 périodes.\nLes soldes ont été recalculés.');
+}
+
+function formatDateISO(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 init();
 
 // ========== SOUMISSION DU FORMULAIRE ADMIN "MES CONGÉS" ==========
