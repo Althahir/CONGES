@@ -27,16 +27,11 @@
         </header>
 
         <!-- Contenu principal -->
-        <div class="dashboard-content">
-            <!-- Calendrier annuel (gauche) -->
-            <div class="calendar-section">
-                <div id="calendrierAnnuel" class="calendrier-grid">
-                    <!-- Les 12 mois seront générés dynamiquement ici -->
-                </div>
-            </div>
-
-            <!-- Panneau latéral (droite) -->
-            <aside class="sidebar-panel">
+        <!-- Contenu principal -->
+        <div class="dashboard-content-new">
+            <!-- Colonne gauche : Légende + Soldes + Formulaire -->
+            <aside class="sidebar-left-new">
+                <!-- Légende -->
                 <div class="panel-section legende-section">
                     <h2><i class="fa-solid fa-palette"></i> Légende</h2>
                     <div class="legende-item">
@@ -60,36 +55,41 @@
                         <span>Jour férié</span>
                     </div>
                 </div>
+
                 <!-- Soldes -->
-                <div class="panel-section soldes-section">
+                <div class="panel-section soldes-section-new">
                     <h2><i class="fa-solid fa-chart-bar"></i> Mes soldes</h2>
-                    <div class="soldes-grid">
-                        <div class="solde-mini cp-n1">
-                            <div class="solde-label">CP N-1</div>
-                            <div class="solde-value" id="solde-cp-n1">-</div>
+                    <div class="soldes-grid-compact">
+                        <div class="solde-card-compact cp-n1">
+                            <div class="solde-label-compact">CP N-1</div>
+                            <div class="solde-value-compact" id="solde-cp-n1">-</div>
                         </div>
-                        <div class="solde-mini cp-n">
-                            <div class="solde-label">CP N</div>
-                            <div class="solde-value" id="solde-cp-n">-</div>
+                        <div class="solde-card-compact cp-n">
+                            <div class="solde-label-compact">CP N</div>
+                            <div class="solde-value-compact" id="solde-cp-n">-</div>
                         </div>
-                        <div class="solde-mini rtt">
-                            <div class="solde-label">RTT</div>
-                            <div class="solde-value" id="solde-rtt">-</div>
+                        <div class="solde-card-compact rtt">
+                            <div class="solde-label-compact">RTT</div>
+                            <div class="solde-value-compact" id="solde-rtt">-</div>
                         </div>
-                        <div class="solde-mini recup">
-                            <div class="solde-label">Récup</div>
-                            <div class="solde-value" id="solde-recup">-</div>
+                        <div class="solde-card-compact recup">
+                            <div class="solde-label-compact">Récup</div>
+                            <div class="solde-value-compact" id="solde-recup">-</div>
                         </div>
                     </div>
+                    
+                    <!-- Bouton Heures sup (visible uniquement si a_droit_recup) -->
+                    <button id="btnAjouterHeuresSup" class="btn-heures-sup" style="display: none;">
+                        <i class="fa-solid fa-plus"></i> Ajouter heures sup
+                    </button>
                 </div>
 
-                <!-- Légende -->
-                <!-- Formulaire poser absence -->
+                <!-- Formulaire -->
                 <div class="panel-section form-section">
                     <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>
                     <form id="formAbsence">
                         <div class="form-group-compact">
-                            <label for="typeAbsence">Type *</label>
+                            <!-- <label for="typeAbsence">Type *</label> -->
                             <select id="typeAbsence" name="typeAbsence" required>
                                 <option value="">-- Sélectionner --</option>
                                 <option value="CP">Congés payés (CP)</option>
@@ -109,7 +109,7 @@
                         </div>
 
                         <div class="form-group-compact">
-                            <label for="periodeType">Période *</label>
+                            <!-- <label for="periodeType">Période *</label> -->
                             <select id="periodeType" name="periodeType" required>
                                 <option value="journee">Journée entière</option>
                                 <option value="demi">Demi-journée</option>
@@ -153,15 +153,14 @@
                         </div>
                     </form>
                 </div>
-
-                <!-- Historique -->
-                <div class="panel-section historique-section">
-                    <h2><i class="fa-solid fa-history"></i> Historique récent</h2>
-                    <div id="historiqueList" class="historique-list">
-                        <p class="text-muted">Aucune absence enregistrée</p>
-                    </div>
-                </div>
             </aside>
+
+            <!-- Colonne droite : Calendrier -->
+            <div class="calendar-section-new">
+                <div id="calendrierAnnuel" class="calendrier-grid">
+                    <!-- Les 12 mois seront générés dynamiquement ici -->
+                </div>
+            </div>
         </div>
     </div>
 

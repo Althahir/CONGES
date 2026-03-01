@@ -2183,3 +2183,865 @@ table tr:hover {
     border-radius: 3px;
     border-left: 3px solid var(--bleu);
 }
+
+/* ========== NOUVEAU LAYOUT 2 COLONNES ADMIN "MES CONGÉS" ========== */
+
+.dashboard-content-new {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 10px;
+    height: calc(100vh - 200px);
+    padding: 15px;
+    overflow: hidden;
+}
+
+.sidebar-left-new {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 10px;
+    max-height: calc(100vh - 200px);
+}
+
+.calendar-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ========== SOLDES COMPACTS ADMIN ========== */
+
+.soldes-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.soldes-grid-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.solde-card-compact {
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #e0e0e0;
+}
+
+.solde-card-compact.cp-n1, .solde-card-compact.cp-n {
+    background: #87a3f17a;
+    border-color: var(--bleu);
+}
+
+.solde-card-compact.rtt {
+    background: #d578e773;
+    border-color: var(--mauve);
+}
+
+.solde-card-compact.recup {
+    background: #e92f2f7e;
+    border-color: var(--rouge);
+}
+
+.solde-label-compact {
+    font-size: 1em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    opacity: 0.8;
+}
+
+.solde-card-compact.cp-n1 .solde-label-compact,
+.solde-card-compact.cp-n .solde-label-compact {
+    color: var(--bleu);
+}
+
+.solde-card-compact.rtt .solde-label-compact {
+    color: var(--mauve);
+}
+
+.solde-card-compact.recup .solde-label-compact {
+    color: var(--rouge);
+}
+
+.solde-value-compact {
+    font-size: 1.1em;
+    font-weight: 700;
+}
+
+.solde-card-compact.cp-n1 .solde-value-compact,
+.solde-card-compact.cp-n .solde-value-compact {
+    color: var(--bleu);
+}
+
+.solde-card-compact.rtt .solde-value-compact {
+    color: var(--mauve);
+}
+
+.solde-card-compact.recup .solde-value-compact {
+    color: var(--rouge);
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Bouton Heures sup */
+.btn-heures-sup {
+    width: 100%;
+    background-color: var(--rouge);
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+}
+
+.btn-heures-sup:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.btn-heures-sup i {
+    margin-right: 6px;
+}
+
+/* ========== SCROLLBAR CUSTOM ADMIN ========== */
+
+.sidebar-left-new::-webkit-scrollbar,
+.calendar-section-new::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-track,
+.calendar-section-new::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-thumb,
+.calendar-section-new::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-thumb:hover,
+.calendar-section-new::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* ========== FORMULAIRE ADMIN ========== */
+
+#mes-conges-section .form-section {
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    color: #666;
+}
+
+#mes-conges-section .form-group-compact {
+    margin-bottom: 10px;
+}
+
+#mes-conges-section .form-group-compact label {
+    font-size: 0.75em;
+    margin-bottom: 4px;
+    display: block;
+    color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#mes-conges-section .form-group-compact input,
+#mes-conges-section .form-group-compact select,
+#mes-conges-section .form-group-compact textarea {
+    width: 100%;
+    font-size: 0.85em;
+    padding: 8px 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: all 0.3s ease;
+}
+
+#mes-conges-section .form-group-compact input:focus,
+#mes-conges-section .form-group-compact select:focus,
+#mes-conges-section .form-group-compact textarea:focus {
+    outline: none;
+    border-color: #666;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+}
+
+#mes-conges-section .form-group-compact select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 35px;
+}
+
+#mes-conges-section .form-group-compact textarea {
+    min-height: 50px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+#mes-conges-section .form-row-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+#mes-conges-section .resume-compact {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 0.85em;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#mes-conges-section .resume-compact div {
+    margin-bottom: 5px;
+}
+
+#mes-conges-section .resume-compact strong {
+    color: #666;
+}
+
+#mes-conges-section .alert-compact {
+    background: rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 5px;
+    font-size: 0.8em;
+    color: #666;
+}
+
+#mes-conges-section .error-message,
+#mes-conges-section .success-message {
+    padding: 8px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 0.85em;
+    font-weight: 500;
+    display: none;
+    transition: all 0.3s ease;
+}
+
+#mes-conges-section .error-message.show,
+#mes-conges-section .success-message.show {
+    display: block;
+}
+
+#mes-conges-section .error-message {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    color: #666;
+}
+
+#mes-conges-section .success-message {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid rgba(40, 167, 69, 0.5);
+    color: #666;
+}
+
+#mes-conges-section .form-actions-compact {
+    margin-top: 12px;
+}
+
+#mes-conges-section .btn-primary.btn-block {
+    width: 100%;
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+#mes-conges-section .btn-primary.btn-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    background: #f8f9fa;
+}
+
+#mes-conges-section .btn-primary.btn-block:active {
+    transform: translateY(0);
+}
+
+/* ========== RESPONSIVE ========== */
+
+@media (max-width: 1400px) {
+    .dashboard-content-new {
+        grid-template-columns: 350px 1fr;
+    }
+}
+
+@media (max-width: 1200px) {
+    .dashboard-content-new {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+    
+    .sidebar-left-new {
+        max-height: 400px;
+    }
+}
+/* ========== SECTION MES CONGÉS ADMIN - COPIE EXACTE DU USER ========== */
+
+#mes-conges-section .dashboard-content-new {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 10px;
+    height: calc(100vh - 200px);
+    padding: 15px;
+    overflow: hidden;
+}
+
+#mes-conges-section .sidebar-left-new {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 10px;
+    max-height: calc(100vh - 200px);
+}
+
+#mes-conges-section .calendar-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#mes-conges-section .soldes-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#mes-conges-section .soldes-grid-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+#mes-conges-section .solde-card-compact {
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #e0e0e0;
+}
+
+#mes-conges-section .solde-card-compact.cp-n1,
+#mes-conges-section .solde-card-compact.cp-n {
+    background: #87a3f17a;
+    border-color: var(--bleu);
+}
+
+#mes-conges-section .solde-card-compact.rtt {
+    background: #d578e773;
+    border-color: var(--mauve);
+}
+
+#mes-conges-section .solde-card-compact.recup {
+    background: #e92f2f7e;
+    border-color: var(--rouge);
+}
+
+#mes-conges-section .solde-label-compact {
+    font-size: 1em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    opacity: 0.8;
+}
+
+#mes-conges-section .solde-card-compact.cp-n1 .solde-label-compact,
+#mes-conges-section .solde-card-compact.cp-n .solde-label-compact {
+    color: var(--bleu);
+}
+
+#mes-conges-section .solde-card-compact.rtt .solde-label-compact {
+    color: var(--mauve);
+}
+
+#mes-conges-section .solde-card-compact.recup .solde-label-compact {
+    color: var(--rouge);
+}
+
+#mes-conges-section .solde-value-compact {
+    font-size: 1.1em;
+    font-weight: 700;
+}
+
+#mes-conges-section .solde-card-compact.cp-n1 .solde-value-compact,
+#mes-conges-section .solde-card-compact.cp-n .solde-value-compact {
+    color: var(--bleu);
+}
+
+#mes-conges-section .solde-card-compact.rtt .solde-value-compact {
+    color: var(--mauve);
+}
+
+#mes-conges-section .solde-card-compact.recup .solde-value-compact {
+    color: var(--rouge);
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
+
+#mes-conges-section .btn-heures-sup {
+    width: 100%;
+    background-color: var(--rouge);
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+}
+
+#mes-conges-section .btn-heures-sup:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+#mes-conges-section .btn-heures-sup i {
+    margin-right: 6px;
+}
+
+#mes-conges-section .sidebar-left-new::-webkit-scrollbar,
+#mes-conges-section .calendar-section-new::-webkit-scrollbar {
+    width: 8px;
+}
+
+#mes-conges-section .sidebar-left-new::-webkit-scrollbar-track,
+#mes-conges-section .calendar-section-new::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+#mes-conges-section .sidebar-left-new::-webkit-scrollbar-thumb,
+#mes-conges-section .calendar-section-new::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+#mes-conges-section .sidebar-left-new::-webkit-scrollbar-thumb:hover,
+#mes-conges-section .calendar-section-new::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+#mes-conges-section .form-section {
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    color: #666;
+}
+
+#mes-conges-section .form-group-compact {
+    margin-bottom: 10px;
+}
+
+#mes-conges-section .form-group-compact label {
+    font-size: 0.75em;
+    margin-bottom: 4px;
+    display: block;
+    color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#mes-conges-section .form-group-compact input,
+#mes-conges-section .form-group-compact select,
+#mes-conges-section .form-group-compact textarea {
+    width: 100%;
+    font-size: 0.85em;
+    padding: 8px 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: all 0.3s ease;
+}
+
+#mes-conges-section .form-group-compact input:focus,
+#mes-conges-section .form-group-compact select:focus,
+#mes-conges-section .form-group-compact textarea:focus {
+    outline: none;
+    border-color: #666;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+}
+
+#mes-conges-section .form-group-compact select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 35px;
+}
+
+#mes-conges-section .form-group-compact textarea {
+    min-height: 50px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+#mes-conges-section .form-row-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+#mes-conges-section .resume-compact {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 0.85em;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#mes-conges-section .resume-compact div {
+    margin-bottom: 5px;
+}
+
+#mes-conges-section .resume-compact strong {
+    color: #666;
+}
+
+#mes-conges-section .alert-compact {
+    background: rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 5px;
+    font-size: 0.8em;
+    color: #666;
+}
+
+#mes-conges-section .error-message,
+#mes-conges-section .success-message {
+    padding: 8px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 0.85em;
+    font-weight: 500;
+    display: none;
+    transition: all 0.3s ease;
+}
+
+#mes-conges-section .error-message.show,
+#mes-conges-section .success-message.show {
+    display: block;
+}
+
+#mes-conges-section .error-message {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    color: #666;
+}
+
+#mes-conges-section .success-message {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid rgba(40, 167, 69, 0.5);
+    color: #666;
+}
+
+#mes-conges-section .form-actions-compact {
+    margin-top: 12px;
+}
+
+#mes-conges-section .btn-primary.btn-block {
+    width: 100%;
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+#mes-conges-section .btn-primary.btn-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    background: #f8f9fa;
+}
+
+#mes-conges-section .btn-primary.btn-block:active {
+    transform: translateY(0);
+}
+
+/* CALENDRIER */
+#mes-conges-section .calendrier-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    height: 100%;
+    width: 100%;
+}
+
+#mes-conges-section .mois-calendrier {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 0;
+}
+
+#mes-conges-section .mois-header {
+    text-align: center;
+    font-weight: bold;
+    color: var(--bleu);
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+#mes-conges-section .jours-semaine {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 3px;
+}
+
+#mes-conges-section .jour-semaine {
+    text-align: center;
+    font-size: 0.7em;
+    color: #666;
+    font-weight: 500;
+}
+
+#mes-conges-section .jours-mois {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    grid-auto-rows: 30px;
+}
+
+#mes-conges-section .jour {
+    width: 100%;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+#mes-conges-section .jour:hover {
+    transform: scale(1.1);
+}
+
+#mes-conges-section .jour.vide {
+    visibility: hidden;
+}
+
+#mes-conges-section .jour.weekend {
+    color: #999;
+}
+
+#mes-conges-section .jour.ferie {
+    background: var(--jaune);
+    color: #666;
+}
+
+#mes-conges-section .jour.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
+}
+
+#mes-conges-section .jour.cp {
+    background: var(--bleu);
+    color: white;
+    font-weight: bold;
+}
+
+#mes-conges-section .jour.rtt {
+    background: var(--mauve);
+    color: white;
+    font-weight: bold;
+}
+
+#mes-conges-section .jour.recup {
+    background: var(--rouge);
+    color: white;
+    font-weight: bold;
+}
+
+#mes-conges-section .jour.maladie {
+    background: var(--orange);
+    color: white;
+    font-weight: bold;
+}
+
+#mes-conges-section .jour.preview {
+    background: rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+#mes-conges-section .jour.ferie.preview {
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+#mes-conges-section .jour[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgb(233, 232, 232);
+    color: var(--bleu);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 5px;
+}
+
+#mes-conges-section .jour[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    pointer-events: none;
+}
+
+/* LÉGENDE */
+#mes-conges-section .legende-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+#mes-conges-section .legende-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+}
+
+#mes-conges-section .legende-color.cp {
+    background: var(--bleu);
+}
+
+#mes-conges-section .legende-color.rtt {
+    background: var(--mauve);
+}
+
+#mes-conges-section .legende-color.recup {
+    background: var(--rouge);
+}
+
+#mes-conges-section .legende-color.maladie {
+    background: var(--orange);
+}
+
+#mes-conges-section .legende-color.ferie {
+    background: var(--jaune);
+}
+
+#mes-conges-section .legende-color.ferie::after {
+    content: " 🚩";
+    font-size: 0.9em;
+}
+
+#mes-conges-section .panel-section {
+    background: white;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#mes-conges-section .panel-section h2 {
+    font-size: 1em;
+    margin-bottom: 12px;
+    color: var(--bleu);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#mes-conges-section .panel-section h2 i {
+    font-size: 1.1em;
+}
+
+@media (max-width: 1400px) {
+    #mes-conges-section .dashboard-content-new {
+        grid-template-columns: 350px 1fr;
+    }
+}
+
+@media (max-width: 1200px) {
+    #mes-conges-section .dashboard-content-new {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+    
+    #mes-conges-section .sidebar-left-new {
+        max-height: 400px;
+    }
+}

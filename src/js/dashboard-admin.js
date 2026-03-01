@@ -617,7 +617,7 @@ async function loadSoldesAdmin() {
             document.getElementById('solde-cp-n-user').textContent = soldes.cp_n.toFixed(2) + 'j';
             
             // RTT
-            const tuileRTT = document.querySelector('#mes-conges-section .solde-mini.rtt');
+            const tuileRTT = document.querySelector('#mes-conges-section .solde-card-compact.rtt');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt-user').textContent = soldes.rtt.toFixed(2) + 'j';
                 if (tuileRTT) tuileRTT.style.opacity = '1';
@@ -630,12 +630,12 @@ async function loadSoldesAdmin() {
             }
             
             // Récup
-            const tuileRecup = document.querySelector('#mes-conges-section .solde-mini.recup');
+            const tuileRecup = document.querySelector('#mes-conges-section .solde-card-compact.recup');
             if (salarie.a_droit_recup === 1) {
                 const recupJours = Math.floor(soldes.recup_heures / 7);
                 const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
                 document.getElementById('solde-recup-user').innerHTML = 
-                    `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j ${recupHeuresRestantes}h)</p>`;
                 if (tuileRecup) tuileRecup.style.opacity = '1';
             } else {
                 document.getElementById('solde-recup-user').textContent = 'N/A';
@@ -645,6 +645,15 @@ async function loadSoldesAdmin() {
                 }
             }
         }
+        
+        // Afficher le bouton heures sup si le salarié a droit récup
+        const btnHeuresSup = document.getElementById('btnAjouterHeuresSup');
+        if (btnHeuresSup && salarie && salarie.a_droit_recup === 1) {
+            btnHeuresSup.style.display = 'block';
+        } else if (btnHeuresSup) {
+            btnHeuresSup.style.display = 'none';
+        }
+        
     } catch (error) {
         console.error('Erreur chargement soldes:', error);
     }

@@ -216,17 +216,23 @@ body {
 }
 
 .panel-section {
-    padding: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .panel-section h2 {
-    margin: 0 0 15px 0;
-    font-size: 1.1em;
+    font-size: 1em;
+    margin-bottom: 12px;
     color: var(--bleu);
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.panel-section h2 i {
+    font-size: 1.1em;
 }
 
 /* ========== SOLDES ========== */
@@ -273,14 +279,15 @@ body {
     color: #333;
 }
 .small-recup{
-    font-size: 0.7em;
+    /* font-size: 0.7em; */
+    font-size: 1em;
     color: #5c5b5b;
 }
 /* ========== LÉGENDE ========== */
 .legende-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 8px;
     font-size: 0.9em;
 }
@@ -341,7 +348,7 @@ body {
 .form-row-compact {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 8px;
 }
 
 .resume-compact {
@@ -364,7 +371,7 @@ body {
 
 .form-actions-compact {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     margin-top: 12px;
 }
 
@@ -429,7 +436,7 @@ body {
 .historique-actions {
     margin-top: 5px;
     display: flex;
-    gap: 5px;
+    /* gap: 5px; */
 }
 
 .historique-actions button {
@@ -562,4 +569,364 @@ body {
 
 #btnCalculer {
     display: none;
+}
+
+/* ========== NOUVEAU LAYOUT 2 COLONNES ========== */
+
+.sidebar-left-new {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* ← Réduit de 20px à 12px */
+    overflow-y: auto;
+    padding-right: 10px;
+    max-height: calc(100vh - 100px); /* ← Force une hauteur max */
+}
+
+/* Réduire encore les marges */
+.dashboard-content-new {
+    display: grid;
+    grid-template-columns: 360px 1fr; /* ← Réduit de 380px à 360px */
+    gap: 10px; /* ← Réduit de 20px à 15px */
+    height: calc(100vh - 80px);
+    padding: 15px; /* ← Réduit de 20px à 15px */
+    overflow: hidden;
+}
+/* Colonne droite : Calendrier */
+.calendar-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+/* ========== SOLDES COMPACTS ========== */
+
+.soldes-section-new {
+    background: white;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* .soldes-section-new h2 {
+    font-size: 0.9em;
+    margin-bottom: 10px;
+} */
+
+.soldes-grid-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.solde-card-compact {
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #e0e0e0;
+}
+
+.solde-card-compact.cp-n1, .solde-card-compact.cp-n {
+    background: #87a3f17a;
+    border-color: var(--bleu);
+}
+
+.solde-card-compact.rtt {
+    background: #d578e773;
+    border-color: var(--mauve);
+}
+
+.solde-card-compact.recup {
+    background: #e92f2f7e;
+    border-color: var(--rouge);
+}
+
+.solde-label-compact {
+    font-size: 0.65em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    opacity: 0.8;
+        font-size: 1em;
+
+}
+
+.solde-card-compact.cp-n1 .solde-label-compact,
+.solde-card-compact.cp-n .solde-label-compact {
+    color: var(--bleu);
+}
+
+.solde-card-compact.rtt .solde-label-compact {
+    color: var(--mauve);
+}
+
+.solde-card-compact.recup .solde-label-compact {
+    color: var(--rouge);
+    
+}
+
+.solde-value-compact {
+    font-size: 1.1em;
+    font-weight: 700;
+}
+
+.solde-card-compact.cp-n1 .solde-value-compact,
+.solde-card-compact.cp-n .solde-value-compact {
+    color: var(--bleu);
+}
+
+.solde-card-compact.rtt .solde-value-compact {
+    color: var(--mauve);
+}
+
+.solde-card-compact.recup .solde-value-compact {
+    color: var(--rouge);
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    
+}
+
+/* Bouton Heures sup */
+.btn-heures-sup {
+    width: 100%;
+    /* background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); */
+    background-color: var(--rouge);
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+    display: block; /* Force l'affichage pour test */
+}
+
+.btn-heures-sup:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.btn-heures-sup i {
+    margin-right: 6px;
+}
+
+/* ========== SCROLLBAR CUSTOM ========== */
+
+.sidebar-left-new::-webkit-scrollbar,
+.calendar-section-new::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-track,
+.calendar-section-new::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-thumb,
+.calendar-section-new::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.sidebar-left-new::-webkit-scrollbar-thumb:hover,
+.calendar-section-new::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+/* ========== FORMULAIRE POSER ABSENCE - DESIGN AMÉLIORE ========== */
+
+.form-section {
+    /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    /* color: white; */
+       color: #666;
+}
+
+
+.form-group-compact {
+    margin-bottom: 10px;
+}
+
+.form-group-compact label {
+    font-size: 0.75em;
+    margin-bottom: 4px;
+    display: block;
+    /* color: rgba(255, 255, 255, 0.95); */
+       color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-group-compact input,
+.form-group-compact select,
+.form-group-compact textarea {
+    width: 100%;
+    font-size: 0.85em;
+    padding: 8px 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: all 0.3s ease;
+}
+
+.form-group-compact input:focus,
+.form-group-compact select:focus,
+.form-group-compact textarea:focus {
+    outline: none;
+    /* border-color: white; */
+    border-color: #666;;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+}
+
+.form-group-compact select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 35px;
+}
+
+.form-group-compact textarea {
+    min-height: 50px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.form-row-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* Résumé de l'absence */
+.resume-compact {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 0.85em;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.resume-compact div {
+    margin-bottom: 5px;
+}
+
+.resume-compact strong {
+    /* color: rgba(255, 255, 255, 0.9); */
+       color: #666;
+}
+
+/* Alertes */
+.alert-compact {
+    background: rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 5px;
+    font-size: 0.8em;
+    /* color: #fff3cd; */
+       color: #666;
+}
+
+.error-message,
+.success-message {
+    padding: 8px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 0.85em;
+    font-weight: 500;
+    display: none;
+    transition: all 0.3s ease;
+}
+
+.error-message.show,
+.success-message.show {
+    display: block;
+}
+
+.error-message {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    /* color: #ffdddd; */
+       color: #666;
+}
+
+.success-message {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid rgba(40, 167, 69, 0.5);
+    /* color: #d4edda; */
+       color: #666;
+}
+
+/* Bouton Valider */
+.form-actions-compact {
+    margin-top: 12px;
+}
+
+.btn-primary.btn-block {
+    width: 100%;
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary.btn-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    background: #f8f9fa;
+}
+
+.btn-primary.btn-block:active {
+    transform: translateY(0);
+}
+
+/* Police par défaut pour tout le dashboard */
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+/* ========== RESPONSIVE ========== */
+
+@media (max-width: 1400px) {
+    .dashboard-content-new {
+        grid-template-columns: 350px 1fr;
+    }
+}
+
+@media (max-width: 1200px) {
+    .dashboard-content-new {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+    
+    .sidebar-left-new {
+        max-height: 400px;
+    }
 }

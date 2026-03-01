@@ -44,7 +44,7 @@ async function loadSoldes() {
             document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
             
             // RTT
-            const tuileRTT = document.querySelector('.solde-mini.rtt');
+            const tuileRTT = document.querySelector('.solde-card-compact.rtt');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
                 if (tuileRTT) tuileRTT.style.opacity = '1';
@@ -57,12 +57,12 @@ async function loadSoldes() {
             }
             
             // Récup
-            const tuileRecup = document.querySelector('.solde-mini.recup');
+            const tuileRecup = document.querySelector('.solde-card-compact.recup');
             if (salarie.a_droit_recup === 1) {
                 const recupJours = Math.floor(soldes.recup_heures / 7);
                 const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
                 document.getElementById('solde-recup').innerHTML = 
-                    `${soldes.recup_heures.toFixed(1)}h<br><small style="font-size: 0.7em;">(${recupJours}j ${recupHeuresRestantes}h)</small>`;
+                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j ${recupHeuresRestantes}h)</p>`;
                 if (tuileRecup) tuileRecup.style.opacity = '1';
             } else {
                 document.getElementById('solde-recup').textContent = 'N/A';
@@ -72,6 +72,15 @@ async function loadSoldes() {
                 }
             }
         }
+        
+        // Afficher le bouton heures sup si le salarié a droit récup
+        const btnHeuresSup = document.getElementById('btnAjouterHeuresSup');
+        if (btnHeuresSup && salarie && salarie.a_droit_recup === 1) {
+            btnHeuresSup.style.display = 'block';
+        } else if (btnHeuresSup) {
+            btnHeuresSup.style.display = 'none';
+        }
+        
     } catch (error) {
         console.error('Erreur chargement soldes:', error);
     }
@@ -615,7 +624,7 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
             // Recharger les données
             await loadSoldes();
             await chargerCalendrier();
-            await afficherHistorique();
+            // await afficherHistorique();
             // Message de succès
             successMessage.textContent = '✅ Absence enregistrée avec succès ! PDF généré.';
             successMessage.classList.add('show');
@@ -637,6 +646,7 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
         errorMessage.classList.add('show');
     }
 });
+
 // ========== AFFICHAGE DE L'HISTORIQUE ==========
 
 async function afficherHistorique() {
@@ -704,7 +714,7 @@ async function init() {
     await loadSoldes();
     await initFormAbsence();
     await chargerCalendrier();
-    await afficherHistorique();
+    // await afficherHistorique();
 }
 
 init();
