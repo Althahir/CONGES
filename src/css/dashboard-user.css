@@ -651,8 +651,6 @@ body {
     letter-spacing: 0.5px;
     margin-bottom: 2px;
     opacity: 0.8;
-        font-size: 1em;
-
 }
 
 .solde-card-compact.cp-n1 .solde-label-compact,
@@ -708,7 +706,6 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
-    display: block; /* Force l'affichage pour test */
 }
 
 .btn-heures-sup:hover {
@@ -921,11 +918,20 @@ body {
 }
 
 @media (max-width: 1200px) {
+    body {
+        overflow-y: auto;
+    }
+
+    .dashboard-container {
+        height: auto;
+    }
+
     .dashboard-content-new {
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr;
+        height: auto;
     }
-    
+
     .sidebar-left-new {
         max-height: 400px;
     }

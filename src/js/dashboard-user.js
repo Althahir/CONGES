@@ -211,14 +211,14 @@ function genererCalendrier() {
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
                     jourDiv.setAttribute('data-tooltip', 'Arrêt maladie');
+                }
+
+                // Ajouter le commentaire si présent
+                if (absence.commentaire) {
+                    const currentTooltip = jourDiv.getAttribute('data-tooltip');
+                    jourDiv.setAttribute('data-tooltip', `${currentTooltip} - ${absence.commentaire}`);
+                }
             }
-    
-            // Ajouter le commentaire si présent
-            if (absence.commentaire) {
-                const currentTooltip = jourDiv.getAttribute('data-tooltip');
-                jourDiv.setAttribute('data-tooltip', `${currentTooltip} - ${absence.commentaire}`);
-            }
-        }
             
             joursMoisDiv.appendChild(jourDiv);
         }
@@ -397,29 +397,12 @@ if (chevauchement) {
     alertePeriode.classList.add('show');
 }
 
-// Alerte si période passée
-if (new Date(dateDebut) < new Date()) {
-    const msgExistant = alertePeriode.textContent;
-    if (msgExistant) {
-        alertePeriode.textContent = msgExistant + ' | ⚠️ Période passée';
-    } else {
-        alertePeriode.textContent = '⚠️ Période passée';
-        alertePeriode.classList.add('show');
-    }
-}
-    // Surligner les jours dans le calendrier
-    surlignerJoursPrevisualisation(dateDebut, dateFin);
-    
     // Si pas de type, juste afficher la durée
     if (!typeAbsence) {
         document.getElementById('resumeDecompte').textContent = 'Sélectionnez un type';
         resumeBox.style.display = 'block';
         return;
-    }else {
-            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
-            dureeJours = result.dureeJours;
-            dureeHeures = dureeJours * 7;
-        }
+    }
         
         // Récupérer les soldes actuels
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
@@ -474,8 +457,13 @@ if (new Date(dateDebut) < new Date()) {
         
         // Alerte si période passée
         if (new Date(dateDebut) < new Date()) {
-            alertePeriode.textContent = '⚠️ Période passée';
-            alertePeriode.classList.add('show');
+            const msgExistant = alertePeriode.textContent;
+            if (msgExistant) {
+                alertePeriode.textContent = msgExistant + ' | ⚠️ Période passée';
+            } else {
+                alertePeriode.textContent = '⚠️ Période passée';
+                alertePeriode.classList.add('show');
+            }
         }
         
         // Afficher le résumé

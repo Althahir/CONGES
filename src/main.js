@@ -579,29 +579,6 @@ async function executerTraitementCPAuto(annee) {
                             nouveaux_cp_n: nouveauCPN.toFixed(2)
                         });
                     }
-                    db.run(
-                        'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                        ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                        (err) => {
-                            if (err) console.error('Erreur enregistrement historique:', err);
-                        }
-                    );
-
-                    // AJOUTE ICI : Créer une notification pour les admins
-                    db.run(
-                        `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
-                        VALUES (?, ?, ?, ?, ?, NULL)`,
-                        [
-                            'CP_ANNUEL',
-                            statut === 'success' ? '✅ Traitement CP Annuel effectué' : '❌ Erreur traitement CP Annuel',
-                            `${nbMisAJour} salarié(s) traité(s)`,
-                            JSON.stringify(details),
-                            statut
-                        ],
-                    (err) => {
-                        if (err) console.error('Erreur création notification:', err);
-                    }
-                );
                 } catch (error) {
                     console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
                     erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
@@ -713,31 +690,6 @@ async function executerTraitementRTTAuto(annee) {
                                 nouveau_solde: nouveauRTT.toFixed(2)
                             });
                         }
-                        // Enregistrer dans l'historique
-                        db.run(
-                            'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                            ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                            (err) => {
-                                if (err) console.error('Erreur enregistrement historique:', err);
-                            }
-                        );
-
-                        // AJOUTE ICI : Créer une notification pour les admins
-                        db.run(
-                            `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
-                            VALUES (?, ?, ?, ?, ?, NULL)`,
-                                [
-                                    'RTT_ANNUEL',
-                                    statut === 'success' ? '✅ Traitement RTT Annuel effectué' : '❌ Erreur traitement RTT Annuel',
-                                    `${nbMisAJour} salarié(s) traité(s)`,
-                                    JSON.stringify(details),
-                                    statut
-                                ],                          
-                            (err) => {
-                                if (err) console.error('Erreur création notification:', err);
-                            }
-                        );
-                        
                     } catch (error) {
                         console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
                         erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
@@ -861,11 +813,6 @@ ipcMain.handle('login', async (event, email, password) => {
             
             if (!user) {
                 console.log('Aucun utilisateur trouvé');
-                resolve({ success: false, message: 'Email ou mot de passe incorrect' });
-                return;
-            }
-            
-            if (!user) {
                 resolve({ success: false, message: 'Email ou mot de passe incorrect' });
                 return;
             }
@@ -1394,6 +1341,59 @@ ipcMain.handle('getJoursFeries', async (event, annee) => {
         db.all('SELECT * FROM jours_feries WHERE annee = ? ORDER BY date', [annee], (err, rows) => {
             if (err) reject(err);
             else resolve(rows);
+        });
+    });
+});
+
+ipcMain.handle('addJourFerie', async (event, data) => {
+    return new Promise((resolve, reject) => {
+        const { date, libelle, annee } = data;
+        db.run(
+            'INSERT INTO jours_feries (date, libelle, annee) VALUES (?, ?, ?)',
+            [date, libelle, annee],
+            function(err) {
+                if (err) reject(err);
+                else resolve({ success: true, id: this.lastID });
+            }
+        );
+    });
+});
+
+// ========== RTT ANNUELS ==========
+
+ipcMain.handle('getRTTAnnuels', async (event) => {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM rtt_annuels ORDER BY annee_debut DESC', (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+});
+
+ipcMain.handle('addRTTAnnuel', async (event, data) => {
+    return new Promise((resolve, reject) => {
+        const { annee_debut, nb_jours_travailles, nb_cp_a_deduire } = data;
+        db.get('SELECT id FROM rtt_annuels WHERE annee_debut = ?', [annee_debut], (err, row) => {
+            if (err) { reject(err); return; }
+            if (row) {
+                db.run(
+                    'UPDATE rtt_annuels SET nb_jours_travailles = ?, nb_cp_a_deduire = ? WHERE annee_debut = ?',
+                    [nb_jours_travailles, nb_cp_a_deduire, annee_debut],
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve({ success: true });
+                    }
+                );
+            } else {
+                db.run(
+                    'INSERT INTO rtt_annuels (annee_debut, nb_jours_travailles, nb_cp_a_deduire) VALUES (?, ?, ?)',
+                    [annee_debut, nb_jours_travailles, nb_cp_a_deduire],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve({ success: true, id: this.lastID });
+                    }
+                );
+            }
         });
     });
 });
