@@ -4,3 +4,4 @@ database/*.sqbpro
 *.log
 .DS_Store
 out/
+DOCS/TODO.md
