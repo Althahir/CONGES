@@ -1406,9 +1406,11 @@ ipcMain.handle('addRTTAnnuel', async (event, data) => {
                     }
                 );
             } else {
+                const date_debut = `${annee_debut}-01-01`;
+                const date_fin   = `${annee_debut}-12-31`;
                 db.run(
-                    'INSERT INTO rtt_annuels (annee_debut, nb_jours_travailles, nb_cp_a_deduire) VALUES (?, ?, ?)',
-                    [annee_debut, nb_jours_travailles, nb_cp_a_deduire],
+                    'INSERT INTO rtt_annuels (annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire) VALUES (?, ?, ?, ?, ?)',
+                    [annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire],
                     function(err) {
                         if (err) reject(err);
                         else resolve({ success: true, id: this.lastID });

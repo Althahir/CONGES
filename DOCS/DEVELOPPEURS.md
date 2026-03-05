@@ -214,12 +214,30 @@ CREATE TABLE notifications (
     lue           INTEGER DEFAULT 0
 );
 
--- Paramètres RTT par année (⚠️ vérifier présence dans conges.db template)
+-- Paramètres RTT par année
 CREATE TABLE rtt_annuels (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    annee_debut        INTEGER UNIQUE,
-    nb_jours_travailles INTEGER,
-    nb_cp_a_deduire    INTEGER
+    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+    annee_debut               INTEGER NOT NULL UNIQUE,
+    date_debut                DATE NOT NULL,   -- Défaut : YYYY-01-01
+    date_fin                  DATE NOT NULL,   -- Défaut : YYYY-12-31
+    nb_jours_periode          INTEGER,
+    nb_jours_we               INTEGER,
+    nb_jours_feries_hors_we   INTEGER,
+    nb_jours_travailles       INTEGER,
+    nb_cp_a_deduire           INTEGER DEFAULT 25,
+    nb_rtt                    INTEGER,
+    annee                     INTEGER
+);
+
+-- Historique des modifications (audit trail — pas de handler IPC, usage interne)
+CREATE TABLE historique_modifs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    salarie_id       INTEGER REFERENCES salaries(id),
+    action           TEXT NOT NULL,
+    table_concernee  TEXT NOT NULL,
+    details          TEXT,
+    date_modif       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    modifie_par      INTEGER REFERENCES salaries(id)
 );
 ```
 
