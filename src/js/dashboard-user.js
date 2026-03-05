@@ -42,33 +42,41 @@ async function loadSoldes() {
         if (soldes) {
             document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
-            
+            document.querySelector('.solde-card-compact.cp-n1')?.classList.toggle('solde-vide', soldes.cp_n1 === 0);
+            document.querySelector('.solde-card-compact.cp-n')?.classList.toggle('solde-vide', soldes.cp_n === 0);
+
             // RTT
             const tuileRTT = document.querySelector('.solde-card-compact.rtt');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
-                if (tuileRTT) tuileRTT.style.opacity = '1';
+                if (tuileRTT) {
+                    tuileRTT.classList.remove('sans-droit');
+                    tuileRTT.classList.toggle('solde-vide', soldes.rtt === 0);
+                }
             } else {
                 document.getElementById('solde-rtt').textContent = 'N/A';
                 if (tuileRTT) {
-                    tuileRTT.style.opacity = '0.4';
-                    tuileRTT.style.cursor = 'not-allowed';
+                    tuileRTT.classList.add('sans-droit');
+                    tuileRTT.classList.remove('solde-vide');
                 }
             }
-            
+
             // Récup
             const tuileRecup = document.querySelector('.solde-card-compact.recup');
             if (salarie.a_droit_recup === 1) {
                 const recupJours = Math.floor(soldes.recup_heures / 7);
                 const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
-                document.getElementById('solde-recup').innerHTML = 
+                document.getElementById('solde-recup').innerHTML =
                     `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j ${recupHeuresRestantes}h)</p>`;
-                if (tuileRecup) tuileRecup.style.opacity = '1';
+                if (tuileRecup) {
+                    tuileRecup.classList.remove('sans-droit');
+                    tuileRecup.classList.toggle('solde-vide', soldes.recup_heures === 0);
+                }
             } else {
                 document.getElementById('solde-recup').textContent = 'N/A';
                 if (tuileRecup) {
-                    tuileRecup.style.opacity = '0.4';
-                    tuileRecup.style.cursor = 'not-allowed';
+                    tuileRecup.classList.add('sans-droit');
+                    tuileRecup.classList.remove('solde-vide');
                 }
             }
         }

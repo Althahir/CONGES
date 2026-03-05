@@ -123,3 +123,51 @@ body {
 .toggle-password:hover {
     color: var(--rouge);
 }
+
+/* === TUILE SANS DROIT (N/A — gris neutre) === */
+.solde-card-compact.sans-droit {
+    background: #fafafa !important;
+    border-color: #e0e0e0 !important;
+    cursor: not-allowed;
+}
+.solde-card-compact.cp-n1.sans-droit .solde-label-compact,
+.solde-card-compact.cp-n1.sans-droit .solde-value-compact,
+.solde-card-compact.cp-n.sans-droit .solde-label-compact,
+.solde-card-compact.cp-n.sans-droit .solde-value-compact,
+.solde-card-compact.rtt.sans-droit .solde-label-compact,
+.solde-card-compact.rtt.sans-droit .solde-value-compact,
+.solde-card-compact.recup.sans-droit .solde-label-compact,
+.solde-card-compact.recup.sans-droit .solde-value-compact {
+    color: #ccc;
+}
+
+/* === TUILE SOLDE VIDE (solde = 0, droits actifs) === */
+.solde-card-compact.cp-n1.solde-vide,
+.solde-card-compact.cp-n.solde-vide {
+    background: rgba(0, 108, 137, 0.06);
+    border-color: rgba(0, 108, 137, 0.25);
+}
+.solde-card-compact.cp-n1.solde-vide .solde-label-compact,
+.solde-card-compact.cp-n.solde-vide .solde-label-compact,
+.solde-card-compact.cp-n1.solde-vide .solde-value-compact,
+.solde-card-compact.cp-n.solde-vide .solde-value-compact {
+    color: rgba(0, 108, 137, 0.4);
+}
+
+.solde-card-compact.rtt.solde-vide {
+    background: rgba(116, 43, 135, 0.06);
+    border-color: rgba(116, 43, 135, 0.25);
+}
+.solde-card-compact.rtt.solde-vide .solde-label-compact,
+.solde-card-compact.rtt.solde-vide .solde-value-compact {
+    color: rgba(116, 43, 135, 0.4);
+}
+
+.solde-card-compact.recup.solde-vide {
+    background: rgba(181, 22, 63, 0.06);
+    border-color: rgba(181, 22, 63, 0.25);
+}
+.solde-card-compact.recup.solde-vide .solde-label-compact,
+.solde-card-compact.recup.solde-vide .solde-value-compact {
+    color: rgba(181, 22, 63, 0.4);
+}
