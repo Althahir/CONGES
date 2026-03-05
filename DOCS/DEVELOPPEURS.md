@@ -114,8 +114,11 @@ ATHELIA_CONGES/
 │   ├── preload.js               # Bridge sécurisé renderer ↔ main
 │   ├── conges.db                # Template DB (copié à l'install)
 │   ├── assets/
-│   │   ├── favicon2.ico
-│   │   └── logo.png (ou similaire)
+│   │   ├── logo.png               # Logo page login
+│   │   ├── logo.ico               # Icône app packagée (forge)
+│   │   ├── favicon2.png           # Logo topbar admin + user
+│   │   ├── favicon3.ico           # Icône fenêtre/taskbar + installateur
+│   │   └── logo_horiz_fdBlanc.png # Logo page set-password
 │   ├── pages/
 │   │   ├── login.html
 │   │   ├── dashboard-user.html  # Interface salarié
@@ -596,8 +599,9 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 4. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
 5. ~~**RTT annuels par salarié**~~ ✅ **Fait** — calcul complet, UI, notifications, migration DB
 6. ~~**Backup automatique DB**~~ ✅ **Fait** — copie quotidienne au démarrage, rétention 60 jours
-7. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
+7. ~~**Nettoyage assets + icônes**~~ ✅ **Fait** — 9 images inutilisées supprimées, icônes cohérentes (logo.ico pour l'app, favicon3.ico pour installateur/fenêtre, favicon2.png pour topbars)
+8. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (RTT annuels + dark mode + nav unifiée)*
+*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (RTT annuels + dark mode + nav unifiée + backup DB + nettoyage assets)*
