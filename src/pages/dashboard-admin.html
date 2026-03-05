@@ -18,14 +18,7 @@
         <img src="../assets/logo_vert.png" alt="Logo" class="header-logo">
     </div>
     <div class="header-center">
-        <div id="headerAdminDefault">
-            <h1>Administration</h1>
-        </div>
-        <div id="headerAdminMesConges" style="display: none;">
-            <button id="btnPrevYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
-            <h1 id="anneeAdmin">2026</h1>
-            <button id="btnNextYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
-        </div>
+        <h1 id="headerTitle">Mes Congés</h1>
     </div>
     <div class="header-right">
         <div class="notif-wrapper">
@@ -43,6 +36,9 @@
                 </div>
             </div>
         </div>
+        <button id="btnThemeToggle" class="btn-theme-toggle" title="Changer de thème">
+            <i class="fa-solid fa-moon"></i>
+        </button>
         <span id="userName" class="user-name">Admin</span>
         <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
     </div>
@@ -50,24 +46,33 @@
 
         <!-- Navigation -->
         <nav class="admin-nav">
-            <button class="nav-btn active" data-section="mes-conges">
-                <i class="fa-solid fa-user"></i> Mes congés
-            </button>
-            <button class="nav-btn" data-section="calendrier">
-                <i class="fa-regular fa-calendar"></i> Calendrier Global
-            </button>
-            <button class="nav-btn" data-section="historique">
-                <i class="fa-solid fa-clock-rotate-left"></i> Historique
-            </button>
-            <button class="nav-btn" data-section="salaries">
-                <i class="fa-solid fa-users"></i> Salariés
-            </button>
-            <button class="nav-btn" data-section="feries">
-                <i class="fa-regular fa-flag"></i> Jours Fériés
-            </button>
-            <button class="nav-btn" data-section="rtt">
-                <i class="fa-regular fa-clock"></i> Planning des traitements
-            </button>
+            <div class="nav-left">
+                <button class="nav-btn active" data-section="mes-conges">
+                    <i class="fa-solid fa-user"></i> Mes congés
+                </button>
+                <button class="nav-btn" data-section="calendrier">
+                    <i class="fa-regular fa-calendar"></i> Calendrier Global
+                </button>
+                <button class="nav-btn" data-section="historique">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Historique
+                </button>
+                <button class="nav-btn" data-section="salaries">
+                    <i class="fa-solid fa-users"></i> Salariés
+                </button>
+                <button class="nav-btn" data-section="feries">
+                    <i class="fa-regular fa-flag"></i> Jours Fériés
+                </button>
+                <button class="nav-btn" data-section="rtt">
+                    <i class="fa-regular fa-clock"></i> Planning des traitements
+                </button>
+            </div>
+            <div class="nav-right">
+                <div class="year-nav" id="yearNavAdmin">
+                    <button id="btnPrevYearAdmin" class="btn-year-nav"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span id="anneeAdmin">2026</span>
+                    <button id="btnNextYearAdmin" class="btn-year-nav"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
         </nav>
 
         <!-- Modale Ajouter/Modifier Salarié -->
@@ -330,15 +335,6 @@
 
             <!-- Section Calendrier Global -->
             <section id="calendrier-section" class="content-section">
-                <div class="section-header">
-                    <!-- <h2>Calendrier Global</h2> -->
-                    <div class="year-selector">
-                        <button id="btnPrevYearCal" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
-                        <span id="anneeCalendrier">2026</span>
-                        <button id="btnNextYearCal" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
-                    </div>
-                </div>
-                
                 <div id="calendrierGlobal" class="calendrier-global">
                     <!-- Sera rempli dynamiquement -->
                 </div>
@@ -348,16 +344,9 @@
             <section id="feries-section" class="content-section">
                 <div class="section-header">
                     <h2>Gestion des Jours Fériés</h2>
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div class="year-nav">
-                            <button id="btnPrevYearFeries" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
-                            <span id="anneeFeries"></span>
-                            <button id="btnNextYearFeries" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
-                        </div>
-                        <button id="btnAjouterFerie" class="btn-primary">
-                            <i class="fa-solid fa-plus"></i> Ajouter
-                        </button>
-                    </div>
+                    <button id="btnAjouterFerie" class="btn-primary">
+                        <i class="fa-solid fa-plus"></i> Ajouter
+                    </button>
                 </div>
                 
                 <div id="listeFeries" class="liste-feries">
@@ -392,12 +381,14 @@
 
             <!-- Section Gestion des Types de Congés -->
             <section id="rtt-section" class="content-section">
-    <h2>Gestion des Types de Congés</h2>
-    
+    <div class="section-header">
+        <h2>Planning des traitements</h2>
+    </div>
+
     <!-- Configuration des traitements -->
     <div class="config-traitements">
         <h3><i class="fa-solid fa-cog"></i> Configuration des dates de traitement automatique</h3>
-        
+        <div class="config-cards-grid">
         <div class="config-card">
             <div class="config-header">
                 <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des CP</h4>
@@ -461,7 +452,8 @@
                 </div>
             </div>
         </div>
-        
+        </div><!-- /.config-cards-grid -->
+
         <div class="config-actions">
             <button id="btnEnregistrerConfig" class="btn-primary btn-large">
                 <i class="fa-solid fa-save"></i> Enregistrer la configuration
@@ -503,28 +495,14 @@
            
             <!-- Section Historique -->
             <section id="historique-section" class="content-section">
-    <div class="historique-header">
+    <div class="section-header historique-header">
         <h2>Gestion des absences</h2>
-        
         <div class="historique-controls">
             <div class="control-group">
                 <label>Salarié :</label>
                 <select id="selectSalarieHistorique" class="select-control">
                     <option value="">Sélectionnez un salarié</option>
                 </select>
-            </div>
-            
-            <div class="control-group">
-                <label>Année :</label>
-                <div class="annee-navigation">
-                    <button id="btnPrevYearHistorique" class="btn-year">
-                        <i class="fa-solid fa-chevron-left"></i>
-                    </button>
-                    <span id="anneeHistorique" class="annee-display">2026</span>
-                    <button id="btnNextYearHistorique" class="btn-year">
-                        <i class="fa-solid fa-chevron-right"></i>
-                    </button>
-                </div>
             </div>
         </div>
     </div>
@@ -544,19 +522,19 @@
     <div id="soldesHistorique" class="soldes-historique" style="display: none;">
         <h3 id="nomSalarieHistorique"></h3>
         <div class="soldes-grid">
-            <div class="solde-card">
+            <div class="solde-card sh-cp">
                 <div class="solde-label">CP N-1</div>
                 <div class="solde-value" id="soldeCPN1Historique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-cp">
                 <div class="solde-label">CP N</div>
                 <div class="solde-value" id="soldeCPNHistorique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-rtt">
                 <div class="solde-label">RTT</div>
                 <div class="solde-value" id="soldeRTTHistorique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-recup">
                 <div class="solde-label">Récupération</div>
                 <div class="solde-value" id="soldeRecupHistorique">0h</div>
             </div>

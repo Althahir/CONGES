@@ -11,25 +11,73 @@ if (!user) {
 // Afficher le nom de l'utilisateur
 document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
 
+// ========== TOGGLE THEME SOMBRE/CLAIR ==========
+(function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.querySelector('#btnThemeToggle i');
+    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+})();
+
+document.getElementById('btnThemeToggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    const icon = document.querySelector('#btnThemeToggle i');
+    icon.className = next === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+});
+
 // Variables globales
 let anneeActuelle = new Date().getFullYear();
 let joursFeries = [];
 let absences = [];
-// ========== GESTION DE L'ANNÉE ==========
+let sectionActive = 'mes-conges';
+
+// ========== NAVIGATION ENTRE SECTIONS ==========
+
+const navBtns = document.querySelectorAll('.nav-btn');
+const sections = document.querySelectorAll('.content-section');
+
+const titresSection = {
+    'mes-conges': 'Mes Congés',
+    'calendrier': 'Calendrier Global'
+};
+
+navBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        navBtns.forEach(b => b.classList.remove('active'));
+        sections.forEach(s => s.classList.remove('active'));
+
+        btn.classList.add('active');
+
+        sectionActive = btn.getAttribute('data-section');
+        document.getElementById(`${sectionActive}-section`).classList.add('active');
+        document.getElementById('headerTitle').textContent = titresSection[sectionActive];
+
+        if (sectionActive === 'calendrier') {
+            chargerCalendrierGlobal();
+        }
+    });
+});
+
+// ========== GESTION DE L'ANNÉE (unifiée) ==========
 
 document.getElementById('anneeActuelle').textContent = anneeActuelle;
 
-document.getElementById('btnPrevYear').addEventListener('click', () => {
-    anneeActuelle--;
+function changerAnnee(delta) {
+    anneeActuelle += delta;
     document.getElementById('anneeActuelle').textContent = anneeActuelle;
-    chargerCalendrier();
-});
+    // Recharger la section active
+    if (sectionActive === 'mes-conges') {
+        chargerCalendrier();
+    } else if (sectionActive === 'calendrier') {
+        chargerCalendrierGlobal();
+    }
+}
 
-document.getElementById('btnNextYear').addEventListener('click', () => {
-    anneeActuelle++;
-    document.getElementById('anneeActuelle').textContent = anneeActuelle;
-    chargerCalendrier();
-});
+document.getElementById('btnPrevYear').addEventListener('click', () => changerAnnee(-1));
+document.getElementById('btnNextYear').addEventListener('click', () => changerAnnee(1));
 
 // ========== CHARGEMENT DES DONNÉES ==========
 
@@ -500,8 +548,6 @@ document.getElementById('periodeType').addEventListener('change', calculerDureeA
 document.getElementById('recupType').addEventListener('change', calculerDureeAbsence);
 document.getElementById('recupHeures').addEventListener('input', calculerDureeAbsence);
 
-// Garder le bouton calculer pour forcer un recalcul si besoin
-document.getElementById('btnCalculer').addEventListener('click', calculerDureeAbsence);
 
 // Bouton déconnexion
 document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -772,6 +818,139 @@ function initModalHeuresSup() {
     });
 }
 
+// ========== CALENDRIER GLOBAL ==========
+
+async function chargerCalendrierGlobal() {
+    try {
+        const container = document.getElementById('calendrierGlobal');
+
+        const salaries = await window.api.getAllSalaries();
+        const toutesAbsences = await window.api.getAllAbsences();
+        const joursFeriesCal = await window.api.getJoursFeries(anneeActuelle);
+
+        const absencesAnnee = toutesAbsences.filter(abs => {
+            const anneeDebut = new Date(abs.date_debut).getFullYear();
+            const anneeFin = new Date(abs.date_fin).getFullYear();
+            return anneeDebut === anneeActuelle || anneeFin === anneeActuelle;
+        });
+
+        const salariesAvecAbsences = new Set();
+        absencesAnnee.forEach(abs => salariesAvecAbsences.add(abs.salarie_id));
+
+        const salariesActifs = salaries
+            .filter(sal => salariesAvecAbsences.has(sal.id))
+            .sort((a, b) => `${a.nom} ${a.prenom}`.toLowerCase().localeCompare(`${b.nom} ${b.prenom}`.toLowerCase()));
+
+        const couleursDisponibles = [
+            'rgb(249, 198, 73)', 'rgb(237, 113, 17)', 'rgb(181, 22, 63)',
+            'rgb(116, 43, 135)', 'rgb(0, 108, 137)', '#10B981', '#8B5CF6', '#14B8A6'
+        ];
+
+        const couleursSalaries = {};
+        const positionsSalaries = {};
+        salariesActifs.forEach((sal, index) => {
+            couleursSalaries[sal.id] = couleursDisponibles[index % 8];
+            positionsSalaries[sal.id] = index % 8;
+        });
+
+        const legendeHTML = `
+            <div class="legende-salaries">
+                ${salariesActifs.map(sal => `
+                    <div class="legende-salarie">
+                        <span class="legende-color" style="background: ${couleursSalaries[sal.id]}"></span>
+                        <span>${sal.prenom} ${sal.nom}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+        let tableHTML = '<div class="calendrier-lineaire"><table class="calendrier-table">';
+        tableHTML += '<thead><tr>';
+        nomsMois.forEach(mois => { tableHTML += `<th>${mois}</th>`; });
+        tableHTML += '</tr></thead><tbody>';
+
+        for (let jour = 1; jour <= 31; jour++) {
+            tableHTML += '<tr>';
+            for (let mois = 0; mois < 12; mois++) {
+                const dernierJourDuMois = new Date(anneeActuelle, mois + 1, 0).getDate();
+                if (jour > dernierJourDuMois) {
+                    tableHTML += '<td></td>';
+                } else {
+                    const dateISO = `${anneeActuelle}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+                    const date = new Date(anneeActuelle, mois, jour);
+                    const dayOfWeek = date.getDay();
+                    const estFerie = joursFeriesCal.some(f => f.date === dateISO);
+                    const ferie = joursFeriesCal.find(f => f.date === dateISO);
+                    const estWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                    const absentsJour = absencesAnnee.filter(abs => dateISO >= abs.date_debut && dateISO <= abs.date_fin);
+
+                    let cellClass = '';
+                    if (estFerie) cellClass += 'jour-ferie ';
+                    if (estWeekend) cellClass += 'jour-weekend ';
+
+                    let tooltip = '';
+                    if (estFerie) tooltip = ferie.libelle;
+                    if (absentsJour.length > 0) {
+                        const noms = absentsJour.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
+                        tooltip = tooltip ? `${tooltip} - ${noms}` : noms;
+                    }
+
+                    const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                    let jourSemaineIndex = dayOfWeek - 1;
+                    if (jourSemaineIndex === -1) jourSemaineIndex = 6;
+                    const lettreJour = lettresJours[jourSemaineIndex];
+
+                    if (estWeekend || estFerie) {
+                        tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
+                        const jourCellClass = estFerie ? 'jour-cell jour-ferie-cell' : 'jour-cell';
+                        tableHTML += `<div class="${jourCellClass}"><span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
+                        tableHTML += '<div class="indicateurs-wrapper">';
+                        for (let i = 0; i < 8; i++) tableHTML += '<div class="indicateur-colonne"></div>';
+                        tableHTML += '</div>';
+                        if (estFerie) tableHTML += '<span class="drapeau-ferie">🚩</span>';
+                        tableHTML += '</div></td>';
+                        continue;
+                    }
+
+                    tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
+                    if (absentsJour.length > 8) {
+                        tableHTML += `<div class="jour-cell"><span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span><span class="surcharge">8+</span></div>`;
+                    } else {
+                        const jourCellClass = estFerie ? 'jour-cell jour-ferie-cell' : 'jour-cell';
+                        tableHTML += `<div class="${jourCellClass}"><span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
+                        tableHTML += '<div class="indicateurs-wrapper">';
+                        const indicateurs = new Array(8).fill(null);
+                        absentsJour.forEach(abs => {
+                            const position = positionsSalaries[abs.salarie_id];
+                            if (position !== undefined && position < 8) indicateurs[position] = couleursSalaries[abs.salarie_id];
+                        });
+                        indicateurs.forEach(couleur => {
+                            tableHTML += couleur
+                                ? `<div class="indicateur-colonne actif" style="background: ${couleur};"></div>`
+                                : '<div class="indicateur-colonne"></div>';
+                        });
+                        tableHTML += '</div>';
+                        if (estFerie) tableHTML += '<span class="drapeau-ferie">🚩</span>';
+                        tableHTML += '</div>';
+                    }
+                    tableHTML += '</td>';
+                }
+            }
+            tableHTML += '</tr>';
+        }
+
+        tableHTML += '</tbody></table></div>';
+        container.innerHTML = legendeHTML + tableHTML;
+
+    } catch (error) {
+        console.error('Erreur chargement calendrier global:', error);
+    }
+}
+
 // ========== INITIALISATION ==========
 
 async function init() {
@@ -779,7 +958,6 @@ async function init() {
     await initFormAbsence();
     await chargerCalendrier();
     initModalHeuresSup();
-    // await afficherHistorique();
 }
 
 init();

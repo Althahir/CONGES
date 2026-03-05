@@ -11,8 +11,41 @@ if (!user) {
 // Afficher le nom de l'utilisateur
 document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
 
-// Variables globales
+// ========== TOGGLE THEME SOMBRE/CLAIR ==========
+(function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.querySelector('#btnThemeToggle i');
+    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+})();
+
+document.getElementById('btnThemeToggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    const icon = document.querySelector('#btnThemeToggle i');
+    icon.className = next === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+});
+
+// Variables globales — années par section
 let anneeCalendrier = new Date().getFullYear();
+let anneeFeries = new Date().getFullYear();
+let anneeActuelle = new Date().getFullYear();
+let anneeHistorique = new Date().getFullYear();
+let sectionActiveAdmin = 'mes-conges';
+
+const titresSectionAdmin = {
+    'mes-conges': 'Mes Congés',
+    'calendrier': 'Calendrier Global',
+    'historique': 'Historique',
+    'salaries': 'Salariés',
+    'feries': 'Jours Fériés',
+    'rtt': 'Planning des traitements'
+};
+
+// Sections qui utilisent la navigation par année
+const sectionsAvecAnnee = ['mes-conges', 'calendrier', 'historique', 'feries'];
 
 // ========== NAVIGATION ENTRE SECTIONS ==========
 
@@ -21,30 +54,72 @@ const sections = document.querySelectorAll('.content-section');
 
 
 
+// Fonction pour obtenir l'année de la section active
+function getAnneeSection(sectionName) {
+    switch(sectionName) {
+        case 'mes-conges': return anneeActuelle;
+        case 'calendrier': return anneeCalendrier;
+        case 'historique': return anneeHistorique;
+        case 'feries': return anneeFeries;
+        default: return new Date().getFullYear();
+    }
+}
+
+// Fonction pour mettre à jour l'affichage année dans la nav
+function updateYearNavDisplay() {
+    const yearNav = document.getElementById('yearNavAdmin');
+    const anneeSpan = document.getElementById('anneeAdmin');
+
+    if (sectionsAvecAnnee.includes(sectionActiveAdmin)) {
+        yearNav.style.display = 'flex';
+        anneeSpan.textContent = getAnneeSection(sectionActiveAdmin);
+    } else {
+        yearNav.style.display = 'none';
+    }
+}
+
+// Navigation année centralisée
+function changerAnneeAdmin(delta) {
+    switch(sectionActiveAdmin) {
+        case 'mes-conges':
+            anneeActuelle += delta;
+            chargerCalendrierUser();
+            break;
+        case 'calendrier':
+            anneeCalendrier += delta;
+            chargerCalendrierGlobal();
+            break;
+        case 'historique':
+            anneeHistorique += delta;
+            chargerCalendrierHistorique();
+            break;
+        case 'feries':
+            anneeFeries += delta;
+            chargerJoursFeries();
+            break;
+    }
+    updateYearNavDisplay();
+}
+
 navBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         // Retirer active de tous
         navBtns.forEach(b => b.classList.remove('active'));
         sections.forEach(s => s.classList.remove('active'));
-        
+
         // Ajouter active au cliqué
         btn.classList.add('active');
-        
+
         const sectionName = btn.getAttribute('data-section');
+        sectionActiveAdmin = sectionName;
         document.getElementById(`${sectionName}-section`).classList.add('active');
 
-        // Basculer le header selon la section
-        const headerDefault = document.getElementById('headerAdminDefault');
-        const headerMesConges = document.getElementById('headerAdminMesConges');
+        // Mettre à jour le titre du header
+        document.getElementById('headerTitle').textContent = titresSectionAdmin[sectionName] || 'Administration';
 
-        if (sectionName === 'mes-conges') {
-            headerDefault.style.display = 'none';
-            headerMesConges.style.display = 'flex';
-        } else {
-            headerDefault.style.display = 'block';
-            headerMesConges.style.display = 'none';
-        }
-        
+        // Mettre à jour la navigation année
+        updateYearNavDisplay();
+
         // Charger les données selon la section
         switch(sectionName) {
             case 'mes-conges':
@@ -68,6 +143,14 @@ navBtns.forEach(btn => {
             }
     });
 });
+
+// ========== EVENT LISTENERS NAVIGATION ANNÉE (TOPBAR) ==========
+
+document.getElementById('btnPrevYearAdmin').addEventListener('click', () => changerAnneeAdmin(-1));
+document.getElementById('btnNextYearAdmin').addEventListener('click', () => changerAnneeAdmin(1));
+
+// Initialiser l'affichage année au chargement
+updateYearNavDisplay();
 
 // ========== GESTION DES SALARIÉS ==========
 
@@ -147,19 +230,7 @@ async function chargerSalaries() {
 
 // ========== CALENDRIER GLOBAL ==========
 
-document.getElementById('anneeCalendrier').textContent = anneeCalendrier;
-
-document.getElementById('btnPrevYearCal').addEventListener('click', () => {
-    anneeCalendrier--;
-    document.getElementById('anneeCalendrier').textContent = anneeCalendrier;
-    chargerCalendrierGlobal();
-});
-
-document.getElementById('btnNextYearCal').addEventListener('click', () => {
-    anneeCalendrier++;
-    document.getElementById('anneeCalendrier').textContent = anneeCalendrier;
-    chargerCalendrierGlobal();
-});
+// Navigation année calendrier gérée par changerAnneeAdmin()
 
 async function chargerCalendrierGlobal() {
     console.log('=== DÉBUT chargerCalendrierGlobal ===');
@@ -381,21 +452,7 @@ async function chargerCalendrierGlobal() {
 
 // ========== JOURS FÉRIÉS ==========
 
-let anneeFeries = new Date().getFullYear();
-
-document.getElementById('anneeFeries').textContent = anneeFeries;
-
-document.getElementById('btnPrevYearFeries').addEventListener('click', () => {
-    anneeFeries--;
-    document.getElementById('anneeFeries').textContent = anneeFeries;
-    chargerJoursFeries();
-});
-
-document.getElementById('btnNextYearFeries').addEventListener('click', () => {
-    anneeFeries++;
-    document.getElementById('anneeFeries').textContent = anneeFeries;
-    chargerJoursFeries();
-});
+// Navigation année fériés gérée par changerAnneeAdmin()
 
 async function chargerJoursFeries() {
     try {
@@ -631,47 +688,15 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 // ========== SECTION MES CONGÉS (reprise du dashboard user) ==========
-
-let anneeActuelle = new Date().getFullYear();
 let joursFeriesUser = [];
 let absencesUser = [];
-// Variable pour savoir si les événements sont déjà attachés
-let evenementsAnneesAttaches = false;
 
 async function initMesConges() {
     await loadSoldesAdmin();
     await initFormAbsenceAdmin();
     await chargerCalendrierUser();
     await afficherHistoriqueAdmin();
-    
-    // Navigation année pour "Mes congés" - N'attacher qu'une seule fois !
-    if (!evenementsAnneesAttaches) {
-        const anneeDisplay = document.getElementById('anneeAdmin');
-        const btnPrev = document.getElementById('btnPrevYearAdmin');
-        const btnNext = document.getElementById('btnNextYearAdmin');
-        
-        if (anneeDisplay) {
-            anneeDisplay.textContent = anneeActuelle;
-        }
-        
-        if (btnPrev) {
-            btnPrev.addEventListener('click', () => {
-                anneeActuelle--;
-                anneeDisplay.textContent = anneeActuelle;
-                chargerCalendrierUser();
-            });
-        }
-        
-        if (btnNext) {
-            btnNext.addEventListener('click', () => {
-                anneeActuelle++;
-                anneeDisplay.textContent = anneeActuelle;
-                chargerCalendrierUser();
-            });
-        }
-        
-        evenementsAnneesAttaches = true;
-    }
+    // Navigation année gérée par changerAnneeAdmin() dans la topbar
 }
 
 // Charger les soldes de l'admin
@@ -1222,9 +1247,14 @@ async function chargerHistoriqueTraitements() {
             return;
         }
         
-        // Afficher l'historique dans le tableau
-        tbody.innerHTML = historique.map(h => {
-            // Ajouter 'Z' pour forcer l'interprétation en UTC si pas déjà présent
+        // Garder uniquement le traitement le plus récent par type
+        const dernierParType = [];
+        ['CP_ANNUEL', 'RTT_ANNUEL'].forEach(type => {
+            const derniere = historique.find(h => h.type === type);
+            if (derniere) dernierParType.push(derniere);
+        });
+
+        tbody.innerHTML = dernierParType.map(h => {
             const dateStr = h.date_execution.includes('Z') ? h.date_execution : h.date_execution + 'Z';
             const date = new Date(dateStr);
             const dateFormatee = date.toLocaleString('fr-FR', {
@@ -1235,22 +1265,21 @@ async function chargerHistoriqueTraitements() {
                 minute: '2-digit',
                 timeZone: 'Europe/Paris'
             });
-            
+
             const typeLabel = h.type === 'CP_ANNUEL' ? 'CP Annuel' : 'RTT Annuel';
-            const statutClass = `statut-${h.statut}`;
             const statutLabel = {
                 'success': '✅ Réussi',
                 'error': '❌ Erreur',
                 'partial': '⚠️ Partiel'
             }[h.statut] || h.statut;
-            
+
             return `
                 <tr>
                     <td><strong>${typeLabel}</strong></td>
                     <td>${dateFormatee}</td>
                     <td>${h.annee}</td>
                     <td>${h.nb_salaries_traites} salarié(s)</td>
-                    <td><span class="statut-badge ${statutClass}">${statutLabel}</span></td>
+                    <td><span class="statut-badge statut-${h.statut}">${statutLabel}</span></td>
                 </tr>
             `;
         }).join('');
@@ -2438,21 +2467,8 @@ function afficherNotificationPersistanteAvecId(notificationId, type, titre, mess
 async function init() {
     await initMesConges();
     
-    // Initialiser le header selon la section active au chargement
-    const activeSection = document.querySelector('.nav-btn.active');
-    if (activeSection) {
-        const sectionName = activeSection.getAttribute('data-section');
-        const headerDefault = document.getElementById('headerAdminDefault');
-        const headerMesConges = document.getElementById('headerAdminMesConges');
-        
-        if (sectionName === 'mes-conges') {
-            headerDefault.style.display = 'none';
-            headerMesConges.style.display = 'flex';
-        } else {
-            headerDefault.style.display = 'block';
-            headerMesConges.style.display = 'none';
-        }
-    }
+    // Initialiser le header et year-nav selon la section active au chargement
+    updateYearNavDisplay();
     
     // Initialiser le dropdown de notifications
     initNotifDropdown();
@@ -2466,20 +2482,19 @@ let toutesLesAbsences = [];
 let tousSalaries = [];
 
 // ========== SECTION HISTORIQUE - CALENDRIER ==========
-
-let anneeHistorique = new Date().getFullYear();
 let salarieHistoriqueSelectionne = null;
 let absencesHistorique = [];
 let joursFeriesHistorique = [];
 let absenceCliquee = null;
 let jourClique = null;
+let evenementsHistoriqueAttaches = false;
 
 async function chargerHistoriqueComplet() {
     try {
         // Charger tous les salariés
         const salaries = await window.api.getAllSalaries();
         const select = document.getElementById('selectSalarieHistorique');
-        
+
         select.innerHTML = '<option value="">Sélectionnez un salarié</option>';
         salaries
             .filter(s => s.actif === 1)
@@ -2487,28 +2502,24 @@ async function chargerHistoriqueComplet() {
             .forEach(sal => {
                 select.innerHTML += `<option value="${sal.id}">${sal.prenom} ${sal.nom}</option>`;
             });
-        
-        // Afficher l'année
-        document.getElementById('anneeHistorique').textContent = anneeHistorique;
-        
-        // Événements
-        select.addEventListener('change', (e) => {
-            salarieHistoriqueSelectionne = e.target.value ? parseInt(e.target.value) : null;
-            chargerCalendrierHistorique();
-        });
-        
-        document.getElementById('btnPrevYearHistorique').addEventListener('click', () => {
-            anneeHistorique--;
-            document.getElementById('anneeHistorique').textContent = anneeHistorique;
-            chargerCalendrierHistorique();
-        });
-        
-        document.getElementById('btnNextYearHistorique').addEventListener('click', () => {
-            anneeHistorique++;
-            document.getElementById('anneeHistorique').textContent = anneeHistorique;
-            chargerCalendrierHistorique();
-        });
-        
+
+        // Restaurer la sélection si un salarié était déjà choisi
+        if (salarieHistoriqueSelectionne) {
+            select.value = salarieHistoriqueSelectionne;
+        }
+
+        // Navigation année gérée par changerAnneeAdmin() dans la topbar
+
+        // Listener select salarié attaché une seule fois
+        if (!evenementsHistoriqueAttaches) {
+            evenementsHistoriqueAttaches = true;
+
+            select.addEventListener('change', (e) => {
+                salarieHistoriqueSelectionne = e.target.value ? parseInt(e.target.value) : null;
+                chargerCalendrierHistorique();
+            });
+        }
+
     } catch (error) {
         console.error('Erreur chargement historique:', error);
     }
@@ -2548,10 +2559,49 @@ async function chargerCalendrierHistorique() {
         
         // Afficher les soldes (toujours année en cours)
         document.getElementById('nomSalarieHistorique').textContent = `${salarie.prenom} ${salarie.nom}`;
-        document.getElementById('soldeCPN1Historique').textContent = soldes ? `${soldes.cp_n1.toFixed(1)}j` : '0j';
-        document.getElementById('soldeCPNHistorique').textContent = soldes ? `${soldes.cp_n.toFixed(1)}j` : '0j';
-        document.getElementById('soldeRTTHistorique').textContent = soldes ? `${soldes.rtt.toFixed(1)}j` : '0j';
-        document.getElementById('soldeRecupHistorique').textContent = soldes ? `${soldes.recup_heures.toFixed(1)}h` : '0h';
+
+        const cpCards   = document.querySelectorAll('#soldesHistorique .solde-card.sh-cp');
+        const cardCPN1  = cpCards[0];
+        const cardCPN   = cpCards[1];
+        const cardRTT   = document.querySelector('#soldesHistorique .solde-card.sh-rtt');
+        const cardRecup = document.querySelector('#soldesHistorique .solde-card.sh-recup');
+
+        const cpN1Val   = soldes ? soldes.cp_n1 : 0;
+        const cpNVal    = soldes ? soldes.cp_n   : 0;
+        const rttVal    = soldes ? soldes.rtt    : 0;
+        const recupVal  = soldes ? soldes.recup_heures : 0;
+
+        // CP N-1 (toujours avec droits)
+        document.getElementById('soldeCPN1Historique').textContent = `${cpN1Val.toFixed(1)}j`;
+        cardCPN1.classList.remove('sans-droit');
+        cardCPN1.classList.toggle('solde-vide', cpN1Val === 0);
+
+        // CP N (toujours avec droits)
+        document.getElementById('soldeCPNHistorique').textContent = `${cpNVal.toFixed(1)}j`;
+        cardCPN.classList.remove('sans-droit');
+        cardCPN.classList.toggle('solde-vide', cpNVal === 0);
+
+        // RTT
+        if (salarie.a_droit_rtt) {
+            document.getElementById('soldeRTTHistorique').textContent = `${rttVal.toFixed(1)}j`;
+            cardRTT.classList.remove('sans-droit');
+            cardRTT.classList.toggle('solde-vide', rttVal === 0);
+        } else {
+            document.getElementById('soldeRTTHistorique').textContent = 'N/A';
+            cardRTT.classList.add('sans-droit');
+            cardRTT.classList.remove('solde-vide');
+        }
+
+        // Récupération
+        if (salarie.a_droit_recup) {
+            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(1)}h`;
+            cardRecup.classList.remove('sans-droit');
+            cardRecup.classList.toggle('solde-vide', recupVal === 0);
+        } else {
+            document.getElementById('soldeRecupHistorique').textContent = 'N/A';
+            cardRecup.classList.add('sans-droit');
+            cardRecup.classList.remove('solde-vide');
+        }
         
         soldesDiv.style.display = 'block';
         
@@ -2640,16 +2690,27 @@ function genererCalendrierHistorique() {
             
             if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !ferie) {
                 const type = absence.type.toUpperCase();
+                let tooltipLabel = '';
                 if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');
+                    tooltipLabel = 'Congés payés';
                 } else if (type === 'RTT') {
                     jourDiv.classList.add('rtt');
+                    tooltipLabel = 'RTT';
                 } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
+                    tooltipLabel = 'Récupération';
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
+                    tooltipLabel = 'Arrêt maladie';
                 }
-                
+                if (tooltipLabel) {
+                    const tip = absence.commentaire
+                        ? `${tooltipLabel} — ${absence.commentaire}`
+                        : tooltipLabel;
+                    jourDiv.setAttribute('data-tooltip', tip);
+                }
+
                 // Événement clic
                 jourDiv.addEventListener('click', () => {
                     ouvrirModalSuppression(absence, dateISO);
@@ -2746,68 +2807,107 @@ async function supprimerUnJour(absence, dateISO) {
     const dateDebut = new Date(absence.date_debut);
     const dateFin = new Date(absence.date_fin);
     const dateASupprimer = new Date(dateISO);
-    
+    const anneeEnCours = new Date().getFullYear();
+
+    // Stratégie : deleteAbsence recrédite le solde complet, puis on recrée
+    // la/les partie(s) restante(s) et on redéduit leur durée.
+
     // Cas 1 : Supprimer le premier jour
     if (dateISO === absence.date_debut) {
         const nouvelleDateDebut = new Date(dateASupprimer);
         nouvelleDateDebut.setDate(nouvelleDateDebut.getDate() + 1);
-        
-        // Modifier l'absence existante
-        await window.api.updateAbsence(absence.id, {
-            date_debut: formatDateISO(nouvelleDateDebut),
-            duree_jours: absence.duree_jours - 1,
-            duree_heures: absence.duree_heures - 7
+
+        const nouvelleDureeJours  = absence.duree_jours  - 1;
+        const nouvelleDureeHeures = absence.duree_heures - 7;
+
+        await window.api.deleteAbsence(absence.id);
+        await window.api.createAbsence({
+            salarie_id:   absence.salarie_id,
+            type:         absence.type,
+            date_debut:   formatDateISO(nouvelleDateDebut),
+            date_fin:     absence.date_fin,
+            duree_jours:  nouvelleDureeJours,
+            duree_heures: nouvelleDureeHeures,
+            commentaire:  absence.commentaire
         });
-        
+        await window.api.updateSoldesAfterAbsence(
+            absence.salarie_id, anneeEnCours, absence.type,
+            nouvelleDureeJours, nouvelleDureeHeures
+        );
+
         alert('✅ Premier jour supprimé !\nLes soldes ont été recalculés.');
         return;
     }
-    
+
     // Cas 2 : Supprimer le dernier jour
     if (dateISO === absence.date_fin) {
         const nouvelleDateFin = new Date(dateASupprimer);
         nouvelleDateFin.setDate(nouvelleDateFin.getDate() - 1);
-        
-        await window.api.updateAbsence(absence.id, {
-            date_fin: formatDateISO(nouvelleDateFin),
-            duree_jours: absence.duree_jours - 1,
-            duree_heures: absence.duree_heures - 7
+
+        const nouvelleDureeJours  = absence.duree_jours  - 1;
+        const nouvelleDureeHeures = absence.duree_heures - 7;
+
+        await window.api.deleteAbsence(absence.id);
+        await window.api.createAbsence({
+            salarie_id:   absence.salarie_id,
+            type:         absence.type,
+            date_debut:   absence.date_debut,
+            date_fin:     formatDateISO(nouvelleDateFin),
+            duree_jours:  nouvelleDureeJours,
+            duree_heures: nouvelleDureeHeures,
+            commentaire:  absence.commentaire
         });
-        
+        await window.api.updateSoldesAfterAbsence(
+            absence.salarie_id, anneeEnCours, absence.type,
+            nouvelleDureeJours, nouvelleDureeHeures
+        );
+
         alert('✅ Dernier jour supprimé !\nLes soldes ont été recalculés.');
         return;
     }
-    
+
     // Cas 3 : Supprimer un jour au milieu (couper en 2)
     const jourAvant = new Date(dateASupprimer);
     jourAvant.setDate(jourAvant.getDate() - 1);
-    
+
     const jourApres = new Date(dateASupprimer);
     jourApres.setDate(jourApres.getDate() + 1);
-    
-    // Calculer les durées
+
+    // joursPartie1 calculé par différence calendaire (approximation acceptable)
+    // joursPartie2 déduit de la durée originale pour rester cohérent (évite le bug jours calendaires)
     const joursPartie1 = Math.ceil((jourAvant - dateDebut) / (1000 * 60 * 60 * 24)) + 1;
-    const joursPartie2 = Math.ceil((dateFin - jourApres) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // Modifier l'absence existante (première partie)
-    await window.api.updateAbsence(absence.id, {
-        date_fin: formatDateISO(jourAvant),
-        duree_jours: joursPartie1,
-        duree_heures: joursPartie1 * 7
-    });
-    
-    // Créer une nouvelle absence (deuxième partie)
+    const joursPartie2 = absence.duree_jours - joursPartie1 - 1;
+
+    await window.api.deleteAbsence(absence.id);
+
+    // Partie 1
     await window.api.createAbsence({
-        salarie_id: absence.salarie_id,
-        type: absence.type,
-        date_debut: formatDateISO(jourApres),
-        date_fin: absence.date_fin,
-        duree_jours: joursPartie2,
-        duree_heures: joursPartie2 * 7,
-        commentaire: absence.commentaire,
-        statut: 'valide'
+        salarie_id:   absence.salarie_id,
+        type:         absence.type,
+        date_debut:   absence.date_debut,
+        date_fin:     formatDateISO(jourAvant),
+        duree_jours:  joursPartie1,
+        duree_heures: joursPartie1 * 7,
+        commentaire:  absence.commentaire
     });
-    
+    await window.api.updateSoldesAfterAbsence(
+        absence.salarie_id, anneeEnCours, absence.type, joursPartie1, joursPartie1 * 7
+    );
+
+    // Partie 2
+    await window.api.createAbsence({
+        salarie_id:   absence.salarie_id,
+        type:         absence.type,
+        date_debut:   formatDateISO(jourApres),
+        date_fin:     absence.date_fin,
+        duree_jours:  joursPartie2,
+        duree_heures: joursPartie2 * 7,
+        commentaire:  absence.commentaire
+    });
+    await window.api.updateSoldesAfterAbsence(
+        absence.salarie_id, anneeEnCours, absence.type, joursPartie2, joursPartie2 * 7
+    );
+
     alert('✅ Jour supprimé !\nL\'absence a été coupée en 2 périodes.\nLes soldes ont été recalculés.');
 }
 

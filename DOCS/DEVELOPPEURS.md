@@ -344,8 +344,38 @@ Le handler `calculerDuree(dateDebut, dateFin, periodeType)` dans `main.js` :
     --rouge:  rgb(181, 22, 63);
     --orange: rgb(237, 113, 17);
     --jaune:  rgb(249, 198, 73);
+
+    /* Theme light (par défaut) */
+    --bg-body: #f5f5f5;
+    --bg-surface: #ffffff;
+    --bg-surface-alt: #f8f9fa;
+    --bg-input: rgba(255, 255, 255, 0.95);
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --border-color: #ddd;
+}
+
+[data-theme="dark"] {
+    --bg-body: #1a1a1a;
+    --bg-surface: #242424;
+    --bg-surface-alt: #2e2e2e;
+    --bg-input: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --text-muted: #888;
+    --border-color: #3a3a3a;
 }
 ```
+
+### Mode sombre / clair
+
+- Toggle via bouton lune/soleil dans le header (user + admin)
+- Persisté en `localStorage('theme')` — partagé entre toutes les pages
+- Le thème est appliqué via `data-theme="dark"` sur `<html>`
+- En dark mode, la navigation utilise `--jaune` au lieu de `--bleu`
+- Transition globale de 0.1s sur tous les éléments
+- Surcharges dark organisées en fin de chaque fichier CSS
 
 ### Hauteurs des layouts (critique pour le scroll)
 
@@ -558,12 +588,13 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 
 ### Résumé des priorités hautes
 
-1. ~~**Handler `ajouter-recup`**~~ ✅ **Fait** — modal "Heures supplémentaires" implémentée (main.js + preload.js + UI user et admin)
-2. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
-3. **Vérifier table `rtt_annuels`** — les handlers existent mais la table n'est peut-être pas dans le template `conges.db`
-4. **UI Notifications** — la table et les handlers DB existent, l'interface de lecture/badge est absente
-5. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
+1. ~~**Handler `ajouter-recup`**~~ ✅ **Fait**
+2. ~~**UI Notifications**~~ ✅ **Fait** — badge cloche + dropdown + toasts
+3. ~~**Refonte CSS + Dark mode**~~ ✅ **Fait** — thème sombre complet, navigation unifiée
+4. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
+5. **RTT annuels par salarié** — table `rtt_annuels` existe, UI à compléter
+6. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 05/03/2026*
+*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (dark mode + nav unifiée)*
