@@ -696,12 +696,81 @@ async function afficherHistorique() {
 }
 
 
+// ========== MODAL HEURES SUPPLÉMENTAIRES ==========
+
+function initModalHeuresSup() {
+    const modal = document.getElementById('modalHeuresSup');
+    if (!modal) return;
+
+    document.getElementById('heuresSupDate').value = new Date().toISOString().split('T')[0];
+
+    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+        document.getElementById('heuresSupMsg').style.display = 'none';
+        modal.style.display = 'flex';
+    });
+
+    document.getElementById('closeModalHeuresSup').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    document.getElementById('btnAnnulerHeuresSup').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+
+    document.getElementById('btnEnregistrerHeuresSup').addEventListener('click', async () => {
+        const heures = parseFloat(document.getElementById('heuresSupNb').value);
+        const date = document.getElementById('heuresSupDate').value;
+        const commentaire = document.getElementById('heuresSupCommentaire').value.trim();
+        const msg = document.getElementById('heuresSupMsg');
+
+        if (!heures || heures <= 0 || !date) {
+            msg.textContent = "Veuillez renseigner le nombre d'heures et la date.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+            return;
+        }
+
+        try {
+            await window.api.ajouterRecup({
+                salarie_id: user.id,
+                annee: anneeActuelle,
+                heures,
+                date,
+                commentaire: commentaire || `Heures supplémentaires du ${date}`
+            });
+
+            msg.textContent = `${heures}h enregistrées avec succès.`;
+            msg.className = 'form-success';
+            msg.style.display = 'block';
+
+            await loadSoldes();
+
+            setTimeout(() => {
+                modal.style.display = 'none';
+                document.getElementById('heuresSupNb').value = '';
+                document.getElementById('heuresSupCommentaire').value = '';
+                msg.style.display = 'none';
+            }, 1500);
+        } catch (error) {
+            console.error('Erreur ajout heures sup:', error);
+            msg.textContent = "Erreur lors de l'enregistrement.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+        }
+    });
+}
+
 // ========== INITIALISATION ==========
 
 async function init() {
     await loadSoldes();
     await initFormAbsence();
     await chargerCalendrier();
+    initModalHeuresSup();
     // await afficherHistorique();
 }
 

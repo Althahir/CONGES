@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
     getSoldes: (salarieId, annee) => ipcRenderer.invoke('getSoldes', salarieId, annee),
     updateSoldes: (salarieId, annee, soldes) => ipcRenderer.invoke('updateSoldes', salarieId, annee, soldes),
     updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
+    ajouterRecup: (data) => ipcRenderer.invoke('ajouter-recup', data),
     
     // Gestion des absences
     createAbsence: (data) => ipcRenderer.invoke('createAbsence', data),

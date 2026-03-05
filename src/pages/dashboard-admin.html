@@ -192,6 +192,37 @@
                 </button>
             </div>
 
+            <!-- Modal Heures Supplémentaires (admin) -->
+            <div id="modalHeuresSupAdmin" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 440px;">
+                    <div class="modal-header">
+                        <h3><i class="fa-solid fa-clock"></i> Ajouter des heures supplémentaires</h3>
+                        <button id="closeModalHeuresSupAdmin" class="close-modal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group-compact">
+                            <label for="heuresSupNbAdmin">Nombre d'heures *</label>
+                            <input type="number" id="heuresSupNbAdmin" min="0.5" step="0.5" placeholder="Ex: 3.5">
+                        </div>
+                        <div class="form-group-compact">
+                            <label for="heuresSupDateAdmin">Date *</label>
+                            <input type="date" id="heuresSupDateAdmin">
+                        </div>
+                        <div class="form-group-compact">
+                            <label for="heuresSupCommentaireAdmin">Commentaire</label>
+                            <textarea id="heuresSupCommentaireAdmin" rows="3" placeholder="Description du travail effectué..."></textarea>
+                        </div>
+                        <div id="heuresSupMsgAdmin" style="display: none;"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="btnAnnulerHeuresSupAdmin" class="btn-secondary">Annuler</button>
+                        <button id="btnEnregistrerHeuresSupAdmin" class="btn-primary">Enregistrer</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Formulaire -->
             <div class="panel-section form-section">
                 <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>

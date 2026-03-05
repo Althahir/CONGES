@@ -16,7 +16,8 @@
 7. [Fonctionnalités existantes](#7-fonctionnalités-existantes)
 8. [Easter eggs admin](#8-easter-eggs-admin)
 9. [Build & distribution](#9-build--distribution)
-10. [Roadmap](#10-roadmap)
+10. [Déploiement multi-utilisateurs](#10-déploiement-multi-utilisateurs)
+11. [Roadmap](#11-roadmap)
 
 ---
 
@@ -440,17 +441,111 @@ npm run make
 
 ---
 
-## 10. Roadmap
+## 10. Déploiement multi-utilisateurs
+
+> **Contexte** : par défaut, chaque machine a sa propre DB locale dans `AppData`. Pour que les 5 salariés partagent les mêmes données, il faut pointer toutes les instances vers **un seul fichier DB commun**.
+
+### Option retenue : dossier réseau partagé (Option A)
+
+Toutes les instances Electron lisent/écrivent le même fichier `conges.db` stocké sur un emplacement accessible en réseau.
+
+```
+Poste 1  ──┐
+Poste 2  ──┤──► \\serveur\partage\conges.db  (ou OneDrive mappé)
+Poste 3  ──┘
+```
+
+### Modifications à apporter dans `main.js`
+
+#### 1. Activer le mode WAL (obligatoire pour les accès simultanés)
+
+Juste après l'ouverture de la DB, ajouter :
+
+```javascript
+db.run('PRAGMA journal_mode=WAL');
+db.run('PRAGMA busy_timeout=5000'); // Attendre 5s si la DB est verrouillée
+```
+
+#### 2. Rendre le chemin DB configurable
+
+Actuellement le chemin est calculé automatiquement vers `AppData`. Il faut permettre de le surcharger.
+
+Exemple d'implémentation : lire un fichier `config.json` placé à côté de l'exécutable :
+
+```javascript
+const configPath = path.join(app.getPath('exe'), '..', 'config.json');
+let dbPath;
+
+if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    dbPath = config.dbPath; // Ex: "\\\\serveur\\partage\\conges.db"
+}
+
+if (!dbPath) {
+    // Fallback : comportement actuel (AppData local)
+    const userDataPath = app.getPath('userData');
+    dbPath = path.join(userDataPath, 'conges.db');
+}
+```
+
+Chaque poste aura un `config.json` à côté de l'exécutable :
+
+```json
+{
+    "dbPath": "C:\\Users\\<user>\\OneDrive\\LaCiotat\\conges.db"
+}
+```
+
+*(Le chemin OneDrive est le chemin local de la synchronisation — voir section ci-dessous)*
+
+#### 3. S'assurer que le fichier DB est copié une seule fois
+
+La logique actuelle copie `src/conges.db` → `AppData` si le fichier n'existe pas. Avec un chemin réseau, cette logique doit être adaptée : ne copier le template que si le fichier réseau n'existe pas encore (premier déploiement).
+
+---
+
+### ⚠️ Utilisation avec OneDrive
+
+OneDrive **peut** fonctionner comme dossier partagé pour SQLite, à condition de respecter ces contraintes :
+
+| Contrainte | Détail |
+|---|---|
+| **Toujours disponible localement** | Désactiver "Fichiers à la demande" (Files On-Demand) — le fichier doit être en cache local, pas en ligne uniquement |
+| **Pas d'accès simultané en écriture** | OneDrive sync + SQLite lock = risque de corruption si deux personnes écrivent exactement au même moment |
+| **WAL mode obligatoire** | Réduit fortement les conflits de verrouillage (voir section ci-dessus) |
+| **Dossier non synchronisé en temps réel** | Mettre le dossier `conges.db` en pause de sync si possible (ou utiliser un NAS à la place) |
+
+> ⚠️ **Point critique — à faire sur chaque poste avant le déploiement** : désactiver l'option **"Fichiers à la demande"** (Files On-Demand) dans les paramètres OneDrive. Sans ça, OneDrive peut stocker `conges.db` uniquement en ligne et SQLite ne pourra pas y accéder, rendant l'app inutilisable. Pour 5 utilisateurs avec peu d'accès simultanés, l'ensemble devrait tenir.
+
+> **Recommandation** : OneDrive est acceptable pour 5 utilisateurs avec peu d'accès simultanés, mais un **partage réseau local (NAS ou PC partagé)** est plus fiable car il n'y a pas de couche de synchronisation entre SQLite et le fichier.
+
+> **En cas de corruption** : SQLite en mode WAL crée automatiquement des fichiers `conges.db-wal` et `conges.db-shm` à côté de la DB. Ne pas les supprimer manuellement.
+
+---
+
+### Procédure de déploiement (résumé)
+
+1. Packager l'app : `npm run make`
+2. Installer l'app sur chaque poste (installeur Squirrel généré dans `/out/make/`)
+3. Créer le dossier partagé (OneDrive ou réseau)
+4. Y copier `src/conges.db` (template vierge) une seule fois
+5. Créer un `config.json` sur chaque poste à côté de l'exécutable avec le chemin réseau
+6. Lancer l'app — elle utilisera la DB partagée
+
+---
+
+## 11. Roadmap
 
 Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 
 ### Résumé des priorités hautes
 
-1. **Handler `ajouter-recup` manquant** — le bouton "Heures supplémentaires" existe en UI mais le backend IPC n'est pas implémenté dans `main.js`
-2. **Vérifier table `rtt_annuels`** — les handlers existent mais la table n'est peut-être pas dans le template `conges.db`
-3. **UI Notifications** — la table et les handlers DB existent, l'interface de lecture/badge est absente
-4. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
+1. ~~**Handler `ajouter-recup`**~~ ✅ **Fait** — modal "Heures supplémentaires" implémentée (main.js + preload.js + UI user et admin)
+2. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
+3. **Vérifier table `rtt_annuels`** — les handlers existent mais la table n'est peut-être pas dans le template `conges.db`
+4. **UI Notifications** — la table et les handlers DB existent, l'interface de lecture/badge est absente
+5. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 03/03/2026*
+*Document maintenu par Excellium — dernière mise à jour 05/03/2026*

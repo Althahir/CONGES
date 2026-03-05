@@ -1083,6 +1083,27 @@ ipcMain.handle('updateSoldesAfterAbsence', async (event, salarieId, annee, type,
         );
     });
 });
+// ========== AJOUT HEURES SUPPLÉMENTAIRES ==========
+
+ipcMain.handle('ajouter-recup', async (event, data) => {
+    const { salarie_id, annee, heures } = data;
+    return new Promise((resolve, reject) => {
+        db.run(
+            `UPDATE soldes SET recup_heures = recup_heures + ?, derniere_maj = CURRENT_TIMESTAMP
+             WHERE salarie_id = ? AND annee = ?`,
+            [heures, salarie_id, annee],
+            (err) => {
+                if (err) {
+                    console.error('Erreur ajout heures sup:', err);
+                    reject(err);
+                } else {
+                    resolve({ success: true });
+                }
+            }
+        );
+    });
+});
+
 // ========== GÉNÉRATION PDF ==========
 ipcMain.handle('genererPDF', async (event, absenceData) => {
     return new Promise((resolve, reject) => {

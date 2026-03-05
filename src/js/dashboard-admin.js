@@ -2730,7 +2730,7 @@ await window.api.genererPDF(pdfData);
             } else {
                 throw new Error('Erreur lors de la création');
             }
-            
+
         } catch (error) {
             console.error('Erreur:', error);
             errorMsg.textContent = 'Erreur lors de l\'enregistrement de l\'absence';
@@ -2738,3 +2738,73 @@ await window.api.genererPDF(pdfData);
         }
     });
 }
+
+// ========== MODAL HEURES SUPPLÉMENTAIRES (ADMIN) ==========
+
+function initModalHeuresSupAdmin() {
+    const modal = document.getElementById('modalHeuresSupAdmin');
+    if (!modal) return;
+
+    document.getElementById('heuresSupDateAdmin').value = new Date().toISOString().split('T')[0];
+
+    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+        document.getElementById('heuresSupMsgAdmin').style.display = 'none';
+        modal.style.display = 'flex';
+    });
+
+    document.getElementById('closeModalHeuresSupAdmin').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    document.getElementById('btnAnnulerHeuresSupAdmin').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+
+    document.getElementById('btnEnregistrerHeuresSupAdmin').addEventListener('click', async () => {
+        const heures = parseFloat(document.getElementById('heuresSupNbAdmin').value);
+        const date = document.getElementById('heuresSupDateAdmin').value;
+        const commentaire = document.getElementById('heuresSupCommentaireAdmin').value.trim();
+        const msg = document.getElementById('heuresSupMsgAdmin');
+
+        if (!heures || heures <= 0 || !date) {
+            msg.textContent = "Veuillez renseigner le nombre d'heures et la date.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+            return;
+        }
+
+        try {
+            await window.api.ajouterRecup({
+                salarie_id: user.id,
+                annee: anneeActuelle,
+                heures,
+                date,
+                commentaire: commentaire || `Heures supplémentaires du ${date}`
+            });
+
+            msg.textContent = `${heures}h enregistrées avec succès.`;
+            msg.className = 'form-success';
+            msg.style.display = 'block';
+
+            await loadSoldesAdmin();
+
+            setTimeout(() => {
+                modal.style.display = 'none';
+                document.getElementById('heuresSupNbAdmin').value = '';
+                document.getElementById('heuresSupCommentaireAdmin').value = '';
+                msg.style.display = 'none';
+            }, 1500);
+        } catch (error) {
+            console.error('Erreur ajout heures sup:', error);
+            msg.textContent = "Erreur lors de l'enregistrement.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+        }
+    });
+}
+
+initModalHeuresSupAdmin();
