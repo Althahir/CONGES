@@ -1247,9 +1247,44 @@ document.getElementById('btnEnregistrerConfig').addEventListener('click', async 
     }
 });
 
-// Fonction pour afficher une notification persistante
+// ========== FILE D'ATTENTE DES TOASTS ==========
+
+const _toastQueue = [];
+let _toastActif = false;
+
 function afficherNotificationPersistante(type, titre, message) {
-    afficherNotificationPersistanteAvecId(null, type, titre, message);
+    _toastQueue.push({ type, titre, message });
+    _afficherProchainToast();
+}
+
+function _afficherProchainToast() {
+    if (_toastActif || _toastQueue.length === 0) return;
+    _toastActif = true;
+    const { type, titre, message } = _toastQueue.shift();
+    _rendreToast(type, titre, message);
+}
+
+function _rendreToast(type, titre, message) {
+    const toast = document.createElement('div');
+    toast.className = `notification-persistante ${type}`;
+
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    toast.innerHTML = `
+        <div class="notification-icon"><i class="fa-solid ${icon}"></i></div>
+        <div class="notification-content">
+            <h4>${titre}</h4>
+            <p>${message}</p>
+        </div>
+        <button class="notification-close"><i class="fa-solid fa-times"></i></button>
+    `;
+
+    document.body.appendChild(toast);
+
+    toast.querySelector('.notification-close').addEventListener('click', () => {
+        toast.remove();
+        _toastActif = false;
+        _afficherProchainToast();
+    });
 }
 
 // TEST NOTIFICATION
@@ -1913,9 +1948,9 @@ async function creerAbsenceImport(salarieId, absence) {
 if (window.api.onTraitementAutomatique) {
     window.api.onTraitementAutomatique((data) => {
         console.log('Traitement automatique reçu:', data);
-        
+
         const typeLabel = data.type === 'CP_ANNUEL' ? 'CP Annuel' : 'RTT Annuel';
-        
+
         if (data.statut === 'success') {
             afficherNotificationPersistante(
                 'success',
@@ -1929,7 +1964,10 @@ if (window.api.onTraitementAutomatique) {
                 data.erreurs ? data.erreurs.join(', ') : 'Une erreur est survenue'
             );
         }
-        
+
+        // Rafraîchir le badge depuis la DB (la notif y est sauvegardée)
+        chargerNotificationsNonLues();
+
         // Recharger l'historique
         chargerHistoriqueTraitements();
     });
@@ -2149,22 +2187,121 @@ XLSX.utils.book_append_sheet(wb, wsArchives, 'Archives');
 async function chargerNotificationsNonLues() {
     try {
         const notifications = await window.api.getNotificationsNonLues(user.id);
-        
         console.log('📬 Notifications non lues:', notifications.length);
-        
-        // Afficher chaque notification
-        for (const notif of notifications) {
-            afficherNotificationPersistanteAvecId(
-                notif.id,
-                notif.statut,
-                notif.titre,
-                notif.message,
-                notif.date_creation
-            );
-        }
-        
+        window._notificationsEnAttente = notifications;
+        mettreAJourBadge(notifications.length);
     } catch (error) {
         console.error('Erreur chargement notifications:', error);
+    }
+}
+
+function mettreAJourBadge(count) {
+    const badge = document.getElementById('notifBadge');
+    if (!badge) return;
+    if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderNotifDropdown(notifications) {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    if (!notifications || notifications.length === 0) {
+        list.innerHTML = '<p class="notif-vide">Aucune notification</p>';
+        return;
+    }
+
+    list.innerHTML = notifications.map(notif => {
+        const statut = notif.statut;
+        const icon = statut === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+        const cssClass = statut === 'success' ? 'success' : (statut === 'partial' ? 'partial' : 'error');
+
+        let dateFormatee = '';
+        if (notif.date_creation) {
+            const dateStr = notif.date_creation.includes('Z') ? notif.date_creation : notif.date_creation + 'Z';
+            const date = new Date(dateStr);
+            dateFormatee = date.toLocaleString('fr-FR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
+            });
+        }
+
+        return `
+            <div class="notif-item ${cssClass}" data-notif-id="${notif.id}">
+                <div class="notif-item-icon">
+                    <i class="fa-solid ${icon}"></i>
+                </div>
+                <div class="notif-item-content">
+                    <strong>${notif.titre}</strong>
+                    <p>${notif.message}</p>
+                    ${dateFormatee ? `<small>${dateFormatee}</small>` : ''}
+                </div>
+                <button class="notif-item-close" data-notif-id="${notif.id}" title="Marquer comme lu">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    // Listeners fermeture individuelle
+    list.querySelectorAll('.notif-item-close').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.notifId);
+            try {
+                await window.api.marquerNotificationLue(id);
+            } catch (err) {
+                console.error('Erreur marquage notification:', err);
+            }
+            window._notificationsEnAttente = (window._notificationsEnAttente || []).filter(n => n.id !== id);
+            renderNotifDropdown(window._notificationsEnAttente);
+            mettreAJourBadge(window._notificationsEnAttente.length);
+        });
+    });
+}
+
+function initNotifDropdown() {
+    const btn = document.getElementById('btnNotifications');
+    const dropdown = document.getElementById('notifDropdown');
+    const btnToutLire = document.getElementById('btnToutMarquerLu');
+    if (!btn || !dropdown) return;
+
+    let dropdownOuvert = false;
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdownOuvert = !dropdownOuvert;
+        dropdown.style.display = dropdownOuvert ? 'block' : 'none';
+        if (dropdownOuvert) {
+            renderNotifDropdown(window._notificationsEnAttente || []);
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (dropdownOuvert && !btn.closest('.notif-wrapper').contains(e.target)) {
+            dropdownOuvert = false;
+            dropdown.style.display = 'none';
+        }
+    });
+
+    if (btnToutLire) {
+        btnToutLire.addEventListener('click', async () => {
+            const notifs = window._notificationsEnAttente || [];
+            for (const notif of notifs) {
+                try {
+                    await window.api.marquerNotificationLue(notif.id);
+                } catch (err) {
+                    console.error('Erreur marquage:', err);
+                }
+            }
+            window._notificationsEnAttente = [];
+            renderNotifDropdown([]);
+            mettreAJourBadge(0);
+        });
     }
 }
 
@@ -2241,6 +2378,9 @@ async function init() {
         }
     }
     
+    // Initialiser le dropdown de notifications
+    initNotifDropdown();
+
     // Charger les notifications non lues
     await chargerNotificationsNonLues();
 }
@@ -2806,5 +2946,13 @@ function initModalHeuresSupAdmin() {
         }
     });
 }
+
+// ========== TEST TOASTS MULTIPLES — décommenter pour tester ("reactive le test des notifs") ==========
+// setTimeout(() => {
+//     afficherNotificationPersistante('success', 'Absence posée — Marie Martin', 'RTT · du 10/03 au 10/03 (1j) · Solde restant : 4j');
+//     setTimeout(() => afficherNotificationPersistante('success', 'Absence posée — Paul Lemaire', 'CP · du 15/03 au 19/03 (5j) · Solde restant : 8j'), 800);
+//     setTimeout(() => afficherNotificationPersistante('error', 'Absence posée — Sophie Bernard', 'MALADIE · du 12/03 au 14/03 (3j)'), 1600);
+// }, 3000);
+// ========== FIN TEST ==========
 
 initModalHeuresSupAdmin();

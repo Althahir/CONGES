@@ -225,7 +225,15 @@ ipcMain.handle('executerTraitementCP', async (event, annee) => {
                     if (err) console.error('Erreur enregistrement historique:', err);
                 }
             );
-            
+
+            // Sauvegarder la notification en DB
+            const notifTitreCP = statut === 'success' ? 'Traitement CP Annuel effectué' : (statut === 'partial' ? 'Traitement CP Annuel partiel' : 'Erreur traitement CP Annuel');
+            const notifMessageCP = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) avec succès` : (erreurs.join(', ') || 'Aucun salarié traité');
+            db.run(
+                `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
+                [notifTitreCP, notifMessageCP, statut]
+            );
+
             resolve({
                 success: statut !== 'error',
                 statut,
@@ -457,7 +465,15 @@ ipcMain.handle('executerTraitementRTT', async (event, annee) => {
                         if (err) console.error('Erreur enregistrement historique:', err);
                     }
                 );
-                
+
+                // Sauvegarder la notification en DB
+                const notifTitreRTT = statut === 'success' ? 'Traitement RTT Annuel effectué' : (statut === 'partial' ? 'Traitement RTT Annuel partiel' : 'Erreur traitement RTT Annuel');
+                const notifMessageRTT = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) avec succès` : (erreurs.join(', ') || 'Aucun salarié traité');
+                db.run(
+                    `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
+                    [notifTitreRTT, notifMessageRTT, statut]
+                );
+
                 resolve({
                     success: statut !== 'error',
                     statut,
@@ -1010,6 +1026,39 @@ ipcMain.handle('createAbsence', async (event, absenceData) => {
                 } else {
                     console.log('Absence créée avec ID:', this.lastID);
                     resolve({ success: true, id: this.lastID });
+
+                    // Notification absence
+                    const anneeAbsence = new Date(date_debut).getFullYear();
+                    db.get('SELECT nom, prenom FROM salaries WHERE id = ?', [salarie_id], (err2, salarie) => {
+                        if (err2 || !salarie) return;
+                        db.get('SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?', [salarie_id, anneeAbsence], (err3, soldes) => {
+                            const formatDate = (d) => { const [y, m, j] = d.split('-'); return `${j}/${m}`; };
+                            const labels = { CP_N: 'CP', CP_N1: 'CP', CP: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+                            const typeLabel = labels[type] || type;
+                            const dureeStr = (type === 'RECUP' && !duree_jours) ? `${duree_heures}h` : `${duree_jours}j`;
+
+                            let soldeStr = '';
+                            if (soldes && type !== 'MALADIE') {
+                                if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
+                                    const restant = (soldes.cp_n1 + soldes.cp_n) - (duree_jours || 0);
+                                    soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                                } else if (type === 'RTT') {
+                                    const restant = soldes.rtt - (duree_jours || 0);
+                                    soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                                } else if (type === 'RECUP') {
+                                    const restant = soldes.recup_heures - (duree_heures || 0);
+                                    soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}h`;
+                                }
+                            }
+
+                            const titre = `Absence posée — ${salarie.prenom} ${salarie.nom}`;
+                            const message = `${typeLabel} · du ${formatDate(date_debut)} au ${formatDate(date_fin)} (${dureeStr})${soldeStr}`;
+                            db.run(
+                                `INSERT INTO notifications (type, titre, message, statut) VALUES ('absence', ?, ?, 'success')`,
+                                [titre, message]
+                            );
+                        });
+                    });
                 }
             }
         );
