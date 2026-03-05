@@ -348,15 +348,47 @@
             <section id="feries-section" class="content-section">
                 <div class="section-header">
                     <h2>Gestion des Jours Fériés</h2>
-                    <button id="btnAjouterFerie" class="btn-primary">
-                        <i class="fa-solid fa-plus"></i> Ajouter
-                    </button>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="year-nav">
+                            <button id="btnPrevYearFeries" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
+                            <span id="anneeFeries"></span>
+                            <button id="btnNextYearFeries" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                        <button id="btnAjouterFerie" class="btn-primary">
+                            <i class="fa-solid fa-plus"></i> Ajouter
+                        </button>
+                    </div>
                 </div>
                 
                 <div id="listeFeries" class="liste-feries">
                     <!-- Sera rempli dynamiquement -->
                 </div>
             </section>
+
+        <!-- Modale Ajouter un jour férié -->
+        <div id="modalFerie" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width:420px;">
+                <div class="modal-header">
+                    <h2>Ajouter un jour férié</h2>
+                    <button class="modal-close" id="closeFerieModal">&times;</button>
+                </div>
+                <form id="formFerie">
+                    <div class="form-group">
+                        <label for="ferieDate">Date *</label>
+                        <input type="date" id="ferieDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ferieLibelle">Libellé *</label>
+                        <input type="text" id="ferieLibelle" placeholder="ex: 1er Mai" required>
+                    </div>
+                    <p id="ferieMsgErreur" class="form-error" style="display:none;"></p>
+                    <div class="form-actions">
+                        <button type="button" id="btnAnnulerFerie" class="btn-secondary">Annuler</button>
+                        <button type="submit" id="btnSauvegarderFerie" class="btn-primary">Ajouter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
             <!-- Section Gestion des Types de Congés -->
             <section id="rtt-section" class="content-section">

@@ -1429,6 +1429,15 @@ ipcMain.handle('addJourFerie', async (event, data) => {
     });
 });
 
+ipcMain.handle('deleteJourFerie', async (event, id) => {
+    return new Promise((resolve, reject) => {
+        db.run('DELETE FROM jours_feries WHERE id = ?', [id], function(err) {
+            if (err) reject(err);
+            else resolve({ success: true });
+        });
+    });
+});
+
 // ========== RTT ANNUELS ==========
 
 ipcMain.handle('getRTTAnnuels', async (event) => {

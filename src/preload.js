@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
     // Jours fériés
     getJoursFeries: (annee) => ipcRenderer.invoke('getJoursFeries', annee),
     addJourFerie: (data) => ipcRenderer.invoke('addJourFerie', data),
+    deleteJourFerie: (id) => ipcRenderer.invoke('deleteJourFerie', id),
     
     // RTT annuels
     getRTTAnnuels: () => ipcRenderer.invoke('getRTTAnnuels'),

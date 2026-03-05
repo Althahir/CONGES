@@ -381,35 +381,105 @@ async function chargerCalendrierGlobal() {
 
 // ========== JOURS FÉRIÉS ==========
 
+let anneeFeries = new Date().getFullYear();
+
+document.getElementById('anneeFeries').textContent = anneeFeries;
+
+document.getElementById('btnPrevYearFeries').addEventListener('click', () => {
+    anneeFeries--;
+    document.getElementById('anneeFeries').textContent = anneeFeries;
+    chargerJoursFeries();
+});
+
+document.getElementById('btnNextYearFeries').addEventListener('click', () => {
+    anneeFeries++;
+    document.getElementById('anneeFeries').textContent = anneeFeries;
+    chargerJoursFeries();
+});
+
 async function chargerJoursFeries() {
     try {
-        const annee = new Date().getFullYear();
+        const annee = anneeFeries;
         const feries = await window.api.getJoursFeries(annee);
         const container = document.getElementById('listeFeries');
-        
+
         if (feries.length === 0) {
-            container.innerHTML = '<p class="text-muted">Aucun jour férié enregistré</p>';
+            container.innerHTML = '<p class="text-muted">Aucun jour férié enregistré pour ' + annee + '</p>';
             return;
         }
-        
-        const html = feries.map(f => `
-            <div class="ferie-item">
-                <div class="ferie-date">${new Date(f.date).toLocaleDateString('fr-FR', { 
-                    weekday: 'long', 
-                    day: 'numeric', 
-                    month: 'long', 
-                    year: 'numeric' 
+
+        container.innerHTML = feries.map(f => `
+            <div class="ferie-item" data-id="${f.id}">
+                <div class="ferie-date">${new Date(f.date + 'T00:00:00').toLocaleDateString('fr-FR', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
                 })}</div>
                 <div class="ferie-libelle">${f.libelle}</div>
+                <button class="btn-supprimer-ferie" data-id="${f.id}" title="Supprimer">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
             </div>
         `).join('');
-        
-        container.innerHTML = html;
-        
+
+        container.querySelectorAll('.btn-supprimer-ferie').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('Supprimer ce jour férié ?')) return;
+                try {
+                    await window.api.deleteJourFerie(parseInt(btn.dataset.id));
+                    chargerJoursFeries();
+                } catch (err) {
+                    console.error('Erreur suppression jour férié:', err);
+                }
+            });
+        });
+
     } catch (error) {
         console.error('Erreur chargement jours fériés:', error);
     }
 }
+
+// Modale jours fériés
+(function() {
+    const modal  = document.getElementById('modalFerie');
+    const form   = document.getElementById('formFerie');
+    const erreur = document.getElementById('ferieMsgErreur');
+
+    function ouvrirModal() {
+        form.reset();
+        erreur.style.display = 'none';
+        modal.style.display = 'flex';
+    }
+    function fermerModal() {
+        modal.style.display = 'none';
+    }
+
+    document.getElementById('btnAjouterFerie').addEventListener('click', ouvrirModal);
+    document.getElementById('closeFerieModal').addEventListener('click', fermerModal);
+    document.getElementById('btnAnnulerFerie').addEventListener('click', fermerModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) fermerModal(); });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date    = document.getElementById('ferieDate').value;
+        const libelle = document.getElementById('ferieLibelle').value.trim();
+
+        if (!date || !libelle) return;
+
+        const btn = document.getElementById('btnSauvegarderFerie');
+        btn.disabled = true;
+        erreur.style.display = 'none';
+
+        try {
+            await window.api.addJourFerie({ date, libelle, annee: anneeFeries });
+            fermerModal();
+            chargerJoursFeries();
+        } catch (err) {
+            erreur.textContent = 'Erreur : ' + (err.message || 'impossible d\'ajouter ce jour férié');
+            erreur.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
 
 // ========== TABLE RTT ==========
 
@@ -552,9 +622,7 @@ window.resetPassword = async (salarieId, nom, prenom) => {
 
 // ========== AUTRES BOUTONS ==========
 
-document.getElementById('btnAjouterFerie').addEventListener('click', () => {
-    alert('Fonctionnalité "Ajouter un jour férié" à implémenter');
-});
+// Bouton "Ajouter" géré par la modale initialisée dans la section JOURS FÉRIÉS
 
 // Bouton déconnexion
 document.getElementById('logoutBtn').addEventListener('click', () => {

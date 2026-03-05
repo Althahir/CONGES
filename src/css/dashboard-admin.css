@@ -315,6 +315,22 @@ h2 {
     text-align: center;
 }
 
+.year-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+#feries-section .btn-year {
+    width: 24px;
+    height: 24px;
+    font-size: 0.7rem;
+    padding: 0;
+    border-radius: 4px;
+}
+
 .btn-year {
     background: rgba(0, 0, 0, 0.1);
     border: none;
@@ -361,6 +377,22 @@ h2 {
 
 .ferie-item:last-child {
     border-bottom: none;
+}
+
+.btn-supprimer-ferie {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.btn-supprimer-ferie:hover {
+    color: var(--rouge);
 }
 
 .ferie-date {
