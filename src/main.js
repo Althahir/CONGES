@@ -45,6 +45,29 @@ db = new sqlite3.Database(dbPath, (err) => {
         console.error("Erreur de connexion SQLite :", err);
     } else {
         console.log("Base de données active : " + dbPath);
+        // Migration : s'assurer que rtt_annuels a toutes les colonnes
+        db.run(`CREATE TABLE IF NOT EXISTS rtt_annuels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            annee_debut INTEGER UNIQUE,
+            date_debut TEXT,
+            date_fin TEXT,
+            nb_jours_periode INTEGER,
+            nb_jours_we INTEGER,
+            nb_jours_feries_hors_we INTEGER,
+            nb_jours_travailles INTEGER,
+            nb_cp_a_deduire INTEGER,
+            nb_rtt INTEGER
+        )`, () => {
+            // Si la table existait déjà, ajouter les colonnes manquantes
+            const cols = ['nb_jours_periode', 'nb_jours_we', 'nb_jours_feries_hors_we', 'nb_rtt'];
+            cols.forEach(col => {
+                db.run(`ALTER TABLE rtt_annuels ADD COLUMN ${col} INTEGER`, (err) => {
+                    if (err && !err.message.includes('duplicate column')) {
+                        console.error(`Migration rtt_annuels.${col}:`, err.message);
+                    }
+                });
+            });
+        });
     }
 });
 }
@@ -301,7 +324,8 @@ ipcMain.handle('deleteAbsence', async (event, absenceId) => {
                                 let nouvelleRecup = soldes.recup_heures;
                                 
                                 if (type === 'CP_N' || type === 'CP_N1' || type === 'CP') {
-                                    nouveauCPN = soldes.cp_n + dureeJours;
+                                    // Recréditer en priorité sur cp_n1 (miroir de la déduction)
+                                    nouveauCPN1 = soldes.cp_n1 + dureeJours;
                                 } else if (type === 'RTT') {
                                     nouveauRTT = soldes.rtt + dureeJours;
                                 } else if (type === 'RECUP') {
@@ -384,11 +408,11 @@ ipcMain.handle('executerTraitementRTT', async (event, annee) => {
             }
             
             if (!rttAnnuel) {
-                reject(new Error(`Aucun paramètre RTT trouvé pour l'année ${annee}`));
+                reject(new Error(`Aucun paramètre RTT configuré pour l'année ${annee}. Rendez-vous dans Planning des traitements pour les renseigner.`));
                 return;
             }
             
-            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
+            const nbRTT = rttAnnuel.nb_rtt != null ? rttAnnuel.nb_rtt : (rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire);
             
             db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
                 if (err) {
@@ -537,6 +561,55 @@ async function verifierTraitementsAutomatiques() {
             }
         }
         
+        // Vérifier si les RTT de l'année suivante ne sont toujours pas configurés (rappel 1 mois après traitement)
+        const rttConfig = config.find(c => c.type === 'RTT_ANNUEL');
+        if (rttConfig) {
+            // Calculer la date 1 mois après le traitement RTT
+            let moisRappel = rttConfig.mois + 1;
+            let anneeRappel = annee;
+            if (moisRappel > 12) { moisRappel = 1; anneeRappel++; }
+
+            if (mois === moisRappel && jour === rttConfig.jour) {
+                // Vérifier si le traitement RTT de cette année a bien eu lieu
+                const traitementFait = await new Promise((res, rej) => {
+                    db.get('SELECT * FROM historique_traitements WHERE type = "RTT_ANNUEL" AND annee = ? AND statut = "success"',
+                        [annee], (err, row) => { if (err) rej(err); else res(row); });
+                });
+
+                if (traitementFait) {
+                    // Vérifier si les RTT N+1 sont toujours pas configurés
+                    const rttNextYear = await new Promise((res, rej) => {
+                        db.get('SELECT id FROM rtt_annuels WHERE annee_debut = ?', [annee + 1],
+                            (err, row) => { if (err) rej(err); else res(row); });
+                    });
+
+                    if (!rttNextYear) {
+                        // Vérifier qu'on n'a pas déjà envoyé ce rappel (éviter les doublons)
+                        const dejaNotifie = await new Promise((res, rej) => {
+                            db.get(`SELECT id FROM notifications WHERE type = 'error' AND titre = 'Paramètres RTT manquants'
+                                    AND message LIKE '%${annee + 1}%' AND date_creation > datetime('now', '-30 days')`,
+                                (err, row) => { if (err) rej(err); else res(row); });
+                        });
+
+                        if (!dejaNotifie) {
+                            const admins = await new Promise((res, rej) => {
+                                db.all("SELECT id FROM salaries WHERE role = 'admin' AND actif = 1",
+                                    (err, rows) => { if (err) rej(err); else res(rows || []); });
+                            });
+                            admins.forEach(admin => {
+                                db.run(
+                                    'INSERT INTO notifications (user_id, type, titre, message, date_creation, lue) VALUES (?, ?, ?, ?, datetime("now"), 0)',
+                                    [admin.id, 'error', 'Paramètres RTT manquants',
+                                     `Les paramètres RTT pour ${annee + 1} ne sont toujours pas configurés (rappel 1 mois après traitement). Le prochain traitement RTT échouera sans ces paramètres.`]
+                                );
+                            });
+                            console.log(`⚠️ Rappel envoyé : RTT ${annee + 1} non configurés`);
+                        }
+                    }
+                }
+            }
+        }
+
     } catch (error) {
         console.error('❌ Erreur vérification traitements:', error);
     }
@@ -641,11 +714,23 @@ async function executerTraitementRTTAuto(annee) {
             
             if (!rttAnnuel) {
                 console.error(`Aucun paramètre RTT pour ${annee}`);
+                // Notifier tous les admins
+                db.all("SELECT id FROM salaries WHERE role = 'admin' AND actif = 1", (err2, admins) => {
+                    if (!err2 && admins) {
+                        admins.forEach(admin => {
+                            db.run(
+                                'INSERT INTO notifications (user_id, type, titre, message, date_creation, lue) VALUES (?, ?, ?, ?, datetime("now"), 0)',
+                                [admin.id, 'warning', 'Traitement RTT impossible',
+                                 `Les paramètres RTT pour l'année ${annee} ne sont pas configurés. Rendez-vous dans Planning des traitements pour les renseigner.`]
+                            );
+                        });
+                    }
+                });
                 reject(new Error(`Aucun paramètre RTT pour ${annee}`));
                 return;
             }
             
-            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
+            const nbRTT = rttAnnuel.nb_rtt != null ? rttAnnuel.nb_rtt : (rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire);
             
             db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
                 if (err) {
@@ -734,6 +819,24 @@ async function executerTraitementRTTAuto(annee) {
                 }
                 
                 console.log(`✅ Traitement RTT terminé: ${nbMisAJour} salariés traités`);
+
+                // Vérifier si les RTT sont configurés pour l'année suivante
+                db.get('SELECT id FROM rtt_annuels WHERE annee_debut = ?', [annee + 1], (err3, nextYear) => {
+                    if (!err3 && !nextYear) {
+                        db.all("SELECT id FROM salaries WHERE role = 'admin' AND actif = 1", (err4, admins) => {
+                            if (!err4 && admins) {
+                                admins.forEach(admin => {
+                                    db.run(
+                                        'INSERT INTO notifications (user_id, type, titre, message, date_creation, lue) VALUES (?, ?, ?, ?, datetime("now"), 0)',
+                                        [admin.id, 'info', 'Paramètres RTT à configurer',
+                                         `Le traitement RTT ${annee} s'est bien déroulé. Pensez à configurer les paramètres RTT pour ${annee + 1} dans Planning des traitements.`]
+                                    );
+                                });
+                            }
+                        });
+                    }
+                });
+
                 resolve({ success: statut !== 'error', nbMisAJour, statut });
             });
         });
@@ -1444,31 +1547,35 @@ ipcMain.handle('getRTTAnnuels', async (event) => {
     return new Promise((resolve, reject) => {
         db.all('SELECT * FROM rtt_annuels ORDER BY annee_debut DESC', (err, rows) => {
             if (err) reject(err);
-            else resolve(rows);
+            else {
+                console.log('📖 getRTTAnnuels:', JSON.stringify(rows));
+                resolve(rows);
+            }
         });
     });
 });
 
 ipcMain.handle('addRTTAnnuel', async (event, data) => {
     return new Promise((resolve, reject) => {
-        const { annee_debut, nb_jours_travailles, nb_cp_a_deduire } = data;
+        console.log('📝 addRTTAnnuel reçu:', JSON.stringify(data));
+        const { annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire, nb_jours_periode, nb_jours_we, nb_jours_feries_hors_we, nb_rtt } = data;
         db.get('SELECT id FROM rtt_annuels WHERE annee_debut = ?', [annee_debut], (err, row) => {
             if (err) { reject(err); return; }
             if (row) {
                 db.run(
-                    'UPDATE rtt_annuels SET nb_jours_travailles = ?, nb_cp_a_deduire = ? WHERE annee_debut = ?',
-                    [nb_jours_travailles, nb_cp_a_deduire, annee_debut],
+                    `UPDATE rtt_annuels SET date_debut = ?, date_fin = ?, nb_jours_travailles = ?, nb_cp_a_deduire = ?,
+                     nb_jours_periode = ?, nb_jours_we = ?, nb_jours_feries_hors_we = ?, nb_rtt = ? WHERE annee_debut = ?`,
+                    [date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire, nb_jours_periode, nb_jours_we, nb_jours_feries_hors_we, nb_rtt, annee_debut],
                     (err) => {
                         if (err) reject(err);
                         else resolve({ success: true });
                     }
                 );
             } else {
-                const date_debut = `${annee_debut}-01-01`;
-                const date_fin   = `${annee_debut}-12-31`;
                 db.run(
-                    'INSERT INTO rtt_annuels (annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire) VALUES (?, ?, ?, ?, ?)',
-                    [annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire],
+                    `INSERT INTO rtt_annuels (annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire,
+                     nb_jours_periode, nb_jours_we, nb_jours_feries_hors_we, nb_rtt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [annee_debut, date_debut, date_fin, nb_jours_travailles, nb_cp_a_deduire, nb_jours_periode, nb_jours_we, nb_jours_feries_hors_we, nb_rtt],
                     function(err) {
                         if (err) reject(err);
                         else resolve({ success: true, id: this.lastID });

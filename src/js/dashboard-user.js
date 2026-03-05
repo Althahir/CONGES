@@ -66,6 +66,7 @@ navBtns.forEach(btn => {
 document.getElementById('anneeActuelle').textContent = anneeActuelle;
 
 function changerAnnee(delta) {
+    if (anneeActuelle + delta < 2022) return;
     anneeActuelle += delta;
     document.getElementById('anneeActuelle').textContent = anneeActuelle;
     // Recharger la section active

@@ -424,7 +424,7 @@
         <div class="config-card">
             <div class="config-header">
                 <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
-                <p>Ajout des RTT annuels à chaque salariés eligible</p>
+                <p>Ajout des RTT annuels à chaque salarié éligible</p>
             </div>
             <div class="config-body">
                 <div class="config-date">
@@ -454,19 +454,108 @@
         </div>
         </div><!-- /.config-cards-grid -->
 
+        <!-- Calcul RTT : pleine largeur sous les 2 cartes -->
+        <div class="rtt-calc-card">
+            <h4><i class="fa-solid fa-calculator"></i> Calcul RTT par année</h4>
+            <div class="rtt-calc-row">
+                <div class="rtt-form-inline">
+                    <div class="form-group-inline">
+                        <label for="rttAnnee">Année</label>
+                        <input type="number" id="rttAnnee" min="2022" placeholder="2026">
+                    </div>
+                    <div class="form-group-inline">
+                        <label for="rttCPDeduire">CP</label>
+                        <input type="number" id="rttCPDeduire" min="0" max="30" value="25">
+                    </div>
+                    <div class="form-group-inline">
+                        <label for="rttForfaitJours">Forfait</label>
+                        <input type="number" id="rttForfaitJours" min="200" max="230" value="218">
+                    </div>
+                    <button id="btnCalculerRTT" class="btn-secondary">
+                        <i class="fa-solid fa-calculator"></i> Calculer
+                    </button>
+                </div>
+
+                <div id="rttDetailCalc" class="rtt-detail-calc" style="display: none;">
+                    <div class="rtt-detail-grid">
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">Période</span>
+                            <strong id="rttPeriodeLabel" class="rtt-detail-value">-</strong>
+                        </div>
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">Jours</span>
+                            <span id="rttJoursPeriode" class="rtt-detail-value">-</span>
+                        </div>
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">WE</span>
+                            <span id="rttWeekends" class="rtt-detail-value">-</span>
+                        </div>
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">Fériés</span>
+                            <span id="rttFeries" class="rtt-detail-value">-</span>
+                        </div>
+                        <div class="rtt-detail-cell rtt-cell-accent">
+                            <span class="rtt-detail-label">Jours ouvrés</span>
+                            <strong id="rttJoursOuvres" class="rtt-detail-value">-</strong>
+                        </div>
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">CP</span>
+                            <span id="rttCPAffiche" class="rtt-detail-value">-</span>
+                        </div>
+                        <div class="rtt-detail-cell">
+                            <span class="rtt-detail-label">Forfait</span>
+                            <span id="rttForfaitAffiche" class="rtt-detail-value">-</span>
+                        </div>
+                        <div class="rtt-detail-cell rtt-cell-result">
+                            <span class="rtt-detail-label">RTT</span>
+                            <strong id="rttCalcules" class="rtt-result-value">-</strong>
+                        </div>
+                        <div class="rtt-detail-cell rtt-cell-action">
+                            <button id="btnEnregistrerRTT" class="btn-primary">
+                                <i class="fa-solid fa-save"></i> Enregistrer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rttWarningFeries" class="rtt-warning" style="display: none;"></div>
+
+            <div id="tableRTTAnnuels" class="table-historique" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Année</th>
+                            <th>Période</th>
+                            <th>Jours ouvrés</th>
+                            <th>Fériés</th>
+                            <th>CP</th>
+                            <th>Forfait</th>
+                            <th>RTT</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rttAnnuelsBody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 20px;">Chargement...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="config-actions">
             <button id="btnEnregistrerConfig" class="btn-primary btn-large">
                 <i class="fa-solid fa-save"></i> Enregistrer la configuration
             </button>
         </div>
-        
+
         <div class="config-note">
             <i class="fa-solid fa-info-circle"></i>
-            <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine 
+            <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine
             si le traitement a déjà été effectué cette année.
         </div>
     </div>
-    
+
     <!-- Historique des traitements -->
     <div class="historique-traitements">
         <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>

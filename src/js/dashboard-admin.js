@@ -80,6 +80,7 @@ function updateYearNavDisplay() {
 
 // Navigation année centralisée
 function changerAnneeAdmin(delta) {
+    if (getAnneeSection(sectionActiveAdmin) + delta < 2022) return;
     switch(sectionActiveAdmin) {
         case 'mes-conges':
             anneeActuelle += delta;
@@ -543,6 +544,216 @@ async function chargerJoursFeries() {
 async function chargerTableauRTT() {
     genererOptionsJours();
     await chargerConfigTraitements();
+    initRTTParams();
+    await chargerRTTAnnuels();
+}
+
+// ========== PARAMETRES RTT PAR ANNEE ==========
+
+let rttParamsInit = false;
+let rttCalcData = null; // Stocke les données du dernier calcul
+
+function initRTTParams() {
+    if (rttParamsInit) return;
+    rttParamsInit = true;
+
+    document.getElementById('rttAnnee').value = new Date().getFullYear();
+
+    // Vérifier les fériés et rafraîchir le tableau quand l'année change
+    async function verifierFeriesRTT() {
+        const annee = parseInt(document.getElementById('rttAnnee').value);
+        const warningEl = document.getElementById('rttWarningFeries');
+        const btnCalc = document.getElementById('btnCalculerRTT');
+
+        if (!annee || annee < 2022) {
+            warningEl.style.display = 'none';
+            document.getElementById('btnEnregistrerRTT').disabled = false;
+            return;
+        }
+
+        // Lire la date de traitement depuis les selects de la tuile
+        const moisTraitement = parseInt(document.getElementById('rttMois').value) || 6;
+
+        // La période couvre annee et annee+1 (sauf si traitement en janvier)
+        const anneesConcernees = moisTraitement === 1 ? [annee] : [annee, annee + 1];
+
+        let anneesMissing = [];
+        for (const a of anneesConcernees) {
+            const feries = await window.api.getJoursFeries(a) || [];
+            if (feries.length === 0) anneesMissing.push(a);
+        }
+
+        if (anneesMissing.length > 0) {
+            warningEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Aucun jour férié renseigné pour ${anneesMissing.join(' et ')}. Ajoutez-les dans la page "Jours fériés" avant d'enregistrer.`;
+            warningEl.style.display = 'block';
+            document.getElementById('btnEnregistrerRTT').disabled = true;
+        } else {
+            warningEl.style.display = 'none';
+            document.getElementById('btnEnregistrerRTT').disabled = false;
+        }
+
+        await chargerRTTAnnuels();
+    }
+
+    document.getElementById('rttAnnee').addEventListener('change', verifierFeriesRTT);
+    document.getElementById('rttAnnee').addEventListener('input', verifierFeriesRTT);
+    verifierFeriesRTT(); // vérifier au chargement
+
+    // Bouton Calculer
+    document.getElementById('btnCalculerRTT').addEventListener('click', async () => {
+        const annee = parseInt(document.getElementById('rttAnnee').value);
+        const cp = parseInt(document.getElementById('rttCPDeduire').value) || 25;
+        const forfait = parseInt(document.getElementById('rttForfaitJours').value) || 218;
+
+        if (!annee || annee < 2022) {
+            alert('Veuillez saisir une année valide (à partir de 2022)');
+            return;
+        }
+
+        // Lire la date de traitement RTT depuis les selects de la tuile
+        const jourTraitement = parseInt(document.getElementById('rttJour').value) || 1;
+        const moisTraitement = parseInt(document.getElementById('rttMois').value) || 6;
+
+        // Période de référence : date traitement N → veille date traitement N+1
+        const debut = new Date(annee, moisTraitement - 1, jourTraitement);
+        const finDate = new Date(annee + 1, moisTraitement - 1, jourTraitement);
+        finDate.setDate(finDate.getDate() - 1);
+
+        // Compter jours totaux et weekends
+        let totalJours = 0;
+        let weekends = 0;
+        const d = new Date(debut);
+        while (d <= finDate) {
+            totalJours++;
+            const dow = d.getDay();
+            if (dow === 0 || dow === 6) weekends++;
+            d.setDate(d.getDate() + 1);
+        }
+
+        // Récupérer les jours fériés de la DB
+        let feries = [];
+        try {
+            const feriesN = await window.api.getJoursFeries(annee) || [];
+            const feriesN1 = await window.api.getJoursFeries(annee + 1) || [];
+            feries = [...feriesN, ...feriesN1];
+        } catch (e) {
+            console.error('Erreur chargement jours fériés:', e);
+        }
+
+        // Fériés dans la période et hors weekends
+        let feriesHorsWE = 0;
+        feries.forEach(f => {
+            const dateF = new Date(f.date + 'T00:00:00');
+            if (dateF >= debut && dateF <= finDate) {
+                const dow = dateF.getDay();
+                if (dow !== 0 && dow !== 6) feriesHorsWE++;
+            }
+        });
+
+        // RTT = jours période - WE - fériés hors WE - CP - forfait jours
+        const joursOuvres = totalJours - weekends - feriesHorsWE;
+        const rtt = joursOuvres - cp - forfait;
+
+        // Formater les dates pour l'affichage
+        const moisNoms = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
+        const debutLabel = `${jourTraitement} ${moisNoms[moisTraitement - 1]} ${annee}`;
+        const finLabel = `${finDate.getDate()} ${moisNoms[finDate.getMonth()]} ${finDate.getFullYear()}`;
+
+        // Formater les dates pour la DB
+        const pad = n => String(n).padStart(2, '0');
+        const dateDebutStr = `${annee}-${pad(moisTraitement)}-${pad(jourTraitement)}`;
+        const dateFinStr = `${finDate.getFullYear()}-${pad(finDate.getMonth() + 1)}-${pad(finDate.getDate())}`;
+
+        // Stocker pour l'enregistrement
+        rttCalcData = {
+            annee_debut: annee,
+            date_debut: dateDebutStr,
+            date_fin: dateFinStr,
+            nb_jours_periode: totalJours,
+            nb_jours_we: weekends,
+            nb_jours_feries_hors_we: feriesHorsWE,
+            nb_jours_travailles: forfait,
+            nb_cp_a_deduire: cp,
+            nb_rtt: rtt
+        };
+
+        // Afficher le détail
+        document.getElementById('rttPeriodeLabel').textContent = `${debutLabel} → ${finLabel}`;
+        document.getElementById('rttJoursPeriode').textContent = totalJours;
+        document.getElementById('rttWeekends').textContent = weekends;
+        document.getElementById('rttFeries').textContent = feriesHorsWE;
+        document.getElementById('rttJoursOuvres').textContent = joursOuvres;
+        document.getElementById('rttCPAffiche').textContent = cp;
+        document.getElementById('rttForfaitAffiche').textContent = forfait;
+        document.getElementById('rttCalcules').textContent = rtt + 'j';
+        document.getElementById('rttDetailCalc').style.display = 'block';
+        // Re-vérifier l'état du bouton Enregistrer
+        await verifierFeriesRTT();
+    });
+
+    // Bouton Enregistrer
+    document.getElementById('btnEnregistrerRTT').addEventListener('click', async () => {
+        if (!rttCalcData) {
+            alert('Veuillez d\'abord calculer les RTT');
+            return;
+        }
+
+        try {
+            await window.api.addRTTAnnuel(rttCalcData);
+            await chargerRTTAnnuels();
+            // Feedback
+            const btn = document.getElementById('btnEnregistrerRTT');
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Enregistré !';
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fa-solid fa-save"></i> Enregistrer pour cette année';
+            }, 1500);
+        } catch (error) {
+            console.error('Erreur ajout RTT:', error);
+            alert('Erreur lors de l\'enregistrement : ' + error.message);
+        }
+    });
+}
+
+async function chargerRTTAnnuels() {
+    try {
+        const rttList = await window.api.getRTTAnnuels();
+        const tbody = document.getElementById('rttAnnuelsBody');
+        const anneeFiltre = parseInt(document.getElementById('rttAnnee').value);
+
+        const r = rttList ? rttList.find(x => x.annee_debut === anneeFiltre) : null;
+
+        if (!r) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">${anneeFiltre ? 'Aucun paramètre RTT pour ' + anneeFiltre : 'Saisissez une année'}</td></tr>`;
+            return;
+        }
+
+        const isOldFormat = r.nb_rtt == null;
+        const rtt = r.nb_rtt != null ? r.nb_rtt : '-';
+        let periodeLabel = '-';
+        if (r.date_debut && r.date_fin) {
+            const deb = new Date(r.date_debut + 'T00:00:00');
+            const fin = new Date(r.date_fin + 'T00:00:00');
+            const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+            periodeLabel = `${deb.toLocaleDateString('fr-FR', opts)} → ${fin.toLocaleDateString('fr-FR', opts)}`;
+        }
+        const joursOuvres = (r.nb_jours_periode != null && r.nb_jours_we != null)
+            ? r.nb_jours_periode - r.nb_jours_we - (r.nb_jours_feries_hors_we || 0)
+            : '-';
+        const oldWarning = isOldFormat ? ' <small style="color: var(--orange);" title="Recalculer pour mettre à jour">⚠</small>' : '';
+        tbody.innerHTML = `
+            <tr${isOldFormat ? ' style="opacity: 0.6;"' : ''}>
+                <td><strong>${r.annee_debut}</strong>${oldWarning}</td>
+                <td>${periodeLabel}</td>
+                <td>${joursOuvres}</td>
+                <td>${r.nb_jours_feries_hors_we != null ? r.nb_jours_feries_hors_we : '-'}</td>
+                <td>${r.nb_cp_a_deduire || 25}</td>
+                <td>${r.nb_jours_travailles || '-'}</td>
+                <td><strong style="color: var(--mauve);">${isOldFormat ? '-' : rtt + 'j'}</strong></td>
+            </tr>
+        `;
+    } catch (error) {
+        console.error('Erreur chargement RTT annuels:', error);
+    }
 }
 
 // ========== GESTION MODALE SALARIÉ ==========

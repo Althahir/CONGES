@@ -214,19 +214,18 @@ CREATE TABLE notifications (
     lue           INTEGER DEFAULT 0
 );
 
--- Paramètres RTT par année
+-- Paramètres RTT par année (migration auto au démarrage)
 CREATE TABLE rtt_annuels (
     id                        INTEGER PRIMARY KEY AUTOINCREMENT,
     annee_debut               INTEGER NOT NULL UNIQUE,
-    date_debut                DATE NOT NULL,   -- Défaut : YYYY-01-01
-    date_fin                  DATE NOT NULL,   -- Défaut : YYYY-12-31
-    nb_jours_periode          INTEGER,
-    nb_jours_we               INTEGER,
-    nb_jours_feries_hors_we   INTEGER,
-    nb_jours_travailles       INTEGER,
+    date_debut                TEXT,             -- Début période (ex: 2026-06-01)
+    date_fin                  TEXT,             -- Fin période (ex: 2027-05-31)
+    nb_jours_periode          INTEGER,          -- Total jours dans la période
+    nb_jours_we               INTEGER,          -- Jours de weekend
+    nb_jours_feries_hors_we   INTEGER,          -- Fériés hors WE (depuis DB jours_feries)
+    nb_jours_travailles       INTEGER,          -- Forfait jours (ex: 218)
     nb_cp_a_deduire           INTEGER DEFAULT 25,
-    nb_rtt                    INTEGER,
-    annee                     INTEGER
+    nb_rtt                    INTEGER           -- Résultat final du calcul
 );
 
 -- Historique des modifications (audit trail — pas de handler IPC, usage interne)
@@ -306,7 +305,9 @@ const data = await window.api.monHandler(param1, param2);
 |---|---|
 | Éligibilité | `a_droit_rtt = 1` dans `salaries` |
 | Attribution | Annuelle via `executerTraitementRTT(annee)` |
-| Calcul | Basé sur `rtt_annuels` (jours travaillés - CP déduits) |
+| Calcul | `nb_rtt` = Jours période - WE - Fériés (hors WE, depuis DB) - CP (25) - Forfait jours (218) |
+| Période | Dynamique, basée sur la date de traitement RTT configurée (ex: 1 juin N → 31 mai N+1) |
+| Configuration | Admin → Planning des traitements → bloc "Calcul RTT par année" |
 | Débit | 1 RTT = 1 jour |
 
 ### Récupération (RECUP)
@@ -592,9 +593,9 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 2. ~~**UI Notifications**~~ ✅ **Fait** — badge cloche + dropdown + toasts
 3. ~~**Refonte CSS + Dark mode**~~ ✅ **Fait** — thème sombre complet, navigation unifiée
 4. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
-5. **RTT annuels par salarié** — table `rtt_annuels` existe, UI à compléter
+5. ~~**RTT annuels par salarié**~~ ✅ **Fait** — calcul complet, UI, notifications, migration DB
 6. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (dark mode + nav unifiée)*
+*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (RTT annuels + dark mode + nav unifiée)*
