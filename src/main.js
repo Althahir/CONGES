@@ -15,10 +15,49 @@ let db;
 // Connexion à la base de données
 
 
+function backupDatabase() {
+    const userDataPath = app.getPath('userData');
+    const dbPath = path.join(userDataPath, 'conges.db');
+    if (!fs.existsSync(dbPath)) return;
+
+    const backupDir = path.join(userDataPath, 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+
+    // Backup du jour
+    const today = new Date().toISOString().slice(0, 10);
+    const backupPath = path.join(backupDir, `conges_${today}.db`);
+    if (!fs.existsSync(backupPath)) {
+        try {
+            fs.copyFileSync(dbPath, backupPath);
+            console.log(`Backup créé : ${backupPath}`);
+        } catch (err) {
+            console.error('Erreur backup DB :', err);
+        }
+    }
+
+    // Nettoyage : supprimer les backups de plus de 60 jours
+    const now = Date.now();
+    const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
+    try {
+        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('conges_') && f.endsWith('.db'));
+        for (const file of files) {
+            const match = file.match(/conges_(\d{4}-\d{2}-\d{2})\.db/);
+            if (!match) continue;
+            const fileAge = now - new Date(match[1]).getTime();
+            if (fileAge > SIXTY_DAYS) {
+                fs.unlinkSync(path.join(backupDir, file));
+                console.log(`Backup supprimé (>60j) : ${file}`);
+            }
+        }
+    } catch (err) {
+        console.error('Erreur nettoyage backups :', err);
+    }
+}
+
 function connectDatabase() {
     // 1. Déterminer le chemin vers le dossier de données utilisateur (AppData)
     // C'est ici que la base doit vivre pour être modifiable
-    const userDataPath = app.getPath('userData'); 
+    const userDataPath = app.getPath('userData');
 const dbPath = path.join(userDataPath, 'conges.db');
 
 // 1. Vérifier si le dossier dans AppData existe, sinon le créer
@@ -75,7 +114,7 @@ db = new sqlite3.Database(dbPath, (err) => {
 function createWindow() {
     mainWindow = new BrowserWindow({
         fullscreen: false,
-        icon: path.join(__dirname, 'assets/favicon2.ico'),
+        icon: path.join(__dirname, 'assets/favicon3.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -844,6 +883,7 @@ async function executerTraitementRTTAuto(annee) {
 }
 
 app.whenReady().then(() => {
+    backupDatabase();
     connectDatabase();
     createWindow();
     

@@ -98,7 +98,7 @@
 /* ========== DARK MODE — LOGIN ========== */
 
 [data-theme="dark"] .login-page {
-    background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+    background: linear-gradient(135deg, var(--bleu) 0%, var(--mauve) 100%);
 }
 
 [data-theme="dark"] .login-box {

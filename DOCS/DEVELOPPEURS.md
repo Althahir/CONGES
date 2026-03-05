@@ -486,6 +486,7 @@ npm run make
 
 - La DB template (`src/conges.db`) est incluse dans le ASAR
 - À la première installation, elle est copiée dans `AppData` de l'utilisateur
+- **Backup automatique** : à chaque lancement, `conges.db` est copié dans `AppData/.../backups/conges_YYYY-MM-DD.db` (1 par jour, rétention 60 jours, suppression auto des plus anciens)
 - **Si le schéma évolue** (nouvelles tables/colonnes) : les utilisateurs existants n'auront pas les migrations → prévoir un système de migration DB
 
 ---
@@ -594,7 +595,8 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 3. ~~**Refonte CSS + Dark mode**~~ ✅ **Fait** — thème sombre complet, navigation unifiée
 4. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
 5. ~~**RTT annuels par salarié**~~ ✅ **Fait** — calcul complet, UI, notifications, migration DB
-6. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
+6. ~~**Backup automatique DB**~~ ✅ **Fait** — copie quotidienne au démarrage, rétention 60 jours
+7. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
 
 ---
 

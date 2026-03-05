@@ -3335,11 +3335,11 @@ function initModalHeuresSupAdmin() {
 }
 
 // ========== TEST TOASTS MULTIPLES — décommenter pour tester ("reactive le test des notifs") ==========
-// setTimeout(() => {
-//     afficherNotificationPersistante('success', 'Absence posée — Marie Martin', 'RTT · du 10/03 au 10/03 (1j) · Solde restant : 4j');
-//     setTimeout(() => afficherNotificationPersistante('success', 'Absence posée — Paul Lemaire', 'CP · du 15/03 au 19/03 (5j) · Solde restant : 8j'), 800);
-//     setTimeout(() => afficherNotificationPersistante('error', 'Absence posée — Sophie Bernard', 'MALADIE · du 12/03 au 14/03 (3j)'), 1600);
-// }, 3000);
+setTimeout(() => {
+    afficherNotificationPersistante('success', 'Absence posée — Marie Martin', 'RTT · du 10/03 au 10/03 (1j) · Solde restant : 4j');
+    setTimeout(() => afficherNotificationPersistante('success', 'Absence posée — Paul Lemaire', 'CP · du 15/03 au 19/03 (5j) · Solde restant : 8j'), 800);
+    setTimeout(() => afficherNotificationPersistante('error', 'Absence posée — Sophie Bernard', 'MALADIE · du 12/03 au 14/03 (3j)'), 1600);
+}, 3000);
 // ========== FIN TEST ==========
 
 initModalHeuresSupAdmin();

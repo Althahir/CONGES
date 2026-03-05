@@ -3358,8 +3358,17 @@ h2 {
 
 /* Toast notifications */
 [data-theme="dark"] .notification-persistante {
-    background: var(--bg-surface);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .notification-persistante.success {
+    background-color: rgba(40, 167, 69, 0.25);
+    border-left-color: #5cbf7a;
+}
+
+[data-theme="dark"] .notification-persistante.error {
+    background-color: rgba(220, 53, 69, 0.25);
+    border-left-color: #e86880;
 }
 
 [data-theme="dark"] .notification-content h4 {
