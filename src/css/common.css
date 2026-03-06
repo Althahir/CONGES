@@ -252,8 +252,11 @@ body {
     background: white;
     border-radius: 12px;
     padding: 15px;
-    overflow-y: auto;
+    overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 #mes-conges-section .panel-section {
@@ -324,7 +327,7 @@ body {
 
 #mes-conges-section .solde-card-compact {
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 4px 6px;
     text-align: center;
     position: relative;
     overflow: hidden;
@@ -348,11 +351,12 @@ body {
 }
 
 #mes-conges-section .solde-label-compact {
-    font-size: 1em;
+    font-size: 0.7em;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
+    letter-spacing: 0.3px;
+    margin-bottom: 1px;
+    white-space: nowrap;
     opacity: 0.8;
 }
 
@@ -362,8 +366,9 @@ body {
 #mes-conges-section .solde-card-compact.recup .solde-label-compact { color: var(--rouge); }
 
 #mes-conges-section .solde-value-compact {
-    font-size: 1.1em;
+    font-size: 0.85em;
     font-weight: 700;
+    white-space: nowrap;
 }
 
 #mes-conges-section .solde-card-compact.cp-n1 .solde-value-compact,
@@ -454,7 +459,7 @@ body {
 #mes-conges-section .form-section {
     border-radius: 12px;
     padding: 15px;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 108, 137, 0.3);
     color: #666;
 }
 
@@ -501,28 +506,36 @@ body {
     background-position: right 10px center;
     padding-right: 35px;
 }
-#mes-conges-section .demi-journee-row {
+#mes-conges-section .period-toggle {
     display: flex;
-    gap: 16px;
-    margin-bottom: 8px;
+    margin-top: 4px;
 }
 
-#mes-conges-section .checkbox-demi {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+#mes-conges-section .period-btn {
+    flex: 1;
+    padding: 2px 0;
+    font-size: 0.72em;
+    font-weight: 600;
+    border: 1.5px solid #ccc;
+    background: #f5f5f5;
+    color: #999;
     cursor: pointer;
-    font-size: 0.82em;
-    color: var(--text-secondary);
-    user-select: none;
+    transition: all 0.15s;
 }
 
-#mes-conges-section .checkbox-demi input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    accent-color: var(--bleu);
-    flex-shrink: 0;
+#mes-conges-section .period-btn:first-child {
+    border-radius: 4px 0 0 4px;
+    border-right: none;
+}
+
+#mes-conges-section .period-btn:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+#mes-conges-section .period-btn.active {
+    background: var(--bleu);
+    border-color: var(--bleu);
+    color: white;
 }
 
 #mes-conges-section .form-group-compact textarea {
@@ -548,8 +561,35 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-#mes-conges-section .resume-compact div { margin-bottom: 5px; }
+#mes-conges-section .resume-compact div { margin-bottom: 3px; }
 #mes-conges-section .resume-compact strong { color: #666; }
+#mes-conges-section .resume-header-row {
+    font-size: 0.95em;
+    margin-bottom: 6px;
+}
+#mes-conges-section .resume-decompte {
+    font-size: 0.85em;
+}
+#mes-conges-section .resume-decompte table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+#mes-conges-section .resume-decompte th,
+#mes-conges-section .resume-decompte td {
+    padding: 2px 6px;
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+#mes-conges-section .resume-decompte th {
+    background: rgba(0,0,0,0.05);
+    font-weight: 600;
+    font-size: 0.9em;
+    color: #555;
+}
+#mes-conges-section .resume-decompte td {
+    font-weight: 500;
+}
 
 #mes-conges-section .alert-compact {
     border-radius: 4px;
@@ -600,10 +640,48 @@ body {
 #mes-conges-section .form-actions-compact { margin-top: 12px; }
 #mes-conges-section .form-actions-compact .btn-primary { width: 100%; }
 
+#mes-conges-section .btn-submit-wrapper {
+    position: relative;
+}
+
+#mes-conges-section .btn-primary:disabled {
+    background: #b0b0b0;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+#mes-conges-section .btn-submit-wrapper[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75em;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+}
+
+#mes-conges-section .btn-submit-wrapper[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 100;
+    pointer-events: none;
+}
+
 #mes-conges-section .btn-primary.btn-block {
     width: 100%;
     background: white;
-    color: #667eea;
+    color: var(--bleu);
     border: none;
     padding: 12px;
     border-radius: 8px;
@@ -630,32 +708,37 @@ body {
 #mes-conges-section .calendrier-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    height: 100%;
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
     width: 100%;
 }
 
 #mes-conges-section .mois-calendrier {
     background: white;
     border-radius: 8px;
-    padding: 10px;
+    padding: 6px 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 #mes-conges-section .mois-header {
     text-align: center;
     font-weight: bold;
     color: var(--bleu);
-    margin-bottom: 8px;
-    font-size: 0.9em;
+    margin-bottom: 4px;
+    font-size: 0.85em;
 }
 
 #mes-conges-section .jours-semaine {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    margin-bottom: 3px;
+    gap: 1px;
+    margin-bottom: 2px;
 }
 
 #mes-conges-section .jour-semaine {
@@ -668,13 +751,14 @@ body {
 #mes-conges-section .jours-mois {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    grid-auto-rows: 30px;
+    grid-template-rows: repeat(6, 1fr);
+    gap: 1px;
+    flex: 1;
+    user-select: none;
 }
 
 #mes-conges-section .jour {
     width: 100%;
-    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -685,7 +769,7 @@ body {
     position: relative;
 }
 
-#mes-conges-section .jour:hover { transform: scale(1.1); }
+#mes-conges-section .jour:hover { transform: scale(1.1); cursor: pointer; }
 #mes-conges-section .jour.vide { visibility: hidden; }
 #mes-conges-section .jour.weekend { color: #999; }
 
@@ -805,8 +889,7 @@ body {
     #mes-conges-section .dashboard-content-new {
         grid-template-columns: 350px 1fr;
     }
-    #mes-conges-section .jour { font-size: 0.7em; height: 28px; }
-    #mes-conges-section .jours-mois { grid-auto-rows: 28px; }
+    #mes-conges-section .jour { font-size: 0.7em; }
 }
 
 @media (max-width: 1200px) {
@@ -824,8 +907,7 @@ body {
 }
 
 @media (max-width: 1000px) {
-    #mes-conges-section .jour { font-size: 0.65em; height: 25px; }
-    #mes-conges-section .jours-mois { grid-auto-rows: 25px; }
+    #mes-conges-section .jour { font-size: 0.65em; }
     #mes-conges-section .mois-header { font-size: 0.85em; }
 }
 
@@ -1019,6 +1101,18 @@ body {
     background-size: 12px;
 }
 
+[data-theme="dark"] #mes-conges-section .period-btn {
+    background: var(--bg-surface-alt);
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] #mes-conges-section .period-btn.active {
+    background: var(--bleu);
+    border-color: var(--bleu);
+    color: white;
+}
+
 [data-theme="dark"] #mes-conges-section .resume-compact {
     background: rgba(255, 255, 255, 0.05);
     border-color: var(--border-color);
@@ -1026,6 +1120,17 @@ body {
 
 [data-theme="dark"] #mes-conges-section .resume-compact strong {
     color: var(--text-secondary);
+}
+[data-theme="dark"] #mes-conges-section .resume-decompte th {
+    background: rgba(255,255,255,0.1);
+    color: #e0e0e0;
+}
+[data-theme="dark"] #mes-conges-section .resume-decompte td {
+    color: var(--text-primary);
+}
+[data-theme="dark"] #mes-conges-section .resume-decompte th,
+[data-theme="dark"] #mes-conges-section .resume-decompte td {
+    border-color: var(--border-color);
 }
 
 [data-theme="dark"] #mes-conges-section .alert-compact {

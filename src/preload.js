@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     updateSoldes: (salarieId, annee, soldes) => ipcRenderer.invoke('updateSoldes', salarieId, annee, soldes),
     updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
     ajouterRecup: (data) => ipcRenderer.invoke('ajouter-recup', data),
+    getHeuresSup: (salarieId) => ipcRenderer.invoke('getHeuresSup', salarieId),
     
     // Gestion des absences
     createAbsence: (data) => ipcRenderer.invoke('createAbsence', data),
@@ -42,10 +43,12 @@ contextBridge.exposeInMainWorld('api', {
 
     // PDF
     genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),
+    exporterRecapPDF: (data) => ipcRenderer.invoke('exporterRecapPDF', data),
 
     // Gestion des traitements automatiques
     getConfigTraitements: () => ipcRenderer.invoke('getConfigTraitements'),
     updateConfigTraitement: (type, jour, mois) => ipcRenderer.invoke('updateConfigTraitement', type, jour, mois),
+    logHistoriqueTraitement: (data) => ipcRenderer.invoke('logHistoriqueTraitement', data),
     getHistoriqueTraitements: () => ipcRenderer.invoke('getHistoriqueTraitements'),
     executerTraitementCP: (annee) => ipcRenderer.invoke('executerTraitementCP', annee),
     executerTraitementRTT: (annee) => ipcRenderer.invoke('executerTraitementRTT', annee),

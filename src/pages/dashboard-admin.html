@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="../css/common.css">
     <link rel="stylesheet" href="../css/dashboard-admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../../node_modules/xlsx/dist/xlsx.full.min.js"></script>
 
 </head>
 <body>
@@ -15,7 +15,7 @@
         <!-- Header -->
         <header class="dashboard-header">
     <div class="header-left">
-        <img src="../assets/favicon2.png" alt="Logo" class="header-logo">
+        <img src="../assets/logo.png" alt="Logo" class="header-logo">
     </div>
     <div class="header-center">
         <h1 id="headerTitle">Mes Congés</h1>
@@ -64,6 +64,9 @@
                 </button>
                 <button class="nav-btn" data-section="rtt">
                     <i class="fa-regular fa-clock"></i> Planning des traitements
+                </button>
+                <button class="nav-btn" data-section="statistiques">
+                    <i class="fa-solid fa-chart-pie"></i> Statistiques
                 </button>
             </div>
             <div class="nav-right">
@@ -259,22 +262,21 @@
                         <div class="form-group-compact">
                             <label for="dateDebutUser">Du *</label>
                             <input type="date" id="dateDebutUser" name="dateDebut" required>
+                            <div class="period-toggle">
+                                <button type="button" class="period-btn active" data-target="debutApremUser" data-value="am">Matin</button>
+                                <button type="button" class="period-btn" data-target="debutApremUser" data-value="pm">Après-midi</button>
+                            </div>
+                            <input type="hidden" id="debutApremUser" value="am">
                         </div>
                         <div class="form-group-compact">
                             <label for="dateFinUser">Au *</label>
                             <input type="date" id="dateFinUser" name="dateFin" required>
+                            <div class="period-toggle">
+                                <button type="button" class="period-btn" data-target="finMidiUser" data-value="am">Matin</button>
+                                <button type="button" class="period-btn active" data-target="finMidiUser" data-value="pm">Après-midi</button>
+                            </div>
+                            <input type="hidden" id="finMidiUser" value="pm">
                         </div>
-                    </div>
-
-                    <div class="demi-journee-row">
-                        <label class="checkbox-demi">
-                            <input type="checkbox" id="debutApremUser">
-                            <span>Début après-midi</span>
-                        </label>
-                        <label class="checkbox-demi">
-                            <input type="checkbox" id="finMidiUser">
-                            <span>Fin à midi</span>
-                        </label>
                     </div>
 
                     <!-- Champs Récup -->
@@ -299,8 +301,10 @@
 
                     <!-- Résumé -->
                     <div id="resumeAbsenceUser" class="resume-compact" style="display: none;">
-                        <div><strong>Durée:</strong> <span id="resumeDureeUser">-</span></div>
-                        <div><strong>Décompte:</strong> <span id="resumeDecompteUser">-</span></div>
+                        <div class="resume-header-row">
+                            <span><strong>Durée:</strong> <span id="resumeDureeUser">-</span></span>
+                        </div>
+                        <div id="resumeDecompteUser" class="resume-decompte"></div>
                         <div id="alerteSoldeUser" class="alert-compact"></div>
                         <div id="alertePeriodeUser" class="alert-compact"></div>
                     </div>
@@ -309,7 +313,9 @@
                     <div id="successMessageUser" class="success-message"></div>
 
                     <div class="form-actions-compact">
-                        <button type="submit" class="btn-primary btn-small">Valider</button>
+                        <div class="btn-submit-wrapper" id="btnSubmitWrapperUser">
+                            <button type="submit" id="btnValiderUser" class="btn-primary btn-small" disabled>Valider</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -339,6 +345,9 @@
 
             <!-- Section Calendrier Global -->
             <section id="calendrier-section" class="content-section">
+                <div class="section-header">
+                    <h2>Calendrier Global</h2>
+                </div>
                 <div id="calendrierGlobal" class="calendrier-global">
                     <!-- Sera rempli dynamiquement -->
                 </div>
@@ -634,6 +643,8 @@
         </div>
     </div>
 </div>
+            </section>
+
 <!-- Modal Suppression Absence -->
 <div id="modalSuppressionAbsence" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 500px;">
@@ -670,6 +681,24 @@
         </div>
     </div>
 </div>
+
+            <!-- Section Statistiques -->
+            <section id="statistiques-section" class="content-section">
+                <div class="stats-grid">
+                    <div class="stats-card stats-card-large">
+                        <h3>Absences par mois</h3>
+                        <div class="chart-container"><canvas id="chartAbsencesMois"></canvas></div>
+                    </div>
+                    <div class="stats-card">
+                        <h3>Répartition par type</h3>
+                        <div class="chart-container"><canvas id="chartRepartitionType"></canvas></div>
+                    </div>
+                    <div class="stats-card">
+                        <h3>Soldes restants par salarié</h3>
+                        <div class="chart-container"><canvas id="chartSoldesSalaries"></canvas></div>
+                    </div>
+                </div>
+            </section>
 
         </div>
     </div>
@@ -770,6 +799,7 @@
     </div>
 </div>
 
+    <script src="../js/chart.umd.js"></script>
     <script src="../js/dashboard-admin.js"></script>
 </body>
 </html>

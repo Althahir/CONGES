@@ -107,6 +107,26 @@ db = new sqlite3.Database(dbPath, (err) => {
                 });
             });
         });
+
+        // Migration : colonnes debut_periode et fin_periode dans absences
+        ['debut_periode', 'fin_periode'].forEach(col => {
+            db.run(`ALTER TABLE absences ADD COLUMN ${col} TEXT DEFAULT 'journee-complete'`, (err) => {
+                if (err && !err.message.includes('duplicate column')) {
+                    console.error(`Migration absences.${col}:`, err.message);
+                }
+            });
+        });
+
+        // Migration : table heures_supplementaires
+        db.run(`CREATE TABLE IF NOT EXISTS heures_supplementaires (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            heures REAL NOT NULL,
+            commentaire TEXT,
+            date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+        )`);
     }
 });
 }
@@ -116,7 +136,7 @@ function createWindow() {
         fullscreen: false,
         minWidth: 1100,
         minHeight: 700,
-        icon: path.join(__dirname, 'assets/favicon3.ico'),
+        icon: path.join(__dirname, 'assets/icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -146,6 +166,20 @@ ipcMain.handle('updateConfigTraitement', async (event, type, jour, mois) => {
         db.run(
             'UPDATE config_traitements SET jour = ?, mois = ?, derniere_maj = CURRENT_TIMESTAMP WHERE type = ?',
             [jour, mois, type],
+            (err) => {
+                if (err) reject(err);
+                else resolve({ success: true });
+            }
+        );
+    });
+});
+
+ipcMain.handle('logHistoriqueTraitement', async (event, data) => {
+    const { type, annee, nb_salaries_traites, details, statut, message_erreur } = data;
+    return new Promise((resolve, reject) => {
+        db.run(
+            'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+            [type, annee, nb_salaries_traites || 0, details || '', statut, message_erreur || ''],
             (err) => {
                 if (err) reject(err);
                 else resolve({ success: true });
@@ -1158,12 +1192,12 @@ ipcMain.handle('getAllAbsences', async (event) => {
 
 ipcMain.handle('createAbsence', async (event, absenceData) => {
     return new Promise((resolve, reject) => {
-        const { salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire } = absenceData;
-        
+        const { salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire, debut_periode, fin_periode, skipNotification } = absenceData;
+
         db.run(
-            `INSERT INTO absences (salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire)
-             VALUES (?, ?, ?, ?, ?, ?, 'valide', ?)`,
-            [salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire],
+            `INSERT INTO absences (salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire, debut_periode, fin_periode)
+             VALUES (?, ?, ?, ?, ?, ?, 'valide', ?, ?, ?)`,
+            [salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire, debut_periode || 'journee-complete', fin_periode || 'journee-complete'],
             function(err) {
                 if (err) {
                     console.error('Erreur création absence:', err);
@@ -1172,7 +1206,8 @@ ipcMain.handle('createAbsence', async (event, absenceData) => {
                     console.log('Absence créée avec ID:', this.lastID);
                     resolve({ success: true, id: this.lastID });
 
-                    // Notification absence
+                    // Notification absence (sauf si l'admin pose pour lui-même)
+                    if (skipNotification) return;
                     const anneeAbsence = new Date(date_debut).getFullYear();
                     db.get('SELECT nom, prenom FROM salaries WHERE id = ?', [salarie_id], (err2, salarie) => {
                         if (err2 || !salarie) return;
@@ -1280,19 +1315,45 @@ ipcMain.handle('updateSoldesAfterAbsence', async (event, salarieId, annee, type,
 // ========== AJOUT HEURES SUPPLÉMENTAIRES ==========
 
 ipcMain.handle('ajouter-recup', async (event, data) => {
-    const { salarie_id, annee, heures } = data;
+    const { salarie_id, annee, heures, date, commentaire } = data;
     return new Promise((resolve, reject) => {
+        // 1. Insérer dans l'historique heures_supplementaires
         db.run(
-            `UPDATE soldes SET recup_heures = recup_heures + ?, derniere_maj = CURRENT_TIMESTAMP
-             WHERE salarie_id = ? AND annee = ?`,
-            [heures, salarie_id, annee],
+            `INSERT INTO heures_supplementaires (salarie_id, date, heures, commentaire) VALUES (?, ?, ?, ?)`,
+            [salarie_id, date, heures, commentaire || null],
             (err) => {
                 if (err) {
-                    console.error('Erreur ajout heures sup:', err);
+                    console.error('Erreur insertion heures sup:', err);
                     reject(err);
-                } else {
-                    resolve({ success: true });
+                    return;
                 }
+                // 2. Mettre à jour le solde récup
+                db.run(
+                    `UPDATE soldes SET recup_heures = recup_heures + ?, derniere_maj = CURRENT_TIMESTAMP
+                     WHERE salarie_id = ? AND annee = ?`,
+                    [heures, salarie_id, annee],
+                    (err2) => {
+                        if (err2) {
+                            console.error('Erreur maj solde recup:', err2);
+                            reject(err2);
+                        } else {
+                            resolve({ success: true });
+                        }
+                    }
+                );
+            }
+        );
+    });
+});
+
+ipcMain.handle('getHeuresSup', async (event, salarie_id) => {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT * FROM heures_supplementaires WHERE salarie_id = ? ORDER BY date DESC`,
+            [salarie_id],
+            (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
             }
         );
     });
@@ -1549,6 +1610,171 @@ ipcMain.handle('genererPDF', async (event, absenceData) => {
         }
     });
 });
+// ========== RÉCAPITULATIF PDF ==========
+ipcMain.handle('exporterRecapPDF', async (event, data) => {
+    const { salarie_id, annee } = data;
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Récupérer les données
+            const salarie = await new Promise((res, rej) => {
+                db.get('SELECT * FROM salaries WHERE id = ?', [salarie_id], (err, row) => err ? rej(err) : res(row));
+            });
+            const soldes = await new Promise((res, rej) => {
+                db.get('SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?', [salarie_id, annee], (err, row) => err ? rej(err) : res(row));
+            });
+            const absences = await new Promise((res, rej) => {
+                db.all(
+                    `SELECT * FROM absences WHERE salarie_id = ? AND statut = "valide"
+                     AND (substr(date_debut,1,4) = ? OR substr(date_fin,1,4) = ?)
+                     ORDER BY date_debut`,
+                    [salarie_id, String(annee), String(annee)],
+                    (err, rows) => err ? rej(err) : res(rows || [])
+                );
+            });
+
+            const fileName = `recap_${salarie.nom}_${salarie.prenom}_${annee}.pdf`;
+            const filePath = path.join(os.tmpdir(), fileName);
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            const stream = fs.createWriteStream(filePath);
+            doc.pipe(stream);
+
+            const bleu = '#006C89';
+            const orange = '#ED7111';
+            const gris = '#666666';
+
+            // === EN-TÊTE ===
+            doc.rect(0, 0, doc.page.width, 90).fill(bleu);
+            doc.fillColor('white')
+               .fontSize(22).font('Helvetica-Bold')
+               .text('RÉCAPITULATIF DES CONGÉS', 50, 25, { align: 'center' })
+               .fontSize(11).font('Helvetica')
+               .text(`${salarie.prenom} ${salarie.nom.toUpperCase()} — Année ${annee}`, 50, 55, { align: 'center' });
+
+            doc.fillColor('black');
+            doc.moveDown(4);
+
+            // === SOLDES ===
+            const ySoldes = doc.y;
+            doc.fontSize(14).font('Helvetica-Bold').fillColor(bleu)
+               .text('SOLDES', 50, ySoldes);
+            doc.moveDown(0.5);
+
+            const tableTop = doc.y;
+            const colW = (doc.page.width - 100) / 4;
+            const soldesItems = [
+                { label: 'CP N-1', value: soldes ? `${soldes.cp_n1.toFixed(2)} j` : '—' },
+                { label: 'CP N', value: soldes ? `${soldes.cp_n.toFixed(2)} j` : '—' },
+                { label: 'RTT', value: soldes ? `${soldes.rtt.toFixed(2)} j` : '—' },
+                { label: 'Récup', value: soldes ? `${soldes.recup_heures.toFixed(1)} h` : '—' }
+            ];
+
+            soldesItems.forEach((item, i) => {
+                const x = 50 + i * colW;
+                doc.rect(x, tableTop, colW, 40).lineWidth(1).stroke(bleu);
+                doc.fontSize(9).font('Helvetica').fillColor(gris)
+                   .text(item.label, x, tableTop + 5, { width: colW, align: 'center' });
+                doc.fontSize(14).font('Helvetica-Bold').fillColor('black')
+                   .text(item.value, x, tableTop + 20, { width: colW, align: 'center' });
+            });
+
+            doc.y = tableTop + 55;
+
+            // === TABLEAU DES ABSENCES ===
+            doc.fontSize(14).font('Helvetica-Bold').fillColor(bleu)
+               .text('ABSENCES', 50, doc.y);
+            doc.moveDown(0.5);
+
+            if (absences.length === 0) {
+                doc.fontSize(11).font('Helvetica').fillColor(gris)
+                   .text('Aucune absence enregistrée pour cette année.', 50);
+            } else {
+                const typeLabels = {
+                    'CP': 'CP', 'CP_N': 'CP N', 'CP_N1': 'CP N-1',
+                    'RTT': 'RTT', 'RECUP': 'Récup', 'MALADIE': 'Maladie'
+                };
+
+                // En-tête tableau
+                const absTop = doc.y;
+                const cols = [50, 130, 260, 370, 440];
+                const hdrs = ['Type', 'Du', 'Au', 'Durée', 'Commentaire'];
+                const colWidths = [80, 130, 110, 70, doc.page.width - 50 - 440];
+                const rowH = 22;
+
+                doc.rect(50, absTop, doc.page.width - 100, rowH).fill(bleu);
+                doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+                hdrs.forEach((h, i) => doc.text(h, cols[i] + 5, absTop + 7, { width: colWidths[i] }));
+
+                let yRow = absTop + rowH;
+                doc.fillColor('black');
+
+                absences.forEach((abs, idx) => {
+                    // Nouvelle page si nécessaire
+                    if (yRow + rowH > doc.page.height - 80) {
+                        doc.addPage();
+                        yRow = 50;
+                    }
+
+                    if (idx % 2 === 0) {
+                        doc.rect(50, yRow, doc.page.width - 100, rowH).fill('#f5f5f5');
+                    }
+
+                    const dateD = new Date(abs.date_debut).toLocaleDateString('fr-FR');
+                    const dateF = new Date(abs.date_fin).toLocaleDateString('fr-FR');
+                    const duree = abs.duree_heures && !abs.duree_jours
+                        ? `${abs.duree_heures.toFixed(1)}h`
+                        : `${(abs.duree_jours || 0).toFixed(2)}j`;
+                    const comment = (abs.commentaire || '').substring(0, 30);
+
+                    doc.fillColor('black').fontSize(9).font('Helvetica');
+                    doc.text(typeLabels[abs.type] || abs.type, cols[0] + 5, yRow + 7, { width: colWidths[0] });
+                    doc.text(dateD, cols[1] + 5, yRow + 7, { width: colWidths[1] });
+                    doc.text(dateF, cols[2] + 5, yRow + 7, { width: colWidths[2] });
+                    doc.text(duree, cols[3] + 5, yRow + 7, { width: colWidths[3] });
+                    doc.text(comment, cols[4] + 5, yRow + 7, { width: colWidths[4] });
+
+                    yRow += rowH;
+                });
+
+                // Total
+                doc.y = yRow + 10;
+                doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
+                   .text(`Total : ${absences.length} absence(s)`, 50);
+            }
+
+            // === PIED DE PAGE (sur la page courante) ===
+            const pageBottom = doc.page.height - 40;
+            if (doc.y > pageBottom - 20) doc.addPage();
+            doc.fontSize(8).fillColor('#999')
+               .text(`Document généré le ${new Date().toLocaleString('fr-FR')} — La Ciotat Entreprendre`,
+                   50, pageBottom, { align: 'center', width: doc.page.width - 100, lineBreak: false });
+
+            doc.end();
+
+            stream.on('finish', () => {
+                shell.openPath(filePath);
+                setTimeout(() => {
+                    dialog.showSaveDialog(mainWindow, {
+                        title: 'Enregistrer le récapitulatif PDF',
+                        defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+                    }).then(result => {
+                        if (!result.canceled && result.filePath) {
+                            fs.copyFileSync(filePath, result.filePath);
+                            shell.openPath(result.filePath);
+                        }
+                    });
+                }, 500);
+                resolve({ success: true, filePath });
+            });
+
+            stream.on('error', (err) => reject(err));
+
+        } catch (error) {
+            reject(error);
+        }
+    });
+});
+
 // ========== JOURS FÉRIÉS ==========
 
 ipcMain.handle('getJoursFeries', async (event, annee) => {

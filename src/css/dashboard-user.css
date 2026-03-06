@@ -16,13 +16,23 @@ body {
 
 /* ========== HEADER ========== */
 .dashboard-header {
-    background: linear-gradient(90deg, var(--bleu) 0%,var(--mauve) 25%, var(--rouge) 50%, var(--orange) 75%, var(--jaune) 100%);
+    background: linear-gradient(90deg,
+        var(--bleu), var(--mauve), var(--rouge), var(--orange), var(--jaune),
+        var(--orange), var(--rouge), var(--mauve), var(--bleu)
+    );
+    background-size: 200% 100%;
+    animation: headerGradientFlow 35s linear infinite;
     color: white;
     padding: 15px 30px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes headerGradientFlow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: -200% 50%; }
 }
 
 .header-left {
@@ -164,13 +174,25 @@ body {
     display: block;
 }
 
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: var(--bleu);
+}
+
 /* ========== SECTION CALENDRIER GLOBAL ========== */
 #calendrier-section {
     flex: 1;
     display: none;
     flex-direction: column;
     overflow: hidden;
-    padding: 8px;
+    padding: 30px;
     background: #f5f5f5;
 }
 

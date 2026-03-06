@@ -13,13 +13,23 @@ body {
 
 /* ========== HEADER ========== */
 .dashboard-header {
-    background: linear-gradient(90deg, var(--bleu) 0%,var(--mauve) 25%, var(--rouge) 50%, var(--orange) 75%, var(--jaune) 100%);
+    background: linear-gradient(90deg,
+        var(--bleu), var(--mauve), var(--rouge), var(--orange), var(--jaune),
+        var(--orange), var(--rouge), var(--mauve), var(--bleu)
+    );
+    background-size: 200% 100%;
+    animation: headerGradientFlow 35s linear infinite;
     color: white;
     padding: 15px 30px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes headerGradientFlow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: -200% 50%; }
 }
 
 .header-left {
@@ -300,7 +310,7 @@ h2 {
 }
 
 .btn-edit:hover {
-    background: var(--mauve);
+    background: #2a9bbf;
 }
 
 .btn-reset {
@@ -310,6 +320,14 @@ h2 {
 .btn-reset:hover {
     background: var(--jaune);
     color: #333;
+}
+
+.btn-pdf {
+    background: var(--mauve);
+}
+
+.btn-pdf:hover {
+    background: #9b35b5;
 }
 
 .btn-delete {
@@ -395,7 +413,49 @@ h2 {
     overflow: hidden;  /* ← AJOUTE */
 }
 
+/* ========== STATISTIQUES ========== */
+#statistiques-section {
+    padding: 30px;
+    overflow-y: auto;
+}
+#statistiques-section.active {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+.stats-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    min-height: 350px;
+}
+.stats-card h3 {
+    margin: 0 0 16px 0;
+    font-size: 1em;
+    color: var(--bleu);
+}
+.chart-container {
+    position: relative;
+    height: 280px;
+}
+.stats-card-large {
+    grid-column: 1 / -1;
+}
+.stats-card-large .chart-container {
+    height: 230px;
+}
+
 /* ========== JOURS FÉRIÉS ========== */
+#calendrier-section {
+    padding: 30px;
+}
+
 #feries-section{
     padding: 30px;
 }
@@ -403,6 +463,18 @@ h2 {
     background: white;
     padding: 20px;
     border-radius: 8px;
+}
+
+.feries-vide {
+    text-align: center;
+    padding: 40px 20px;
+}
+.feries-vide .text-muted {
+    margin-bottom: 16px;
+    font-size: 1.1em;
+}
+.feries-vide .btn-primary {
+    font-size: 0.95em;
 }
 
 .ferie-item {
@@ -657,25 +729,25 @@ h2 {
 
 /* Couleurs des absences dans le calendrier global */
 .jour.cp {
-    background: rgb(0, 108, 137);
+    background: var(--bleu);
     color: white;
     font-weight: bold;
 }
 
 .jour.rtt {
-    background: rgb(116, 43, 135);
+    background: var(--mauve);
     color: white;
     font-weight: bold;
 }
 
 .jour.recup {
-    background: rgb(181, 22, 63);
+    background: var(--rouge);
     color: white;
     font-weight: bold;
 }
 
 .jour.maladie {
-    background: rgb(237, 113, 17);
+    background: var(--orange);
     color: white;
     font-weight: bold;
 }
@@ -3196,6 +3268,18 @@ h2 {
     border-top-color: var(--bg-surface-alt);
 }
 
+/* Statistiques */
+[data-theme="dark"] #statistiques-section {
+    background: var(--bg-body);
+}
+[data-theme="dark"] .stats-card {
+    background: var(--bg-surface);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+[data-theme="dark"] .stats-card h3 {
+    color: #5cbdd5;
+}
+
 /* Jours feries */
 [data-theme="dark"] #feries-section {
     background: var(--bg-body);
@@ -3503,4 +3587,77 @@ h2 {
 
 [data-theme="dark"] .preview-table-import tbody tr:hover {
     background: var(--bg-surface-alt);
+}
+
+/* DEBUG modal dark */
+[data-theme="dark"] .test-option {
+    background: rgba(249, 198, 73, 0.1);
+    border-color: rgba(249, 198, 73, 0.3);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .test-option label {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .test-annee label {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .test-annee input {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+[data-theme="dark"] .btn-test:disabled {
+    background: var(--bg-surface-alt);
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .resultat-test h4 {
+    color: #5cbdd5;
+}
+
+/* IMPORT modal dark — compléments */
+[data-theme="dark"] .file-selected-info {
+    background: rgba(46, 125, 50, 0.15);
+    color: #6fcf87;
+}
+
+[data-theme="dark"] .preview-stats-import {
+    background: rgba(0, 108, 137, 0.15);
+}
+
+[data-theme="dark"] .preview-stats-import p {
+    color: #5cbdd5;
+}
+
+[data-theme="dark"] .import-success {
+    background: rgba(46, 125, 50, 0.15);
+    border-color: rgba(46, 125, 50, 0.3);
+    color: #6fcf87;
+}
+
+[data-theme="dark"] .import-error {
+    background: rgba(181, 22, 63, 0.15);
+    border-color: rgba(181, 22, 63, 0.3);
+    color: #e86880;
+}
+
+[data-theme="dark"] .import-details {
+    background: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .import-detail-item {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .import-actions .btn-secondary {
+    background: var(--bg-surface-alt);
+    color: var(--text-primary);
+    border-color: var(--border-color);
 }

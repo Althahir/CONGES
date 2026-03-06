@@ -41,11 +41,13 @@ const titresSectionAdmin = {
     'historique': 'Historique',
     'salaries': 'Salariés',
     'feries': 'Jours Fériés',
-    'rtt': 'Planning des traitements'
+    'rtt': 'Planning des traitements',
+    'statistiques': 'Statistiques'
 };
 
 // Sections qui utilisent la navigation par année
-const sectionsAvecAnnee = ['mes-conges', 'calendrier', 'historique', 'feries'];
+const sectionsAvecAnnee = ['mes-conges', 'calendrier', 'historique', 'feries', 'statistiques'];
+let anneeStatistiques = new Date().getFullYear();
 
 // ========== NAVIGATION ENTRE SECTIONS ==========
 
@@ -61,6 +63,7 @@ function getAnneeSection(sectionName) {
         case 'calendrier': return anneeCalendrier;
         case 'historique': return anneeHistorique;
         case 'feries': return anneeFeries;
+        case 'statistiques': return anneeStatistiques;
         default: return new Date().getFullYear();
     }
 }
@@ -97,6 +100,10 @@ function changerAnneeAdmin(delta) {
         case 'feries':
             anneeFeries += delta;
             chargerJoursFeries();
+            break;
+        case 'statistiques':
+            anneeStatistiques += delta;
+            setTimeout(() => chargerStatistiques(), 50);
             break;
     }
     updateYearNavDisplay();
@@ -140,6 +147,9 @@ navBtns.forEach(btn => {
                 break;
             case 'rtt':
                 chargerTableauRTT();
+                break;
+            case 'statistiques':
+                setTimeout(() => chargerStatistiques(), 50);
                 break;
             }
     });
@@ -209,6 +219,9 @@ async function chargerSalaries() {
                         <button class="btn-action btn-edit" onclick="editSalarie(${salarie.id})" title="Modifier">
                             <i class="fa-solid fa-edit"></i>
                         </button>
+                        <button class="btn-action btn-pdf" onclick="exporterRecapPDF(${salarie.id})" title="Imprimer récap et soldes">
+                            <i class="fa-solid fa-file-pdf"></i>
+                        </button>
                         <button class="btn-action btn-reset" onclick="resetPassword(${salarie.id}, '${salarie.nom}', '${salarie.prenom}')" title="Réinitialiser mot de passe">
                             <i class="fa-solid fa-key"></i>
                         </button>
@@ -226,6 +239,18 @@ async function chargerSalaries() {
         
     } catch (error) {
         console.error('Erreur chargement salariés:', error);
+    }
+}
+
+// ========== EXPORT RÉCAP PDF ==========
+
+async function exporterRecapPDF(salarieId) {
+    try {
+        const annee = new Date().getFullYear();
+        await window.api.exporterRecapPDF({ salarie_id: salarieId, annee });
+    } catch (error) {
+        console.error('Erreur export récap PDF:', error);
+        afficherNotificationPersistante('error', 'Erreur PDF', error.message);
     }
 }
 
@@ -455,6 +480,62 @@ async function chargerCalendrierGlobal() {
 
 // Navigation année fériés gérée par changerAnneeAdmin()
 
+// Calcul de la date de Pâques (algorithme de Meeus/Jones/Butcher)
+function calculerPaques(annee) {
+    const a = annee % 19;
+    const b = Math.floor(annee / 100);
+    const c = annee % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mois = Math.floor((h + l - 7 * m + 114) / 31);
+    const jour = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(annee, mois - 1, jour);
+}
+
+function getFeriesLegaux(annee) {
+    const paques = calculerPaques(annee);
+    const jourMs = 24 * 60 * 60 * 1000;
+    const lundiPaques = new Date(paques.getTime() + 1 * jourMs);
+    const lundiPentecote = new Date(paques.getTime() + 50 * jourMs);
+
+    const fmt = (d) => d.toISOString().split('T')[0];
+
+    return [
+        { date: `${annee}-01-01`, libelle: "Jour de l'An" },
+        { date: fmt(lundiPaques), libelle: 'Lundi de Pâques' },
+        { date: `${annee}-05-01`, libelle: 'Fête du Travail' },
+        { date: `${annee}-05-08`, libelle: 'Victoire 1945' },
+        { date: fmt(lundiPentecote), libelle: 'Lundi de Pentecôte' },
+        { date: `${annee}-07-14`, libelle: 'Fête Nationale' },
+        { date: `${annee}-08-15`, libelle: 'Assomption' },
+        { date: `${annee}-11-01`, libelle: 'Toussaint' },
+        { date: `${annee}-11-11`, libelle: 'Armistice 1918' },
+        { date: `${annee}-12-25`, libelle: 'Noël' }
+    ];
+}
+
+async function genererFeriesLegaux(annee) {
+    const legaux = getFeriesLegaux(annee);
+    const existants = await window.api.getJoursFeries(annee);
+    const datesExistantes = existants.map(f => f.date);
+    let ajoutes = 0;
+
+    for (const ferie of legaux) {
+        if (!datesExistantes.includes(ferie.date)) {
+            await window.api.addJourFerie({ date: ferie.date, libelle: ferie.libelle, annee });
+            ajoutes++;
+        }
+    }
+    return ajoutes;
+}
+
 async function chargerJoursFeries() {
     try {
         const annee = anneeFeries;
@@ -462,7 +543,20 @@ async function chargerJoursFeries() {
         const container = document.getElementById('listeFeries');
 
         if (feries.length === 0) {
-            container.innerHTML = '<p class="text-muted">Aucun jour férié enregistré pour ' + annee + '</p>';
+            container.innerHTML = `
+                <div class="feries-vide">
+                    <p class="text-muted">Aucun jour férié enregistré pour ${annee}</p>
+                    <button id="btnGenererFeries" class="btn-primary">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Générer les ${getFeriesLegaux(annee).length} fériés légaux
+                    </button>
+                </div>`;
+            document.getElementById('btnGenererFeries').addEventListener('click', async () => {
+                const btn = document.getElementById('btnGenererFeries');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Génération...';
+                const nb = await genererFeriesLegaux(annee);
+                chargerJoursFeries();
+            });
             return;
         }
 
@@ -821,10 +915,16 @@ formSalarie.addEventListener('submit', async (e) => {
         }
         
         successMsg.classList.add('show');
-        
+
         // Recharger la liste
         await chargerSalaries();
-        
+
+        // Si c'est l'admin connecté qui a été modifié, rafraîchir ses soldes et le formulaire
+        if (editingSalarieId === user.id) {
+            await loadSoldesAdmin();
+            await initFormAbsenceAdmin();
+        }
+
         // Fermer après 1 seconde
         setTimeout(() => {
             modal.style.display = 'none';
@@ -1046,11 +1146,12 @@ function genererCalendrierUser() {
             const jourDiv = document.createElement('div');
             jourDiv.className = 'jour';
             jourDiv.textContent = jour;
-            
+            jourDiv.dataset.date = dateISO;
+
             if (dayOfWeek === 0 || dayOfWeek === 6) {
                 jourDiv.classList.add('weekend');
             }
-            
+
             const jourFerie = joursFeriesUser.find(f => f.date === dateISO);
             if (jourFerie) {
                 jourDiv.classList.add('ferie');
@@ -1086,16 +1187,65 @@ function genererCalendrierUser() {
             
             joursMoisDiv.appendChild(jourDiv);
         }
-        
+
+        // Compléter à 42 cases (6 lignes × 7 colonnes) pour uniformiser la hauteur
+        const totalCases = premierJourSemaine + nbJours;
+        for (let i = totalCases; i < 42; i++) {
+            const jourVide = document.createElement('div');
+            jourVide.className = 'jour vide';
+            joursMoisDiv.appendChild(jourVide);
+        }
+
         moisDiv.appendChild(joursMoisDiv);
         calendrierContainer.appendChild(moisDiv);
     }
+}
+
+// ========== DRAG-TO-SELECT SUR LE CALENDRIER ==========
+
+let dragStartDate = null;
+let isDragging = false;
+
+function initCalendrierDragSelect() {
+    const container = document.getElementById('calendrierAnnuelUser');
+    if (!container) return;
+
+    container.addEventListener('mousedown', (e) => {
+        const jourDiv = e.target.closest('.jour[data-date]');
+        if (!jourDiv || jourDiv.classList.contains('vide')) return;
+        e.preventDefault();
+        dragStartDate = jourDiv.dataset.date;
+        isDragging = true;
+        document.getElementById('dateDebutUser').value = dragStartDate;
+        document.getElementById('dateFinUser').value = dragStartDate;
+        surlignerJoursPrevisualisation(dragStartDate, dragStartDate);
+    });
+
+    container.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const jourDiv = e.target.closest('.jour[data-date]');
+        if (!jourDiv || jourDiv.classList.contains('vide')) return;
+        const currentDate = jourDiv.dataset.date;
+        const debut = dragStartDate < currentDate ? dragStartDate : currentDate;
+        const fin = dragStartDate < currentDate ? currentDate : dragStartDate;
+        document.getElementById('dateDebutUser').value = debut;
+        document.getElementById('dateFinUser').value = fin;
+        surlignerJoursPrevisualisation(debut, fin);
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        dragStartDate = null;
+        calculerDureeAbsenceAdmin();
+    });
 }
 
 async function chargerCalendrierUser() {
     await chargerJoursFeriesUser();
     await chargerAbsencesUser();
     genererCalendrierUser();
+    initCalendrierDragSelect();
 }
 
 async function initFormAbsenceAdmin() {
@@ -1105,39 +1255,44 @@ async function initFormAbsenceAdmin() {
         
         if (!typeAbsenceSelect) return;
         
+        const existingRTT = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RTT');
         if (salarie.a_droit_rtt === 1) {
-            const existingRTT = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RTT');
             if (!existingRTT) {
                 const optionRTT = document.createElement('option');
                 optionRTT.value = 'RTT';
                 optionRTT.textContent = 'RTT';
                 typeAbsenceSelect.insertBefore(optionRTT, typeAbsenceSelect.lastElementChild);
             }
+        } else if (existingRTT) {
+            existingRTT.remove();
         }
-        
+
+        const existingRecup = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RECUP');
         if (salarie.a_droit_recup === 1) {
-            const existingRecup = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RECUP');
             if (!existingRecup) {
                 const optionRecup = document.createElement('option');
                 optionRecup.value = 'RECUP';
                 optionRecup.textContent = 'Récupération';
                 typeAbsenceSelect.insertBefore(optionRecup, typeAbsenceSelect.lastElementChild);
             }
+        } else if (existingRecup) {
+            existingRecup.remove();
         }
     } catch (error) {
         console.error('Erreur init formulaire:', error);
     }
-    
-    // ========== ÉVÉNEMENTS DU FORMULAIRE ==========
-    
+
+    updateBtnValiderAdmin();
+}
+
+// Listeners formulaire admin — attachés une seule fois au chargement
+(function initFormListenersAdmin() {
     const typeSelect = document.getElementById('typeAbsenceUser');
     const recupFields = document.getElementById('recupFieldsUser');
     const recupTypeSelect = document.getElementById('recupTypeUser');
     const recupHeuresGroup = document.getElementById('recupHeuresGroupUser');
     const dateDebut = document.getElementById('dateDebutUser');
     const dateFin = document.getElementById('dateFinUser');
-    const debutApremEl = document.getElementById('debutApremUser');
-    const finMidiEl = document.getElementById('finMidiUser');
     const recupHeures = document.getElementById('recupHeuresUser');
     
     // Afficher/masquer champs Récup
@@ -1147,9 +1302,10 @@ async function initFormAbsenceAdmin() {
                 recupFields.style.display = e.target.value === 'RECUP' ? 'block' : 'none';
             }
             calculerDureeAbsenceAdmin();
+            updateBtnValiderAdmin();
         });
     }
-    
+
     // Afficher/masquer champ heures
     if (recupTypeSelect) {
         recupTypeSelect.addEventListener('change', (e) => {
@@ -1160,37 +1316,79 @@ async function initFormAbsenceAdmin() {
                 }
             }
             calculerDureeAbsenceAdmin();
+            updateBtnValiderAdmin();
         });
     }
-    
+
     // Calcul automatique sur changement de dates
     if (dateDebut) {
         dateDebut.addEventListener('change', () => {
             calculerDureeAbsenceAdmin();
+            updateBtnValiderAdmin();
             if (dateFin.value) {
                 surlignerJoursPrevisualisation(dateDebut.value, dateFin.value);
             }
         });
     }
-    
+
     if (dateFin) {
         dateFin.addEventListener('change', () => {
             calculerDureeAbsenceAdmin();
+            updateBtnValiderAdmin();
             if (dateDebut.value) {
                 surlignerJoursPrevisualisation(dateDebut.value, dateFin.value);
             }
         });
     }
-    
-    if (debutApremEl) {
-        debutApremEl.addEventListener('change', calculerDureeAbsenceAdmin);
-    }
-    if (finMidiEl) {
-        finMidiEl.addEventListener('change', calculerDureeAbsenceAdmin);
-    }
-    
+
+    // Toggle AM/PM buttons
+    document.querySelectorAll('#mes-conges-section .period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            const toggle = btn.closest('.period-toggle');
+            toggle.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(target).value = btn.dataset.value;
+            calculerDureeAbsenceAdmin();
+            updateBtnValiderAdmin();
+        });
+    });
+
     if (recupHeures) {
-        recupHeures.addEventListener('input', calculerDureeAbsenceAdmin);
+        recupHeures.addEventListener('input', () => { calculerDureeAbsenceAdmin(); updateBtnValiderAdmin(); });
+    }
+})();
+
+// ========== VALIDATION BOUTON VALIDER (ADMIN) ==========
+
+function updateBtnValiderAdmin() {
+    const btn = document.getElementById('btnValiderUser');
+    const wrapper = document.getElementById('btnSubmitWrapperUser');
+    if (!btn || !wrapper) return;
+    const type = document.getElementById('typeAbsenceUser').value;
+    const dateDebut = document.getElementById('dateDebutUser').value;
+    const dateFin = document.getElementById('dateFinUser').value;
+    const recupType = document.getElementById('recupTypeUser')?.value;
+    const recupHeures = document.getElementById('recupHeuresUser')?.value;
+
+    const manquants = [];
+    if (!type) manquants.push('type d\'absence');
+    if (!dateDebut || !dateFin) manquants.push('dates');
+    if (dateDebut && dateFin && dateFin < dateDebut) manquants.push('date de fin antérieure au début');
+    const resumeDiv = document.getElementById('resumeAbsenceUser');
+    if (dateDebut && dateFin && dateFin >= dateDebut && type && resumeDiv && resumeDiv.style.display === 'none') {
+        manquants.push('aucun jour ouvré dans cette période');
+    }
+    if (type === 'RECUP' && recupType === 'heures' && (!recupHeures || recupHeures <= 0)) {
+        manquants.push('nombre d\'heures');
+    }
+
+    if (manquants.length > 0) {
+        btn.disabled = true;
+        wrapper.dataset.tooltip = 'Manquant : ' + manquants.join(', ');
+    } else {
+        btn.disabled = false;
+        delete wrapper.dataset.tooltip;
     }
 }
 
@@ -1201,8 +1399,8 @@ async function calculerDureeAbsenceAdmin() {
     const typeAbsence = document.getElementById('typeAbsenceUser').value;
     const dateDebut = document.getElementById('dateDebutUser').value;
     const dateFin = document.getElementById('dateFinUser').value;
-    const debutPeriode = document.getElementById('debutApremUser').checked ? 'apres-midi' : 'matin';
-    const finPeriode = document.getElementById('finMidiUser').checked ? 'midi' : 'fin-journee';
+    const debutPeriode = document.getElementById('debutApremUser').value === 'pm' ? 'apres-midi' : 'matin';
+    const finPeriode = document.getElementById('finMidiUser').value === 'am' ? 'midi' : 'fin-journee';
     const recupType = document.getElementById('recupTypeUser')?.value;
     const recupHeures = document.getElementById('recupHeuresUser')?.value;
 
@@ -1220,6 +1418,13 @@ async function calculerDureeAbsenceAdmin() {
 
     if (!dateDebut || !dateFin) {
         resumeDiv.style.display = 'none';
+        updateBtnValiderAdmin();
+        return;
+    }
+
+    if (dateFin < dateDebut) {
+        resumeDiv.style.display = 'none';
+        updateBtnValiderAdmin();
         return;
     }
 
@@ -1263,6 +1468,15 @@ async function calculerDureeAbsenceAdmin() {
             dureeHeures = dureeJours * 7;
         }
 
+        // Bloquer si durée = 0 (jour férié, weekend...)
+        if (dureeJours <= 0) {
+            alertePeriode.textContent = '⚠️ Aucun jour ouvré dans cette période (jour férié ou weekend)';
+            alertePeriode.classList.add('alert-warning');
+            resumeDiv.style.display = 'none';
+            updateBtnValiderAdmin();
+            return;
+        }
+
         // Récupérer les soldes actuels
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
         
@@ -1272,49 +1486,40 @@ async function calculerDureeAbsenceAdmin() {
             : `${dureeJours.toFixed(2)} jour(s)`;
         
         // Calculer et afficher le décompte selon le type
-        let decompteText = '';
         let soldeNegatif = false;
-        
+
         if (typeAbsence === 'CP') {
             const cpN1Utilise = Math.min(dureeJours, soldes.cp_n1);
             const cpNUtilise = Math.max(0, dureeJours - soldes.cp_n1);
             const nouveauCPN1 = soldes.cp_n1 - cpN1Utilise;
             const nouveauCPN = soldes.cp_n - cpNUtilise;
-            
-            if (cpN1Utilise > 0) {
-                decompteText = `CP N-1: ${cpN1Utilise.toFixed(2)}j`;
-                if (cpNUtilise > 0) {
-                    decompteText += ` + CP N: ${cpNUtilise.toFixed(2)}j`;
-                }
-            } else {
-                decompteText = `CP N: ${dureeJours.toFixed(2)}j`;
-            }
-            
-            decompteText += ` (reste: ${nouveauCPN1.toFixed(2)}j N-1 + ${nouveauCPN.toFixed(2)}j N)`;
-            
-            if (nouveauCPN < 0) {
-                soldeNegatif = true;
-            }
-            
+            if (nouveauCPN < 0) soldeNegatif = true;
+
+            resumeDecompte.innerHTML = `<table>
+                <tr><th></th><th>Posé</th><th>Reste</th></tr>
+                <tr><td><strong>CP N-1</strong></td><td>${cpN1Utilise.toFixed(1)}j</td><td>${nouveauCPN1.toFixed(1)}j</td></tr>
+                <tr><td><strong>CP N</strong></td><td>${cpNUtilise.toFixed(1)}j</td><td style="color:${nouveauCPN < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauCPN.toFixed(1)}j</td></tr>
+            </table>`;
+
         } else if (typeAbsence === 'RTT') {
             const nouveauRTT = soldes.rtt - dureeJours;
-            decompteText = `RTT: ${dureeJours.toFixed(2)}j (reste: ${nouveauRTT.toFixed(2)}j)`;
-            if (nouveauRTT < 0) {
-                soldeNegatif = true;
-            }
-            
+            if (nouveauRTT < 0) soldeNegatif = true;
+            resumeDecompte.innerHTML = `<table>
+                <tr><th></th><th>Posé</th><th>Reste</th></tr>
+                <tr><td><strong>RTT</strong></td><td>${dureeJours.toFixed(1)}j</td><td style="color:${nouveauRTT < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRTT.toFixed(1)}j</td></tr>
+            </table>`;
+
         } else if (typeAbsence === 'RECUP') {
             const nouvelleRecup = soldes.recup_heures - dureeHeures;
-            decompteText = `Récup: ${dureeHeures.toFixed(1)}h (reste: ${nouvelleRecup.toFixed(1)}h)`;
-            if (nouvelleRecup < 0) {
-                soldeNegatif = true;
-            }
-            
+            if (nouvelleRecup < 0) soldeNegatif = true;
+            resumeDecompte.innerHTML = `<table>
+                <tr><th></th><th>Posé</th><th>Reste</th></tr>
+                <tr><td><strong>Récup</strong></td><td>${dureeHeures.toFixed(1)}h</td><td style="color:${nouvelleRecup < 0 ? 'var(--rouge)' : 'inherit'}">${nouvelleRecup.toFixed(1)}h</td></tr>
+            </table>`;
+
         } else if (typeAbsence === 'MALADIE') {
-            decompteText = 'Arrêt maladie (pas de décompte)';
+            resumeDecompte.textContent = 'Pas de décompte';
         }
-        
-        resumeDecompte.textContent = decompteText;
         
         // Alerte solde
         if (soldeNegatif) {
@@ -1324,16 +1529,18 @@ async function calculerDureeAbsenceAdmin() {
             alerteSolde.textContent = '✓ Solde suffisant';
         }
         
-        // Vérifier les chevauchements
+        // Vérifier les chevauchements (uniquement absences valides, hors maladie)
         const absences = await window.api.getAbsences(user.id);
-        const chevauchement = absences.some(abs => {
-            return (dateDebut >= abs.date_debut && dateDebut <= abs.date_fin) ||
-                   (dateFin >= abs.date_debut && dateFin <= abs.date_fin) ||
-                   (dateDebut <= abs.date_debut && dateFin >= abs.date_fin);
+        const chevauchement = absences.find(abs => {
+            if (abs.statut !== 'valide') return false;
+            return (dateDebut <= abs.date_fin && dateFin >= abs.date_debut);
         });
-        
+
         if (chevauchement) {
-            alertePeriode.textContent = '⚠️ Cette période chevauche une absence existante';
+            const typesTexte = { CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+            const typeTexte = typesTexte[chevauchement.type] || chevauchement.type;
+            const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
+            alertePeriode.textContent = `⚠️ Chevauchement avec ${typeTexte} du ${fmtDate(chevauchement.date_debut)} au ${fmtDate(chevauchement.date_fin)}`;
             alertePeriode.classList.add('alert-warning');
         }
 
@@ -1346,40 +1553,15 @@ async function calculerDureeAbsenceAdmin() {
     } catch (error) {
         console.error('Erreur calcul:', error);
     }
+    updateBtnValiderAdmin();
 }
 
-// Fonction de surlignage des jours (copie de dashboard-user.js)
+// Fonction de surlignage des jours
 function surlignerJoursPrevisualisation(dateDebut, dateFin) {
-    // Enlever tous les surlignages précédents
-    document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
-    
+    document.querySelectorAll('#calendrierAnnuelUser .jour.preview').forEach(j => j.classList.remove('preview'));
     if (!dateDebut || !dateFin) return;
-    
-    // Parser les dates manuellement en ISO
-    const [anneeDebut, moisDebut, jourDebut] = dateDebut.split('-').map(Number);
-    const [anneeFin, moisFin, jourFin] = dateFin.split('-').map(Number);
-    
-    // Parcourir chaque jour du calendrier
-    document.querySelectorAll('#calendrierAnnuelUser .jour').forEach(jourDiv => {
-        const jourTexte = jourDiv.textContent.trim();
-        if (!jourTexte || jourDiv.classList.contains('vide')) return;
-        
-        // Récupérer le mois depuis le parent
-        const moisDiv = jourDiv.closest('.mois-calendrier');
-        const moisHeader = moisDiv.querySelector('.mois-header').textContent;
-        const nomsMois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
-                          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        const moisIndex = nomsMois.indexOf(moisHeader);
-        
-        if (moisIndex === -1) return;
-        
-        const jour = parseInt(jourTexte);
-        
-        // Créer la date ISO du jour du calendrier
-        const dateJourISO = `${anneeActuelle}-${String(moisIndex + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
-        
-        // Si le jour est dans la plage, le surligner
-        if (dateJourISO >= dateDebut && dateJourISO <= dateFin) {
+    document.querySelectorAll('#calendrierAnnuelUser .jour[data-date]').forEach(jourDiv => {
+        if (jourDiv.dataset.date >= dateDebut && jourDiv.dataset.date <= dateFin) {
             jourDiv.classList.add('preview');
         }
     });
@@ -1627,6 +1809,171 @@ function _rendreToast(type, titre, message) {
 //         '8 salarié(s) traité(s) avec succès'
 //     );
 // }, 2000);
+// ========== STATISTIQUES ==========
+
+let chartAbsencesMois = null;
+let chartRepartitionType = null;
+let chartSoldesSalaries = null;
+
+async function chargerStatistiques() {
+    const annee = anneeStatistiques;
+
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js non chargé');
+        return;
+    }
+
+    // Forcer le recalcul du layout avant de créer les graphiques
+    const section = document.getElementById('statistiques-section');
+    section.offsetHeight; // Force reflow
+
+    try {
+        const [absences, salaries] = await Promise.all([
+            window.api.getAllAbsences(),
+            window.api.getAllSalaries()
+        ]);
+        // Filtrer les absences de l'année
+        const absencesAnnee = absences.filter(a => {
+            const debut = a.date_debut.substring(0, 4);
+            const fin = a.date_fin.substring(0, 4);
+            return debut === String(annee) || fin === String(annee);
+        });
+
+        const couleurs = {
+            CP_N: 'rgb(0, 108, 137)',
+            CP_N1: 'rgb(0, 140, 178)',
+            RTT: 'rgb(116, 43, 135)',
+            RECUP: 'rgb(181, 22, 63)',
+            MALADIE: 'rgb(237, 113, 17)'
+        };
+        const labels = {
+            CP_N: 'CP N',
+            CP_N1: 'CP N-1',
+            RTT: 'RTT',
+            RECUP: 'Récupération',
+            MALADIE: 'Maladie'
+        };
+
+        // === 1. Absences par mois (barres empilées) ===
+        const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+        const types = Object.keys(couleurs);
+        const dataMois = {};
+        types.forEach(t => { dataMois[t] = new Array(12).fill(0); });
+
+        absencesAnnee.forEach(a => {
+            const mois = parseInt(a.date_debut.substring(5, 7)) - 1;
+            const type = a.type;
+            if (dataMois[type]) {
+                dataMois[type][mois] += (a.duree_jours || 0);
+            }
+        });
+
+        const ctxMois = document.getElementById('chartAbsencesMois');
+        if (chartAbsencesMois) chartAbsencesMois.destroy();
+        chartAbsencesMois = new Chart(ctxMois, {
+            type: 'bar',
+            data: {
+                labels: moisLabels,
+                datasets: types.filter(t => dataMois[t].some(v => v > 0)).map(t => ({
+                    label: labels[t],
+                    data: dataMois[t],
+                    backgroundColor: couleurs[t],
+                    borderRadius: 3
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Jours' } }
+                }
+            }
+        });
+
+        // === 2. Répartition par type (donut) ===
+        const totauxParType = {};
+        types.forEach(t => { totauxParType[t] = 0; });
+        absencesAnnee.forEach(a => {
+            if (totauxParType[a.type] !== undefined) {
+                totauxParType[a.type] += (a.duree_jours || 0);
+            }
+        });
+
+        const typesActifs = types.filter(t => totauxParType[t] > 0);
+        const ctxType = document.getElementById('chartRepartitionType');
+        if (chartRepartitionType) chartRepartitionType.destroy();
+        chartRepartitionType = new Chart(ctxType, {
+            type: 'doughnut',
+            data: {
+                labels: typesActifs.map(t => labels[t]),
+                datasets: [{
+                    data: typesActifs.map(t => Math.round(totauxParType[t] * 100) / 100),
+                    backgroundColor: typesActifs.map(t => couleurs[t]),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label} : ${ctx.parsed} jours`
+                        }
+                    }
+                }
+            }
+        });
+
+        // === 3. Soldes restants par salarié (barres horizontales) ===
+        const salariesActifs = salaries.filter(s => s.actif === 1);
+        const nomsLabels = salariesActifs.map(s => `${s.prenom} ${s.nom.charAt(0)}.`);
+        const soldesData = { cp: [], rtt: [], recup: [] };
+
+        for (const s of salariesActifs) {
+            const soldes = await window.api.getSoldes(s.id, new Date().getFullYear());
+            if (soldes) {
+                soldesData.cp.push(Math.round((soldes.cp_n1 + soldes.cp_n) * 100) / 100);
+                soldesData.rtt.push(Math.round(soldes.rtt * 100) / 100);
+                soldesData.recup.push(Math.round((soldes.recup_heures / 7) * 100) / 100);
+            } else {
+                soldesData.cp.push(0);
+                soldesData.rtt.push(0);
+                soldesData.recup.push(0);
+            }
+        }
+
+        const ctxSoldes = document.getElementById('chartSoldesSalaries');
+        if (chartSoldesSalaries) chartSoldesSalaries.destroy();
+        chartSoldesSalaries = new Chart(ctxSoldes, {
+            type: 'bar',
+            data: {
+                labels: nomsLabels,
+                datasets: [
+                    { label: 'CP (N-1 + N)', data: soldesData.cp, backgroundColor: 'rgb(0, 108, 137)', borderRadius: 3 },
+                    { label: 'RTT', data: soldesData.rtt, backgroundColor: 'rgb(116, 43, 135)', borderRadius: 3 },
+                    { label: 'Récup (jours)', data: soldesData.recup, backgroundColor: 'rgb(181, 22, 63)', borderRadius: 3 }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    x: { beginAtZero: true, title: { display: true, text: 'Jours' } }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Erreur chargement statistiques:', error);
+    }
+}
+
 // ========== MODE TEST (Ctrl+Shift+T) ==========
 
 // ========== CODE SECRET POUR OUVRIR LA MODALE TEST ==========
@@ -2054,6 +2401,7 @@ async function executerImport() {
         
         // Statistiques
         let nbAbsencesCreees = 0;
+        let nbDoublons = 0;
         let nbErreursPersonne = 0;
         let nbErreursLignes = 0;
         const details = [];
@@ -2087,8 +2435,12 @@ async function executerImport() {
                         await creerAbsenceImport(salarie.id, absence);
                         nbAbsencesCreees++;
                     } catch (error) {
-                        nbErreursLignes++;
-                        erreurs.push(`❌ ${nomComplet} (${absence.date_debut} - ${absence.date_fin}) : ${error.message}`);
+                        if (error.message.includes('Doublon')) {
+                            nbDoublons++;
+                        } else {
+                            nbErreursLignes++;
+                            erreurs.push(`❌ ${nomComplet} (${absence.date_debut} - ${absence.date_fin}) : ${error.message}`);
+                        }
                     }
                 }
                 
@@ -2100,23 +2452,39 @@ async function executerImport() {
             }
         }
         
+        // Log dans historique_traitements
+        try {
+            await window.api.logHistoriqueTraitement({
+                type: 'IMPORT_EXCEL',
+                annee: new Date().getFullYear(),
+                nb_salaries_traites: Object.keys(parPersonne).length - nbErreursPersonne,
+                details: `${nbAbsencesCreees} créée(s), ${nbDoublons} doublon(s), ${nbErreursLignes} erreur(s), ${nbErreursPersonne} introuvable(s)`,
+                statut: (nbErreursPersonne === 0 && nbErreursLignes === 0) ? 'success' : 'partial',
+                message_erreur: erreurs.length > 0 ? erreurs.join(' | ') : ''
+            });
+        } catch (logErr) {
+            console.error('Erreur log historique:', logErr);
+        }
+
         // Afficher le résultat
         let resultHTML = '';
-        
+
         if (nbErreursPersonne === 0 && nbErreursLignes === 0) {
             resultHTML += `
                 <div class="import-success">
                     <h4>✅ Import réussi !</h4>
                     <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s) pour <strong>${Object.keys(parPersonne).length}</strong> personne(s)</p>
+                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) ignoré(s)</p>` : ''}
                 </div>
             `;
         } else {
             resultHTML += `
                 <div class="import-error">
-                    <h4>⚠️ Import terminé avec des erreurs</h4>
+                    <h4>⚠️ Import terminé avec des avertissements</h4>
                     <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s)</p>
-                    <p><strong>${nbErreursPersonne}</strong> personne(s) non trouvée(s)</p>
-                    <p><strong>${nbErreursLignes}</strong> ligne(s) en erreur</p>
+                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) ignoré(s)</p>` : ''}
+                    ${nbErreursPersonne > 0 ? `<p><strong>${nbErreursPersonne}</strong> personne(s) non trouvée(s)</p>` : ''}
+                    ${nbErreursLignes > 0 ? `<p><strong>${nbErreursLignes}</strong> ligne(s) en erreur</p>` : ''}
                 </div>
             `;
         }
@@ -2201,10 +2569,12 @@ function regrouperAbsencesConsecutives(lignes) {
         
         // Mapper le type
         let type = 'CP_N';
-        if (ligne.nature.toLowerCase().includes('recup')) type = 'RECUP';
-        else if (ligne.nature.toLowerCase().includes('rtt')) type = 'RTT';
-        else if (ligne.nature.toLowerCase().includes('anticipé')) type = 'CP_N';
-        else if (ligne.nature.toLowerCase().includes('cp')) type = 'CP_N';
+        const natureLower = ligne.nature.toLowerCase();
+        if (natureLower.includes('maladie') || natureLower.includes('arrêt') || natureLower.includes('arret')) type = 'MALADIE';
+        else if (natureLower.includes('recup')) type = 'RECUP';
+        else if (natureLower.includes('rtt')) type = 'RTT';
+        else if (natureLower.includes('anticipé')) type = 'CP_N';
+        else if (natureLower.includes('cp')) type = 'CP_N';
         
         if (!absenceCourante) {
             // Première absence
@@ -2261,8 +2631,19 @@ function formatDateISO(date) {
     return `${year}-${month}-${day}`;
 }
 
-// Fonction pour créer une absence
+// Fonction pour créer une absence (avec détection doublons)
 async function creerAbsenceImport(salarieId, absence) {
+    // Vérifier si une absence identique existe déjà
+    const existantes = await window.api.getAbsences(salarieId);
+    const doublon = existantes.find(a =>
+        a.date_debut === absence.date_debut &&
+        a.date_fin === absence.date_fin &&
+        a.type === absence.type
+    );
+    if (doublon) {
+        throw new Error('Doublon détecté (absence déjà existante)');
+    }
+
     const absenceData = {
         salarie_id: salarieId,
         type: absence.type,
@@ -2273,7 +2654,7 @@ async function creerAbsenceImport(salarieId, absence) {
         commentaire: 'Import historique',
         statut: 'valide'
     };
-    
+
     return await window.api.createAbsence(absenceData);
 }
 // Écouter les traitements automatiques depuis le main process
@@ -2334,8 +2715,6 @@ document.addEventListener('keydown', (e) => {
         }, 2000);
     }
 });
-// ========== FONCTION EXPORT EXCEL ==========
-
 // ========== FONCTION EXPORT EXCEL ==========
 
 async function executerExport() {
@@ -2436,16 +2815,19 @@ for (const salarie of salaries) {
                 'AM'
             ]);
         } else {
-            // Décomposer en jours
+            // Décomposer en jours ouvrés uniquement
             let currentDate = new Date(dateDebut);
-            
-           while (currentDate <= dateFin) {
-                const jour = currentDate.getDate();
+
+            while (currentDate <= dateFin) {
+                const dayOfWeek = currentDate.getDay();
+                // Ignorer weekends (0 = dimanche, 6 = samedi)
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    const jour = currentDate.getDate();
                     const mois = currentDate.getMonth() + 1;
                     const anneeAbs = currentDate.getFullYear();
-                    
+
                     dataArchives.push([
-                        '', '', '', // Colonnes A, B, C vides
+                        '', '', '',
                         `${salarie.nom} ${salarie.prenom}`,
                         new Date(anneeAbs, mois - 1, jour),
                         natureAbsence,
@@ -2455,9 +2837,8 @@ for (const salarie of salaries) {
                         1,
                         'Journée'
                     ]);
-                
-                
-                // Jour suivant
+                }
+
                 currentDate.setDate(currentDate.getDate() + 1);
             }
         }
@@ -3206,9 +3587,12 @@ if (formAbsenceUser) {
                 duree_jours: dureeJours,
                 duree_heures: dureeHeures,
                 commentaire: commentaire || null,
-                statut: 'valide'
+                debut_periode: debutPeriode,
+                fin_periode: finPeriode,
+                statut: 'valide',
+                skipNotification: true
             };
-            
+
             // Créer l'absence
             const result = await window.api.createAbsence(absenceData);
             

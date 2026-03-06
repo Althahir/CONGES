@@ -13,7 +13,7 @@
         <!-- Header -->
         <header class="dashboard-header">
             <div class="header-left">
-                <img src="../assets/favicon2.png" alt="Logo" class="header-logo">
+                <img src="../assets/logo.png" alt="Logo" class="header-logo">
             </div>
             <div class="header-center">
                 <h1 id="headerTitle">Mes Congés</h1>
@@ -152,22 +152,21 @@
                             <div class="form-group-compact">
                                 <label for="dateDebut">Du *</label>
                                 <input type="date" id="dateDebut" name="dateDebut" required>
+                                <div class="period-toggle">
+                                    <button type="button" class="period-btn active" data-target="debutAprem" data-value="am">Matin</button>
+                                    <button type="button" class="period-btn" data-target="debutAprem" data-value="pm">Après-midi</button>
+                                </div>
+                                <input type="hidden" id="debutAprem" value="am">
                             </div>
                             <div class="form-group-compact">
                                 <label for="dateFin">Au *</label>
                                 <input type="date" id="dateFin" name="dateFin" required>
+                                <div class="period-toggle">
+                                    <button type="button" class="period-btn" data-target="finMidi" data-value="am">Matin</button>
+                                    <button type="button" class="period-btn active" data-target="finMidi" data-value="pm">Après-midi</button>
+                                </div>
+                                <input type="hidden" id="finMidi" value="pm">
                             </div>
-                        </div>
-
-                        <div class="demi-journee-row">
-                            <label class="checkbox-demi">
-                                <input type="checkbox" id="debutAprem">
-                                <span>Début après-midi</span>
-                            </label>
-                            <label class="checkbox-demi">
-                                <input type="checkbox" id="finMidi">
-                                <span>Fin à midi</span>
-                            </label>
                         </div>
 
                         <!-- Champs Récup -->
@@ -192,8 +191,10 @@
 
                         <!-- Résumé -->
                         <div id="resumeAbsence" class="resume-compact" style="display: none;">
-                            <div><strong>Durée:</strong> <span id="resumeDuree">-</span></div>
-                            <div><strong>Décompte:</strong> <span id="resumeDecompte">-</span></div>
+                            <div class="resume-header-row">
+                                <span><strong>Durée:</strong> <span id="resumeDuree">-</span></span>
+                            </div>
+                            <div id="resumeDecompte" class="resume-decompte"></div>
                             <div id="alerteSolde" class="alert-compact"></div>
                             <div id="alertePeriode" class="alert-compact"></div>
                         </div>
@@ -202,7 +203,9 @@
                         <div id="successMessage" class="success-message"></div>
 
                         <div class="form-actions-compact">
-                            <button type="submit" class="btn-primary btn-small">Valider</button>
+                            <div class="btn-submit-wrapper" id="btnSubmitWrapper">
+                                <button type="submit" id="btnValider" class="btn-primary btn-small" disabled>Valider</button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -219,6 +222,9 @@
 
         <!-- Section Calendrier Global -->
         <section id="calendrier-section" class="content-section">
+            <div class="section-header">
+                <h2>Calendrier Global</h2>
+            </div>
             <div id="calendrierGlobal" class="calendrier-global">
                 <!-- Sera rempli dynamiquement -->
             </div>
