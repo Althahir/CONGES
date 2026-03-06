@@ -107,9 +107,7 @@ rtt_annuels           (id, annee_debut, nb_jours_travailles, nb_cp_a_deduire)
 **RTT** : `getRTTAnnuels`, `addRTTAnnuel`
 **Traitements** : `executerTraitementCP`, `executerTraitementRTT`, `getConfigTraitements`, `updateConfigTraitement`, `getHistoriqueTraitements`
 **Notifications** : `getNotificationsNonLues`, `marquerNotificationLue`, `creerNotification`
-**Divers** : `calculerDuree`, `genererPDF`, `navigateTo`
-
-**Handler manquant** : `ajouter-recup` (heures supplémentaires → voir TODO.md #1)
+**Divers** : `calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode)`, `genererPDF`, `navigateTo`
 
 ---
 

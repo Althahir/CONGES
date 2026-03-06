@@ -1536,7 +1536,6 @@ h2 {
 }
 
 .user-dashboard-wrapper .alert-compact {
-    color: #dc3545;
     font-size: 0.85em;
     margin-top: 5px;
 }
@@ -3025,6 +3024,11 @@ h2 {
     background: var(--bg-surface-alt);
 }
 
+[data-theme="dark"] .user-dashboard-wrapper .jour.preview {
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
 /* Modal */
 [data-theme="dark"] .modal-content,
 [data-theme="dark"] .modal-test-content,
@@ -3056,6 +3060,85 @@ h2 {
 
 [data-theme="dark"] .form-actions {
     border-color: var(--border-color);
+}
+
+/* Modal suppression absence */
+[data-theme="dark"] #modalSuppressionAbsence .modal-header {
+    background: var(--bg-surface);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .modal-header h3 {
+    color: #5cbdd5;
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .close-modal {
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .close-modal:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .info-absence-suppression {
+    background: rgba(0, 108, 137, 0.12);
+    border-left-color: #5cbdd5;
+}
+
+[data-theme="dark"] .info-absence-suppression p {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .info-absence-suppression strong {
+    color: #5cbdd5;
+}
+
+[data-theme="dark"] .option-radio {
+    background: var(--bg-surface-alt);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .option-radio:hover {
+    border-color: #5cbdd5;
+    background: rgba(0, 108, 137, 0.08);
+}
+
+[data-theme="dark"] .option-radio span {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .option-radio input[type="radio"]:checked + span {
+    color: #5cbdd5;
+}
+
+[data-theme="dark"] .warning-suppression {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+[data-theme="dark"] .warning-suppression i {
+    color: var(--jaune);
+}
+
+[data-theme="dark"] .warning-suppression p {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .modal-footer {
+    background: var(--bg-surface-alt);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .btn-secondary {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] #modalSuppressionAbsence .btn-secondary:hover {
+    background: var(--bg-surface-alt);
 }
 
 /* Calendrier global */

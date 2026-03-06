@@ -38,7 +38,7 @@ contextBridge.exposeInMainWorld('api', {
     addRTTAnnuel: (data) => ipcRenderer.invoke('addRTTAnnuel', data),
 
     // Calcul de durée
-    calculerDuree: (dateDebut, dateFin, periodeType) => ipcRenderer.invoke('calculerDuree', dateDebut, dateFin, periodeType),
+    calculerDuree: (dateDebut, dateFin, debutPeriode, finPeriode) => ipcRenderer.invoke('calculerDuree', dateDebut, dateFin, debutPeriode, finPeriode),
 
     // PDF
     genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),

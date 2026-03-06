@@ -382,7 +382,8 @@ async function calculerDureeAbsence() {
     const typeAbsence = document.getElementById('typeAbsence').value;
     const dateDebut = document.getElementById('dateDebut').value;
     const dateFin = document.getElementById('dateFin').value;
-    const periodeType = document.getElementById('periodeType').value;
+    const debutPeriode = document.getElementById('debutAprem').checked ? 'apres-midi' : 'matin';
+    const finPeriode = document.getElementById('finMidi').checked ? 'midi' : 'fin-journee';
     const recupType = document.getElementById('recupType').value;
     const recupHeures = document.getElementById('recupHeures').value;
     
@@ -393,8 +394,8 @@ async function calculerDureeAbsence() {
     
     // Réinitialiser les messages
     errorMessage.classList.remove('show');
-    alerteSolde.classList.remove('show');
-    alertePeriode.classList.remove('show');
+    alerteSolde.classList.remove('show', 'alert-warning');
+    alertePeriode.classList.remove('show', 'alert-warning');
     errorMessage.textContent = '';
     alerteSolde.textContent = '';
     alertePeriode.textContent = '';
@@ -411,14 +412,13 @@ async function calculerDureeAbsence() {
         resumeBox.style.display = 'none';
         return;
     }
-    
 
     try {
     let dureeJours = 0;
     let dureeHeures = 0;
-    
+
     // Calculer la durée d'abord
-    const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+    const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
     dureeJours = result.dureeJours;
     dureeHeures = dureeJours * 7;
     
@@ -451,7 +451,7 @@ if (chevauchement) {
     }[chevauchement.type] || chevauchement.type;
     
     alertePeriode.textContent = `⚠️ Chevauchement avec une absence existante (${typeTexte} du ${chevauchement.date_debut} au ${chevauchement.date_fin})`;
-    alertePeriode.classList.add('show');
+    alertePeriode.classList.add('show', 'alert-warning');
 }
 
     // Si pas de type, juste afficher la durée
@@ -487,7 +487,9 @@ if (chevauchement) {
             
             if (nouveauCP_N < 0) {
                 alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauCP_N).toFixed(2)} j`;
-                alerteSolde.classList.add('show');
+                alerteSolde.classList.add('show', 'alert-warning');
+            } else {
+                alerteSolde.textContent = `✓ Solde suffisant`;
             }
             
         } else if (typeAbsence === 'RTT') {
@@ -496,7 +498,9 @@ if (chevauchement) {
             
             if (nouveauRTT < 0) {
                 alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRTT).toFixed(2)} j`;
-                alerteSolde.classList.add('show');
+                alerteSolde.classList.add('show', 'alert-warning');
+            } else {
+                alerteSolde.textContent = `✓ Solde suffisant`;
             }
             
         } else if (typeAbsence === 'RECUP') {
@@ -505,7 +509,9 @@ if (chevauchement) {
             
             if (nouveauRecup < 0) {
                 alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRecup).toFixed(1)} h`;
-                alerteSolde.classList.add('show');
+                alerteSolde.classList.add('show', 'alert-warning');
+            } else {
+                alerteSolde.textContent = `✓ Solde suffisant`;
             }
             
         } else if (typeAbsence === 'MALADIE') {
@@ -519,10 +525,14 @@ if (chevauchement) {
                 alertePeriode.textContent = msgExistant + ' | ⚠️ Période passée';
             } else {
                 alertePeriode.textContent = '⚠️ Période passée';
-                alertePeriode.classList.add('show');
             }
+            alertePeriode.classList.add('show', 'alert-warning');
         }
-        
+
+        if (!alertePeriode.textContent) {
+            alertePeriode.textContent = '✓ Période valide';
+        }
+
         // Afficher le résumé
         document.getElementById('resumeDuree').textContent = 
             typeAbsence === 'RECUP' && recupType === 'heures' 
@@ -545,7 +555,8 @@ if (chevauchement) {
 document.getElementById('typeAbsence').addEventListener('change', calculerDureeAbsence);
 document.getElementById('dateDebut').addEventListener('change', calculerDureeAbsence);
 document.getElementById('dateFin').addEventListener('change', calculerDureeAbsence);
-document.getElementById('periodeType').addEventListener('change', calculerDureeAbsence);
+document.getElementById('debutAprem').addEventListener('change', calculerDureeAbsence);
+document.getElementById('finMidi').addEventListener('change', calculerDureeAbsence);
 document.getElementById('recupType').addEventListener('change', calculerDureeAbsence);
 document.getElementById('recupHeures').addEventListener('input', calculerDureeAbsence);
 
@@ -563,7 +574,8 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
     const typeAbsence = document.getElementById('typeAbsence').value;
     const dateDebut = document.getElementById('dateDebut').value;
     const dateFin = document.getElementById('dateFin').value;
-    const periodeType = document.getElementById('periodeType').value;
+    const debutPeriode = document.getElementById('debutAprem').checked ? 'apres-midi' : 'matin';
+    const finPeriode = document.getElementById('finMidi').checked ? 'midi' : 'fin-journee';
     const recupType = document.getElementById('recupType').value;
     const recupHeures = document.getElementById('recupHeures').value;
     const commentaire = document.getElementById('commentaire').value;
@@ -605,11 +617,11 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
             dureeHeures = parseFloat(recupHeures);
             dureeJours = dureeHeures / 7;
         } else {
-            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
             dureeJours = result.dureeJours;
             dureeHeures = dureeJours * 7;
         }
-        
+
         // Pour les CP, on enregistre en tant que CP_N (le backend gérera CP_N1 puis CP_N)
         if (typeAbsence === 'CP') {
             typeToSave = 'CP_N';

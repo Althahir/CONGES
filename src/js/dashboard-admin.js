@@ -1136,7 +1136,8 @@ async function initFormAbsenceAdmin() {
     const recupHeuresGroup = document.getElementById('recupHeuresGroupUser');
     const dateDebut = document.getElementById('dateDebutUser');
     const dateFin = document.getElementById('dateFinUser');
-    const periodeType = document.getElementById('periodeTypeUser');
+    const debutApremEl = document.getElementById('debutApremUser');
+    const finMidiEl = document.getElementById('finMidiUser');
     const recupHeures = document.getElementById('recupHeuresUser');
     
     // Afficher/masquer champs Récup
@@ -1181,8 +1182,11 @@ async function initFormAbsenceAdmin() {
         });
     }
     
-    if (periodeType) {
-        periodeType.addEventListener('change', calculerDureeAbsenceAdmin);
+    if (debutApremEl) {
+        debutApremEl.addEventListener('change', calculerDureeAbsenceAdmin);
+    }
+    if (finMidiEl) {
+        finMidiEl.addEventListener('change', calculerDureeAbsenceAdmin);
     }
     
     if (recupHeures) {
@@ -1197,38 +1201,42 @@ async function calculerDureeAbsenceAdmin() {
     const typeAbsence = document.getElementById('typeAbsenceUser').value;
     const dateDebut = document.getElementById('dateDebutUser').value;
     const dateFin = document.getElementById('dateFinUser').value;
-    const periodeType = document.getElementById('periodeTypeUser').value;
+    const debutPeriode = document.getElementById('debutApremUser').checked ? 'apres-midi' : 'matin';
+    const finPeriode = document.getElementById('finMidiUser').checked ? 'midi' : 'fin-journee';
     const recupType = document.getElementById('recupTypeUser')?.value;
     const recupHeures = document.getElementById('recupHeuresUser')?.value;
-    
+
     const resumeDiv = document.getElementById('resumeAbsenceUser');
     const resumeDuree = document.getElementById('resumeDureeUser');
     const resumeDecompte = document.getElementById('resumeDecompteUser');
     const alerteSolde = document.getElementById('alerteSoldeUser');
     const alertePeriode = document.getElementById('alertePeriodeUser');
-    
+
     // Réinitialiser les alertes
     alerteSolde.textContent = '';
+    alerteSolde.classList.remove('alert-warning');
     alertePeriode.textContent = '';
-    
+    alertePeriode.classList.remove('alert-warning');
+
     if (!dateDebut || !dateFin) {
         resumeDiv.style.display = 'none';
         return;
     }
-    
+
     // Vérifier si la période est dans le passé
     const aujourdhui = new Date();
     aujourdhui.setHours(0, 0, 0, 0);
     const debut = new Date(dateDebut);
-    
+
     if (debut < aujourdhui) {
         alertePeriode.textContent = '⚠️ La période commence dans le passé';
+        alertePeriode.classList.add('alert-warning');
     }
-    
+
     if (!typeAbsence) {
         resumeDiv.style.display = 'block';
         try {
-            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
             resumeDuree.textContent = `${result.dureeJours.toFixed(2)} jour(s)`;
             resumeDecompte.textContent = 'Sélectionnez un type d\'absence';
         } catch (error) {
@@ -1250,11 +1258,11 @@ async function calculerDureeAbsenceAdmin() {
             dureeHeures = parseFloat(recupHeures);
             dureeJours = dureeHeures / 7;
         } else {
-            const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+            const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
             dureeJours = result.dureeJours;
             dureeHeures = dureeJours * 7;
         }
-        
+
         // Récupérer les soldes actuels
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
         
@@ -1308,9 +1316,12 @@ async function calculerDureeAbsenceAdmin() {
         
         resumeDecompte.textContent = decompteText;
         
-        // Alerte si solde négatif
+        // Alerte solde
         if (soldeNegatif) {
             alerteSolde.textContent = '⚠️ Cette absence mettra votre solde en négatif';
+            alerteSolde.classList.add('alert-warning');
+        } else if (typeAbsence !== 'MALADIE') {
+            alerteSolde.textContent = '✓ Solde suffisant';
         }
         
         // Vérifier les chevauchements
@@ -1323,6 +1334,11 @@ async function calculerDureeAbsenceAdmin() {
         
         if (chevauchement) {
             alertePeriode.textContent = '⚠️ Cette période chevauche une absence existante';
+            alertePeriode.classList.add('alert-warning');
+        }
+
+        if (!alertePeriode.textContent) {
+            alertePeriode.textContent = '✓ Période valide';
         }
         
         resumeDiv.style.display = 'block';
@@ -3149,7 +3165,8 @@ if (formAbsenceUser) {
         const typeAbsence = document.getElementById('typeAbsenceUser').value;
         const dateDebut = document.getElementById('dateDebutUser').value;
         const dateFin = document.getElementById('dateFinUser').value;
-        const periodeType = document.getElementById('periodeTypeUser').value;
+        const debutPeriode = document.getElementById('debutApremUser').checked ? 'apres-midi' : 'matin';
+        const finPeriode = document.getElementById('finMidiUser').checked ? 'midi' : 'fin-journee';
         const commentaire = document.getElementById('commentaireUser').value;
         const recupType = document.getElementById('recupTypeUser')?.value;
         const recupHeures = document.getElementById('recupHeuresUser')?.value;
@@ -3169,11 +3186,11 @@ if (formAbsenceUser) {
                 dureeHeures = parseFloat(recupHeures);
                 dureeJours = dureeHeures / 7;
             } else {
-                const result = await window.api.calculerDuree(dateDebut, dateFin, periodeType);
+                const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
                 dureeJours = result.dureeJours;
                 dureeHeures = dureeJours * 7;
             }
-            
+
             // Mapper le type CP vers CP_N (la base n'accepte que CP_N ou CP_N1)
             let typeAbsenceFinal = typeAbsence;
             if (typeAbsence === 'CP') {
@@ -3335,11 +3352,11 @@ function initModalHeuresSupAdmin() {
 }
 
 // ========== TEST TOASTS MULTIPLES — décommenter pour tester ("reactive le test des notifs") ==========
-setTimeout(() => {
-    afficherNotificationPersistante('success', 'Absence posée — Marie Martin', 'RTT · du 10/03 au 10/03 (1j) · Solde restant : 4j');
-    setTimeout(() => afficherNotificationPersistante('success', 'Absence posée — Paul Lemaire', 'CP · du 15/03 au 19/03 (5j) · Solde restant : 8j'), 800);
-    setTimeout(() => afficherNotificationPersistante('error', 'Absence posée — Sophie Bernard', 'MALADIE · du 12/03 au 14/03 (3j)'), 1600);
-}, 3000);
+// setTimeout(() => {
+//     afficherNotificationPersistante('success', 'Absence posée — Marie Martin', 'RTT · du 10/03 au 10/03 (1j) · Solde restant : 4j');
+//     setTimeout(() => afficherNotificationPersistante('success', 'Absence posée — Paul Lemaire', 'CP · du 15/03 au 19/03 (5j) · Solde restant : 8j'), 800);
+//     setTimeout(() => afficherNotificationPersistante('error', 'Absence posée — Sophie Bernard', 'MALADIE · du 12/03 au 14/03 (3j)'), 1600);
+// }, 3000);
 // ========== FIN TEST ==========
 
 initModalHeuresSupAdmin();

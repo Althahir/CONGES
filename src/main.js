@@ -114,6 +114,8 @@ db = new sqlite3.Database(dbPath, (err) => {
 function createWindow() {
     mainWindow = new BrowserWindow({
         fullscreen: false,
+        minWidth: 1100,
+        minHeight: 700,
         icon: path.join(__dirname, 'assets/favicon3.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -1628,12 +1630,12 @@ ipcMain.handle('addRTTAnnuel', async (event, data) => {
 
 // ========== CALCUL DE DURÉE ==========
 
-ipcMain.handle('calculerDuree', async (event, dateDebut, dateFin, periodeType) => {
+ipcMain.handle('calculerDuree', async (event, dateDebut, dateFin, debutPeriode, finPeriode) => {
     return new Promise((resolve, reject) => {
         // Récupérer les jours fériés
         const anneeDebut = new Date(dateDebut).getFullYear();
         const anneeFin = new Date(dateFin).getFullYear();
-        
+
         db.all(
             'SELECT date FROM jours_feries WHERE annee IN (?, ?)',
             [anneeDebut, anneeFin],
@@ -1642,16 +1644,21 @@ ipcMain.handle('calculerDuree', async (event, dateDebut, dateFin, periodeType) =
                     reject(err);
                     return;
                 }
-                
+
                 const joursOuvres = calculerJoursOuvres(dateDebut, dateFin, joursFeries);
-                
-                // Appliquer le coefficient selon le type de période
+
+                // Appliquer les demi-journées de début et fin
                 let dureeJours = joursOuvres;
-                if (periodeType === 'demi') {
-                    dureeJours = joursOuvres * 0.5;
+                if (debutPeriode === 'apres-midi') {
+                    dureeJours -= 0.5;
                 }
-                
-                resolve({ 
+                if (finPeriode === 'midi') {
+                    dureeJours -= 0.5;
+                }
+                // Sécurité : ne pas descendre sous 0
+                if (dureeJours < 0) dureeJours = 0;
+
+                resolve({
                     joursOuvres: joursOuvres,
                     dureeJours: dureeJours,
                     joursFeries: joursFeries.length

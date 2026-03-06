@@ -330,10 +330,12 @@ const data = await window.api.monHandler(param1, param2);
 
 ### Calcul des durées
 
-Le handler `calculerDuree(dateDebut, dateFin, periodeType)` dans `main.js` :
+Le handler `calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode)` dans `main.js` :
 - Exclut les week-ends
 - Exclut les jours fériés (table `jours_feries`)
-- `periodeType` : `'matin'` | `'apres-midi'` | `'journee'`
+- `debutPeriode` : `'matin'` (défaut) | `'apres-midi'` (retrait de 0.5j)
+- `finPeriode` : `'fin-journee'` (défaut) | `'midi'` (retrait de 0.5j)
+- Les deux se cumulent : ex. après-midi → midi sur 3 jours ouvrés = 2j
 
 ---
 
@@ -600,8 +602,9 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 5. ~~**RTT annuels par salarié**~~ ✅ **Fait** — calcul complet, UI, notifications, migration DB
 6. ~~**Backup automatique DB**~~ ✅ **Fait** — copie quotidienne au démarrage, rétention 60 jours
 7. ~~**Nettoyage assets + icônes**~~ ✅ **Fait** — 9 images inutilisées supprimées, icônes cohérentes (logo.ico pour l'app, favicon3.ico pour installateur/fenêtre, favicon2.png pour topbars)
-8. **Taille minimale fenêtre** — ajouter `minWidth: 1100, minHeight: 700` dans `BrowserWindow` de `main.js`
+8. ~~**Taille minimale fenêtre**~~ ✅ **Fait** — `minWidth: 1100, minHeight: 700`
+9. ~~**Demi-journées début/fin**~~ ✅ **Fait** — checkboxes "Début après-midi" + "Fin à midi", alertes vert/orange
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 05/03/2026 (RTT annuels + dark mode + nav unifiée + backup DB + nettoyage assets)*
+*Document maintenu par Excellium — dernière mise à jour 06/03/2026 (demi-journées, alertes vert/orange, dark mode modal suppression, taille min fenêtre)*

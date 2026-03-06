@@ -159,12 +159,15 @@
                             </div>
                         </div>
 
-                        <div class="form-group-compact">
-                            <!-- <label for="periodeType">Période *</label> -->
-                            <select id="periodeType" name="periodeType" required>
-                                <option value="journee">Journée entière</option>
-                                <option value="demi">Demi-journée</option>
-                            </select>
+                        <div class="demi-journee-row">
+                            <label class="checkbox-demi">
+                                <input type="checkbox" id="debutAprem">
+                                <span>Début après-midi</span>
+                            </label>
+                            <label class="checkbox-demi">
+                                <input type="checkbox" id="finMidi">
+                                <span>Fin à midi</span>
+                            </label>
                         </div>
 
                         <!-- Champs Récup -->

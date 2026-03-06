@@ -501,6 +501,29 @@ body {
     background-position: right 10px center;
     padding-right: 35px;
 }
+#mes-conges-section .demi-journee-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+#mes-conges-section .checkbox-demi {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+#mes-conges-section .checkbox-demi input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--bleu);
+    flex-shrink: 0;
+}
 
 #mes-conges-section .form-group-compact textarea {
     height: 34px;
@@ -529,13 +552,23 @@ body {
 #mes-conges-section .resume-compact strong { color: #666; }
 
 #mes-conges-section .alert-compact {
-    background: rgba(255, 193, 7, 0.2);
-    border: 1px solid rgba(255, 193, 7, 0.5);
     border-radius: 4px;
     padding: 6px 8px;
     margin-top: 5px;
     font-size: 0.8em;
-    color: #666;
+    background: rgba(40, 167, 69, 0.15);
+    border: 1px solid rgba(40, 167, 69, 0.4);
+    color: #2d6a3f;
+}
+
+#mes-conges-section .alert-compact.alert-warning {
+    background: rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    color: #856404;
+}
+
+#mes-conges-section .alert-compact:empty {
+    display: none;
 }
 
 #mes-conges-section .error-message,
@@ -944,6 +977,15 @@ body {
     color: #1a1a1a;
 }
 
+[data-theme="dark"] #mes-conges-section .jour.preview {
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] #mes-conges-section .jour.ferie.preview {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
 /* Formulaire dark */
 [data-theme="dark"] #mes-conges-section .form-section {
     background: var(--bg-surface);
@@ -987,7 +1029,15 @@ body {
 }
 
 [data-theme="dark"] #mes-conges-section .alert-compact {
-    color: var(--text-secondary);
+    background: rgba(40, 167, 69, 0.12);
+    border-color: rgba(40, 167, 69, 0.3);
+    color: #6fcf87;
+}
+
+[data-theme="dark"] #mes-conges-section .alert-compact.alert-warning {
+    background: rgba(255, 193, 7, 0.12);
+    border-color: rgba(255, 193, 7, 0.3);
+    color: #f0c040;
 }
 
 [data-theme="dark"] #mes-conges-section .error-message {
