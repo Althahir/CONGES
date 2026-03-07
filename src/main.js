@@ -223,8 +223,8 @@ function createWindow() {
     ctx.mainWindow = new BrowserWindow({
         title: 'Gestionnaire de congés EXCELLIUM',
         fullscreen: false,
-        minWidth: 1100,
-        minHeight: 700,
+        minWidth: 900,
+        minHeight: 600,
         icon: path.join(__dirname, 'assets/icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),

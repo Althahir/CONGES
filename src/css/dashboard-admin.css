@@ -443,12 +443,14 @@ h2 {
 .chart-container {
     position: relative;
     height: 280px;
+    max-height: 40vh;
 }
 .stats-card-large {
     grid-column: 1 / -1;
 }
 .stats-card-large .chart-container {
     height: 230px;
+    max-height: 35vh;
 }
 
 /* ========== JOURS FÉRIÉS ========== */
@@ -1841,15 +1843,62 @@ h2 {
 }
 
 /* ========== RESPONSIVE ========== */
-@media (max-width: 768px) {
+
+@media (max-width: 1200px) {
+    /* Nav admin : scroll horizontal si trop étroit */
     .admin-nav {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
-    
+    .admin-nav .nav-left {
+        flex-shrink: 0;
+    }
+    .admin-nav .nav-left .nav-btn {
+        width: auto;
+        min-width: 140px;
+    }
+
+    /* Mes Congés admin : comportement identique au user */
+    body {
+        overflow-y: auto;
+    }
+    .dashboard-container {
+        height: auto;
+        overflow: visible;
+    }
+    .admin-content {
+        overflow-y: visible;
+    }
+    .admin-content:has(#mes-conges-section.active) {
+        overflow-y: visible;
+        padding: 0;
+    }
+    #mes-conges-section.active {
+        overflow: visible;
+    }
+
+    /* Stats : 1 colonne + hauteur adaptée sur écrans étroits */
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    .stats-card {
+        min-height: 250px;
+    }
+}
+
+@media (max-width: 900px) {
+    .admin-nav .nav-left .nav-btn {
+        min-width: 120px;
+        padding: 10px 12px;
+        font-size: 0.85em;
+    }
+}
+
+@media (max-width: 768px) {
     .liste-salaries {
         grid-template-columns: 1fr;
     }
-    
+
     .section-header {
         flex-direction: column;
         gap: 10px;
