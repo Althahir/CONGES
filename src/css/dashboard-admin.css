@@ -2153,6 +2153,21 @@ h2 {
     opacity: 1;
 }
 
+/* Mode dégradé (8+ absents) */
+.indicateur-degrade {
+    flex: 1;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--bleu), var(--mauve), var(--rouge), var(--orange), var(--jaune));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
 /* Jour férié */
 .calendrier-table .jour-ferie {
     background-color: rgb(212, 208, 208) !important;
@@ -2229,7 +2244,7 @@ h2 {
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-bottom: 20px;
-    align-items: start;
+    align-items: stretch;
 }
 
 .config-card {
@@ -2546,13 +2561,13 @@ h2 {
 }
 
 /* ========== RESPONSIVE RTT DETAIL ========== */
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
     .rtt-detail-grid {
         flex-wrap: wrap;
     }
 
     .rtt-detail-cell {
-        flex: 1 1 calc(25% - 2px);
+        flex: 1 1 calc(20% - 2px);
         min-width: 100px;
     }
 
@@ -2567,6 +2582,21 @@ h2 {
         width: 100%;
         max-width: 300px;
         padding: 10px 20px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .rtt-detail-cell {
+        flex: 1 1 calc(25% - 2px);
+        min-width: 90px;
+    }
+
+    .rtt-form-inline {
+        gap: 8px;
+    }
+
+    .form-group-inline input {
+        width: 100px;
     }
 }
 

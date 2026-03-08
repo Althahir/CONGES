@@ -71,8 +71,8 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
 
                 const typeLabels = {
                     'CP': 'Congés Payés',
-                    'CP_N': 'Congés Payés (année en cours)',
-                    'CP_N1': 'Congés Payés (année précédente)',
+                    'CP_N': 'Congés Payés',
+                    'CP_N1': 'Congés Payés',
                     'RTT': 'RTT',
                     'RECUP': 'Récupération',
                     'MALADIE': 'Arrêt Maladie'

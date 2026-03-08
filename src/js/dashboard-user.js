@@ -32,6 +32,7 @@ document.getElementById('btnThemeToggle').addEventListener('click', () => {
 let anneeActuelle = new Date().getFullYear();
 let joursFeries = [];
 let absences = [];
+let hasChevauchement = false;
 let sectionActive = 'mes-conges';
 
 // ========== NAVIGATION ENTRE SECTIONS ==========
@@ -424,6 +425,9 @@ function updateBtnValider() {
     if (type === 'RECUP' && recupType === 'heures' && (!recupHeures || recupHeures <= 0)) {
         manquants.push('nombre d\'heures');
     }
+    if (hasChevauchement) {
+        manquants.push('chevauchement avec une absence existante');
+    }
 
     if (manquants.length > 0) {
         btn.disabled = true;
@@ -499,6 +503,8 @@ async function calculerDureeAbsence() {
         if (abs.statut !== 'valide') return false;
         return (dateDebut <= abs.date_fin && dateFin >= abs.date_debut);
     });
+
+    hasChevauchement = !!chevauchement;
 
     if (chevauchement) {
         const typeTexte = {

@@ -27,6 +27,7 @@ document.getElementById('btnThemeToggle').addEventListener('click', () => {
     const icon = document.querySelector('#btnThemeToggle i');
     icon.className = next === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
     // Rafraîchir les graphiques si la section stats est active
+    donutInitialized = false; // Forcer le recalcul du donut (couleurs dark/light)
     if (document.getElementById('statistiques-section')?.classList.contains('active')) {
         setTimeout(() => chargerStatistiques(), 50);
     }
@@ -432,25 +433,30 @@ async function chargerCalendrierGlobal() {
                         tableHTML += `<span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
                         tableHTML += '<div class="indicateurs-wrapper">';
     
-                        // Créer un tableau de 8 indicateurs
-                        const indicateurs = new Array(8).fill(null);
+                        // Compter les absents uniques ce jour
+                        const nbAbsents = new Set(absentsJour.map(a => a.salarie_id)).size;
 
-                        // Remplir les indicateurs selon les absents
-                        absentsJour.forEach(abs => {
-                            const position = positionsSalaries[abs.salarie_id];
-                            if (position !== undefined && position < 8) {
-                                indicateurs[position] = couleursSalaries[abs.salarie_id];
-                            }
-                        });
-    
-                         // Afficher les 8 indicateurs
-                        indicateurs.forEach(couleur => {
-                        if (couleur) {
-                            tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};"></div>`;
+                        if (nbAbsents >= 8) {
+                            // Mode dégradé avec compteur
+                            tableHTML += `<div class="indicateur-degrade">${nbAbsents}</div>`;
                         } else {
-                            tableHTML += '<div class="indicateur-colonne"></div>';
+                            // Mode indicateurs individuels
+                            const indicateurs = new Array(8).fill(null);
+                            absentsJour.forEach(abs => {
+                                const position = positionsSalaries[abs.salarie_id];
+                                if (position !== undefined && position < 8) {
+                                    indicateurs[position] = couleursSalaries[abs.salarie_id];
+                                }
+                            });
+
+                            indicateurs.forEach(couleur => {
+                                if (couleur) {
+                                    tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};"></div>`;
+                                } else {
+                                    tableHTML += '<div class="indicateur-colonne"></div>';
+                                }
+                            });
                         }
-                    });
                         
                         tableHTML += '</div>'; // fin indicateurs-wrapper
                         
@@ -1012,6 +1018,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 // ========== SECTION MES CONGÉS (reprise du dashboard user) ==========
 let joursFeriesUser = [];
 let absencesUser = [];
+let hasChevauchementAdmin = false;
 
 async function initMesConges() {
     await loadSoldesAdmin();
@@ -1391,6 +1398,9 @@ function updateBtnValiderAdmin() {
     if (type === 'RECUP' && recupType === 'heures' && (!recupHeures || recupHeures <= 0)) {
         manquants.push('nombre d\'heures');
     }
+    if (hasChevauchementAdmin) {
+        manquants.push('chevauchement avec une absence existante');
+    }
 
     if (manquants.length > 0) {
         btn.disabled = true;
@@ -1544,6 +1554,8 @@ async function calculerDureeAbsenceAdmin() {
             if (abs.statut !== 'valide') return false;
             return (dateDebut <= abs.date_fin && dateFin >= abs.date_debut);
         });
+
+        hasChevauchementAdmin = !!chevauchement;
 
         if (chevauchement) {
             const typesTexte = { CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
@@ -1825,6 +1837,7 @@ function _rendreToast(type, titre, message) {
 
 let chartAbsencesMois = null;
 let chartRepartitionType = null;
+let donutInitialized = false;
 
 async function chargerStatistiques() {
     const annee = anneeStatistiques;
@@ -1884,16 +1897,25 @@ async function chargerStatistiques() {
             }
         });
 
+        // Fusionner CP_N + CP_N1 en un seul dataset "CP" pour le graphique
+        const dataMoisCP = dataMois['CP_N'].map((v, i) => v + dataMois['CP_N1'][i]);
+        const chartTypes = [
+            { key: 'CP', label: 'CP', data: dataMoisCP, color: couleurs['CP_N'] },
+            { key: 'RTT', label: 'RTT', data: dataMois['RTT'], color: couleurs['RTT'] },
+            { key: 'RECUP', label: 'Récupération', data: dataMois['RECUP'], color: couleurs['RECUP'] },
+            { key: 'MALADIE', label: 'Maladie', data: dataMois['MALADIE'], color: couleurs['MALADIE'] }
+        ];
+
         const ctxMois = document.getElementById('chartAbsencesMois');
         if (chartAbsencesMois) chartAbsencesMois.destroy();
         chartAbsencesMois = new Chart(ctxMois, {
             type: 'bar',
             data: {
                 labels: moisLabels,
-                datasets: types.filter(t => dataMois[t].some(v => v > 0)).map(t => ({
-                    label: labels[t],
-                    data: dataMois[t],
-                    backgroundColor: couleurs[t],
+                datasets: chartTypes.filter(t => t.data.some(v => v > 0)).map(t => ({
+                    label: t.label,
+                    data: t.data,
+                    backgroundColor: t.color,
                     borderColor: borderColorChart,
                     borderWidth: { top: 1, left: 0, right: 0, bottom: 0 },
                     borderRadius: 3
@@ -1910,10 +1932,17 @@ async function chargerStatistiques() {
             }
         });
 
-        // === 2. Répartition par type (donut) avec soldes restants ===
+        // === 2. Répartition par type (donut) — toujours année courante, rendu une seule fois ===
+        if (!donutInitialized) {
+        const anneeCourante = String(new Date().getFullYear());
+        const absencesAnneeCourante = absences.filter(a => {
+            const debut = a.date_debut.substring(0, 4);
+            const fin = a.date_fin.substring(0, 4);
+            return debut === anneeCourante || fin === anneeCourante;
+        });
         const totauxParType = {};
         types.forEach(t => { totauxParType[t] = 0; });
-        absencesAnnee.forEach(a => {
+        absencesAnneeCourante.forEach(a => {
             if (totauxParType[a.type] !== undefined) {
                 totauxParType[a.type] += (a.duree_jours || 0);
             }
@@ -1940,7 +1969,7 @@ async function chargerStatistiques() {
             const cx = c.getContext('2d');
             cx.fillStyle = color;
             cx.fillRect(0, 0, 10, 10);
-            cx.strokeStyle = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';
+            cx.strokeStyle = isDark ? 'rgba(217,217,217,0.5)' : 'rgba(255,255,255,0.5)';
             cx.lineWidth = 2.5;
             cx.beginPath();
             cx.moveTo(0, 10); cx.lineTo(10, 0); cx.stroke();
@@ -2010,8 +2039,8 @@ async function chargerStatistiques() {
                 datasets: [{
                     data: donutData,
                     backgroundColor: donutColors,
-                    borderColor: borderColorChart,
-                    borderWidth: donutBorderWidths
+                    borderColor: 'transparent',
+                    borderWidth: 0
                 }]
             },
             options: {
@@ -2027,6 +2056,9 @@ async function chargerStatistiques() {
                 }
             }
         });
+        donutInitialized = true;
+
+        } // fin if (!donutInitialized)
 
         // === 3. Détail des absences par salarié (tableau avec filtres) ===
         const tableContainer = document.getElementById('tableAbsencesSalaries');
@@ -2044,9 +2076,12 @@ async function chargerStatistiques() {
         };
 
         const typeColors = {
-            CP: 'var(--bleu)', CP_N: 'var(--bleu)', CP_N1: 'var(--bleu)',
+            CP: isDark ? 'var(--jaune)' : 'var(--bleu)',
+            CP_N: isDark ? 'var(--jaune)' : 'var(--bleu)',
+            CP_N1: isDark ? 'var(--jaune)' : 'var(--bleu)',
             RTT: isDark ? 'var(--orange)' : 'var(--mauve)',
-            RECUP: 'var(--rouge)', MALADIE: isDark ? 'var(--mauve)' : 'var(--orange)'
+            RECUP: 'var(--rouge)',
+            MALADIE: isDark ? 'var(--mauve)' : 'var(--orange)'
         };
 
         const filtreTypes = ['CP', 'RTT', 'RECUP', 'MALADIE'];
@@ -2134,7 +2169,7 @@ async function chargerStatistiques() {
                 <div class="stats-filtre-right">
                     <span class="stats-filtre-titre">Période :</span>
                     <select id="filtreStatsMois" class="stats-filtre-mois">
-                        ${moisOptions.map((m, i) => `<option value="${i}">${m}</option>`).join('')}
+                        ${moisOptions.map((m, i) => `<option value="${i}" ${i === new Date().getMonth() + 1 ? 'selected' : ''}>${m}</option>`).join('')}
                     </select>
                     <button id="btnExportStatsPDF" class="btn-stats-pdf" title="Exporter en PDF">
                         <i class="fa-solid fa-file-pdf"></i>
@@ -2226,6 +2261,7 @@ const secretCode = ['d', 'e', 'b', 'u', 'g'];
 let sequenceTimeout;
 
 document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.ctrlKey && e.key.length === 1) {
         const letter = e.key.toLowerCase();
         sequence.push(letter);
@@ -2343,22 +2379,23 @@ const secretCodeImport = ['l', 'o', 'a', 'd'];
 let sequenceTimeoutImport;
 
 document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.ctrlKey && e.key.length === 1) {
         const letter = e.key.toLowerCase();
-        
+
         sequenceImport.push(letter);
-        
+
         if (sequenceImport.length > 4) {
             sequenceImport.shift();
         }
-        
+
         if (sequenceImport.join('') === secretCodeImport.join('')) {
             e.preventDefault();
             document.getElementById('modalImport').style.display = 'flex';
             sequenceImport = [];
             clearTimeout(sequenceTimeoutImport);
         }
-        
+
         clearTimeout(sequenceTimeoutImport);
         sequenceTimeoutImport = setTimeout(() => {
             sequenceImport = [];
@@ -2914,22 +2951,23 @@ const secretCodeExport = ['s', 'a', 'v', 'e'];
 let sequenceTimeoutExport;
 
 document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.ctrlKey && e.key.length === 1) {
         const letter = e.key.toLowerCase();
-        
+
         sequenceExport.push(letter);
-        
+
         if (sequenceExport.length > 4) {
             sequenceExport.shift();
         }
-        
+
         if (sequenceExport.join('') === secretCodeExport.join('')) {
             e.preventDefault();
             executerExport();
             sequenceExport = [];
             clearTimeout(sequenceTimeoutExport);
         }
-        
+
         clearTimeout(sequenceTimeoutExport);
         sequenceTimeoutExport = setTimeout(() => {
             sequenceExport = [];
