@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
@@ -12,6 +12,58 @@ app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 
 // Contexte partagé avec les handlers
 const ctx = { db: null, mainWindow: null };
+
+// ========== CONFIGURATION CHEMIN DB ==========
+
+const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
+
+function readConfig() {
+    try {
+        if (fs.existsSync(CONFIG_PATH)) {
+            return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Erreur lecture config.json :', e);
+    }
+    return null;
+}
+
+function saveConfig(config) {
+    const dir = path.dirname(CONFIG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+async function getDbFolder() {
+    // Vérifier si un chemin est déjà configuré et valide
+    const config = readConfig();
+    if (config && config.dbFolder && fs.existsSync(config.dbFolder)) {
+        console.log('Dossier DB (config) :', config.dbFolder);
+        return config.dbFolder;
+    }
+
+    // Premier lancement ou dossier introuvable — demander à l'utilisateur
+    const msg = config && config.dbFolder
+        ? `Le dossier configuré est introuvable :\n${config.dbFolder}\n\nVeuillez sélectionner le dossier contenant la base de données.`
+        : 'Premier lancement : sélectionnez le dossier réseau (SharePoint/OneDrive) où stocker la base de données.';
+
+    const result = await dialog.showOpenDialog({
+        title: 'Dossier de la base de données',
+        message: msg,
+        properties: ['openDirectory'],
+        buttonLabel: 'Sélectionner ce dossier'
+    });
+
+    if (result.canceled || !result.filePaths.length) {
+        app.quit();
+        return null;
+    }
+
+    const folder = result.filePaths[0];
+    saveConfig({ dbFolder: folder });
+    console.log('Dossier DB configuré :', folder);
+    return folder;
+}
 
 // Wrapper IPC centralisé — try/catch + logging sur tous les handlers
 function safeHandle(channel, handler) {
@@ -42,12 +94,12 @@ require('./handlers/navigation')(ctx, safeHandle);
 
 // ========== BASE DE DONNÉES ==========
 
-function backupDatabase() {
-    const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'conges.db');
+function backupDatabase(dbFolder) {
+    const dbPath = path.join(dbFolder, 'conges.db');
     if (!fs.existsSync(dbPath)) return;
 
-    const backupDir = path.join(userDataPath, 'backups');
+    // Backups en local (AppData), pas sur le réseau
+    const backupDir = path.join(app.getPath('userData'), 'backups');
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
     const today = new Date().toISOString().slice(0, 10);
@@ -79,19 +131,14 @@ function backupDatabase() {
     }
 }
 
-function connectDatabase() {
-    const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'conges.db');
-
-    if (!fs.existsSync(userDataPath)) {
-        fs.mkdirSync(userDataPath, { recursive: true });
-    }
+function connectDatabase(dbFolder) {
+    const dbPath = path.join(dbFolder, 'conges.db');
 
     if (!fs.existsSync(dbPath)) {
         const templatePath = path.join(__dirname, 'conges.db');
         try {
             fs.copyFileSync(templatePath, dbPath);
-            console.log("Première installation : Base de données copiée dans AppData.");
+            console.log("Première installation : Base de données copiée dans " + dbFolder);
         } catch (err) {
             console.error("Erreur lors de la copie de la base :", err);
         }
@@ -225,7 +272,7 @@ function createWindow() {
         fullscreen: false,
         minWidth: 900,
         minHeight: 600,
-        icon: path.join(__dirname, 'assets/icon.ico'),
+        icon: path.join(__dirname, 'assets/app.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -239,9 +286,12 @@ function createWindow() {
 
 // ========== DÉMARRAGE ==========
 
-app.whenReady().then(() => {
-    backupDatabase();
-    connectDatabase();
+app.whenReady().then(async () => {
+    const dbFolder = await getDbFolder();
+    if (!dbFolder) return; // L'utilisateur a annulé → app.quit() déjà appelé
+
+    backupDatabase(dbFolder);
+    connectDatabase(dbFolder);
     createWindow();
 
     setTimeout(() => {

@@ -167,53 +167,6 @@ body {
     color: var(--rouge);
 }
 
-/* === TUILE SANS DROIT (N/A — gris neutre) === */
-.solde-card-compact.sans-droit {
-    background: #fafafa !important;
-    border-color: #e0e0e0 !important;
-    cursor: not-allowed;
-}
-.solde-card-compact.cp-n1.sans-droit .solde-label-compact,
-.solde-card-compact.cp-n1.sans-droit .solde-value-compact,
-.solde-card-compact.cp-n.sans-droit .solde-label-compact,
-.solde-card-compact.cp-n.sans-droit .solde-value-compact,
-.solde-card-compact.rtt.sans-droit .solde-label-compact,
-.solde-card-compact.rtt.sans-droit .solde-value-compact,
-.solde-card-compact.recup.sans-droit .solde-label-compact,
-.solde-card-compact.recup.sans-droit .solde-value-compact {
-    color: #ccc;
-}
-
-/* === TUILE SOLDE VIDE (solde = 0, droits actifs) === */
-.solde-card-compact.cp-n1.solde-vide,
-.solde-card-compact.cp-n.solde-vide {
-    background: rgba(0, 108, 137, 0.06);
-    border-color: rgba(0, 108, 137, 0.25);
-}
-.solde-card-compact.cp-n1.solde-vide .solde-label-compact,
-.solde-card-compact.cp-n.solde-vide .solde-label-compact,
-.solde-card-compact.cp-n1.solde-vide .solde-value-compact,
-.solde-card-compact.cp-n.solde-vide .solde-value-compact {
-    color: rgba(0, 108, 137, 0.4);
-}
-
-.solde-card-compact.rtt.solde-vide {
-    background: rgba(116, 43, 135, 0.06);
-    border-color: rgba(116, 43, 135, 0.25);
-}
-.solde-card-compact.rtt.solde-vide .solde-label-compact,
-.solde-card-compact.rtt.solde-vide .solde-value-compact {
-    color: rgba(116, 43, 135, 0.4);
-}
-
-.solde-card-compact.recup.solde-vide {
-    background: rgba(181, 22, 63, 0.06);
-    border-color: rgba(181, 22, 63, 0.25);
-}
-.solde-card-compact.recup.solde-vide .solde-label-compact,
-.solde-card-compact.recup.solde-vide .solde-value-compact {
-    color: rgba(181, 22, 63, 0.4);
-}
 
 /* ========== SECTION MES CONGÉS — STYLES PARTAGÉS USER/ADMIN ========== */
 
@@ -334,20 +287,32 @@ body {
     border: 2px solid #e0e0e0;
 }
 
-#mes-conges-section .solde-card-compact.cp-n1,
-#mes-conges-section .solde-card-compact.cp-n {
-    background: #87a3f17a;
+/* === États de solde : positif / zéro / négatif === */
+#mes-conges-section .solde-card-compact.solde-positif {
+    background: rgba(0, 108, 137, 0.1);
     border-color: var(--bleu);
 }
-
-#mes-conges-section .solde-card-compact.rtt {
-    background: #d578e773;
-    border-color: var(--mauve);
+#mes-conges-section .solde-card-compact.solde-positif .solde-label-compact,
+#mes-conges-section .solde-card-compact.solde-positif .solde-value-compact {
+    color: var(--bleu);
 }
 
-#mes-conges-section .solde-card-compact.recup {
-    background: #e92f2f7e;
+#mes-conges-section .solde-card-compact.solde-zero {
+    background: rgba(237, 113, 17, 0.1);
+    border-color: var(--orange);
+}
+#mes-conges-section .solde-card-compact.solde-zero .solde-label-compact,
+#mes-conges-section .solde-card-compact.solde-zero .solde-value-compact {
+    color: var(--orange);
+}
+
+#mes-conges-section .solde-card-compact.solde-negatif {
+    background: rgba(181, 22, 63, 0.1);
     border-color: var(--rouge);
+}
+#mes-conges-section .solde-card-compact.solde-negatif .solde-label-compact,
+#mes-conges-section .solde-card-compact.solde-negatif .solde-value-compact {
+    color: var(--rouge);
 }
 
 #mes-conges-section .solde-label-compact {
@@ -360,22 +325,13 @@ body {
     opacity: 0.8;
 }
 
-#mes-conges-section .solde-card-compact.cp-n1 .solde-label-compact,
-#mes-conges-section .solde-card-compact.cp-n .solde-label-compact { color: var(--bleu); }
-#mes-conges-section .solde-card-compact.rtt .solde-label-compact { color: var(--mauve); }
-#mes-conges-section .solde-card-compact.recup .solde-label-compact { color: var(--rouge); }
-
 #mes-conges-section .solde-value-compact {
     font-size: 0.85em;
     font-weight: 700;
     white-space: nowrap;
 }
 
-#mes-conges-section .solde-card-compact.cp-n1 .solde-value-compact,
-#mes-conges-section .solde-card-compact.cp-n .solde-value-compact { color: var(--bleu); }
-#mes-conges-section .solde-card-compact.rtt .solde-value-compact { color: var(--mauve); }
 #mes-conges-section .solde-card-compact.recup .solde-value-compact {
-    color: var(--rouge);
     display: flex;
     flex-direction: row;
     width: 100%;
@@ -409,40 +365,14 @@ body {
 }
 
 /* Tuile sans droit (scoped) */
-#mes-conges-section .solde-card-compact.rtt.sans-droit .solde-label-compact,
-#mes-conges-section .solde-card-compact.rtt.sans-droit .solde-value-compact,
-#mes-conges-section .solde-card-compact.recup.sans-droit .solde-label-compact,
-#mes-conges-section .solde-card-compact.recup.sans-droit .solde-value-compact {
-    color: rgba(0, 0, 0, 0.3);
+#mes-conges-section .solde-card-compact.sans-droit {
+    background: #fafafa !important;
+    border-color: #e0e0e0 !important;
+    cursor: not-allowed;
 }
-
-/* Tuile solde vide (scoped) */
-#mes-conges-section .solde-card-compact.cp-n1.solde-vide,
-#mes-conges-section .solde-card-compact.cp-n.solde-vide {
-    background: rgba(0, 108, 137, 0.06);
-    border-color: rgba(0, 108, 137, 0.25);
-}
-#mes-conges-section .solde-card-compact.cp-n1.solde-vide .solde-label-compact,
-#mes-conges-section .solde-card-compact.cp-n.solde-vide .solde-label-compact,
-#mes-conges-section .solde-card-compact.cp-n1.solde-vide .solde-value-compact,
-#mes-conges-section .solde-card-compact.cp-n.solde-vide .solde-value-compact {
-    color: rgba(0, 108, 137, 0.4);
-}
-#mes-conges-section .solde-card-compact.rtt.solde-vide {
-    background: rgba(116, 43, 135, 0.06);
-    border-color: rgba(116, 43, 135, 0.25);
-}
-#mes-conges-section .solde-card-compact.rtt.solde-vide .solde-label-compact,
-#mes-conges-section .solde-card-compact.rtt.solde-vide .solde-value-compact {
-    color: rgba(116, 43, 135, 0.4);
-}
-#mes-conges-section .solde-card-compact.recup.solde-vide {
-    background: rgba(181, 22, 63, 0.06);
-    border-color: rgba(181, 22, 63, 0.25);
-}
-#mes-conges-section .solde-card-compact.recup.solde-vide .solde-label-compact,
-#mes-conges-section .solde-card-compact.recup.solde-vide .solde-value-compact {
-    color: rgba(181, 22, 63, 0.4);
+#mes-conges-section .solde-card-compact.sans-droit .solde-label-compact,
+#mes-conges-section .solde-card-compact.sans-droit .solde-value-compact {
+    color: #ccc !important;
 }
 
 /* Scrollbar */
@@ -987,50 +917,44 @@ body {
     border-color: var(--border-color);
 }
 
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n {
-    background: rgba(0, 108, 137, 0.2);
-    border-color: rgba(0, 108, 137, 0.5);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt {
-    background: rgba(116, 43, 135, 0.2);
-    border-color: rgba(116, 43, 135, 0.5);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup {
-    background: rgba(181, 22, 63, 0.2);
-    border-color: rgba(181, 22, 63, 0.5);
-}
-
 [data-theme="dark"] #mes-conges-section .solde-label-compact {
     opacity: 1;
 }
 
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1 .solde-label-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n .solde-label-compact {
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-positif {
+    background: rgba(0, 108, 137, 0.2);
+    border-color: rgba(0, 108, 137, 0.5);
+}
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-positif .solde-label-compact,
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-positif .solde-value-compact {
     color: #5cbdd5;
 }
 
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt .solde-label-compact {
-    color: #c98edb;
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-zero {
+    background: rgba(237, 113, 17, 0.15);
+    border-color: rgba(237, 113, 17, 0.5);
+}
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-zero .solde-label-compact,
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-zero .solde-value-compact {
+    color: #f0a050;
 }
 
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup .solde-label-compact {
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-negatif {
+    background: rgba(181, 22, 63, 0.2);
+    border-color: rgba(181, 22, 63, 0.5);
+}
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-negatif .solde-label-compact,
+[data-theme="dark"] #mes-conges-section .solde-card-compact.solde-negatif .solde-value-compact {
     color: #e86880;
 }
 
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1 .solde-value-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n .solde-value-compact {
-    color: #5cbdd5;
+[data-theme="dark"] #mes-conges-section .solde-card-compact.sans-droit {
+    background: var(--bg-surface) !important;
+    border-color: var(--border-color) !important;
 }
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt .solde-value-compact {
-    color: #c98edb;
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup .solde-value-compact {
-    color: #e86880;
+[data-theme="dark"] #mes-conges-section .solde-card-compact.sans-droit .solde-label-compact,
+[data-theme="dark"] #mes-conges-section .solde-card-compact.sans-droit .solde-value-compact {
+    color: var(--text-muted) !important;
 }
 
 /* Calendrier mois dark */
@@ -1200,47 +1124,4 @@ body {
     box-shadow: 0 2px 8px rgba(181, 22, 63, 0.4);
 }
 
-/* Sans droit dark */
-[data-theme="dark"] .solde-card-compact.sans-droit {
-    background: var(--bg-surface) !important;
-    border-color: var(--border-color) !important;
-}
 
-[data-theme="dark"] .solde-card-compact.sans-droit .solde-label-compact,
-[data-theme="dark"] .solde-card-compact.sans-droit .solde-value-compact {
-    color: var(--text-muted) !important;
-}
-
-/* Solde vide dark */
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1.solde-vide,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n.solde-vide {
-    background: rgba(0, 108, 137, 0.08);
-    border-color: rgba(0, 108, 137, 0.2);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt.solde-vide {
-    background: rgba(116, 43, 135, 0.08);
-    border-color: rgba(116, 43, 135, 0.2);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup.solde-vide {
-    background: rgba(181, 22, 63, 0.08);
-    border-color: rgba(181, 22, 63, 0.2);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1.solde-vide .solde-label-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n.solde-vide .solde-label-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n1.solde-vide .solde-value-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.cp-n.solde-vide .solde-value-compact {
-    color: rgba(92, 189, 213, 0.4);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt.solde-vide .solde-label-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.rtt.solde-vide .solde-value-compact {
-    color: rgba(201, 142, 219, 0.4);
-}
-
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup.solde-vide .solde-label-compact,
-[data-theme="dark"] #mes-conges-section .solde-card-compact.recup.solde-vide .solde-value-compact {
-    color: rgba(232, 104, 128, 0.4);
-}

@@ -121,11 +121,11 @@ rtt_annuels           (id, annee_debut, nb_jours_travailles, nb_cp_a_deduire)
 --orange: rgb(237, 113, 17)
 --jaune:  rgb(249, 198, 73)
 
-/* Soldes compacts (layout 2×2) */
-CP N-1 / CP N → fond/bordure bleu
-RTT           → fond/bordure mauve
-Récup         → fond/bordure rouge
-Sans droit    → opacity: 0.4, cursor: not-allowed
+/* Soldes compacts (layout 2×2) — couleur par état */
+Positif  → fond/bordure/texte --bleu
+Zéro     → fond/bordure/texte --orange
+Négatif  → fond/bordure/texte --rouge
+Sans droit → grisé, cursor: not-allowed
 
 /* Layout "Mes Congés" (user + admin) */
 .dashboard-content-new { display: grid; grid-template-columns: 360px 1fr; }
@@ -139,7 +139,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 | Raccourci | Action |
 |---|---|
-| `Ctrl+D+E+B+U+G` | Modale test traitements automatiques |
+| `Ctrl+D+E+B+U+G` | Éditeur de soldes (modification directe CP/RTT/Récup par salarié) |
 | `Ctrl+L+O+A+D` | Modale import Excel |
 | `Ctrl+S+A+V+E` | Export Excel complet |
 

@@ -1,3 +1,28 @@
+// ========== AUTOCOMPLÉTION EMAILS (localStorage) ==========
+(function () {
+    const saved = JSON.parse(localStorage.getItem('knownEmails') || '[]');
+    const datalist = document.getElementById('emailList');
+    saved.forEach(email => {
+        const option = document.createElement('option');
+        option.value = email;
+        datalist.appendChild(option);
+    });
+    // Pré-remplir avec le dernier email utilisé
+    if (saved.length > 0) {
+        document.getElementById('email').value = saved[0];
+    }
+})();
+
+function saveEmailToLocal(email) {
+    let emails = JSON.parse(localStorage.getItem('knownEmails') || '[]');
+    // Retirer si déjà présent, puis mettre en premier (le plus récent en tête)
+    emails = emails.filter(e => e.toLowerCase() !== email.toLowerCase());
+    emails.unshift(email);
+    // Garder max 10 emails
+    localStorage.setItem('knownEmails', JSON.stringify(emails.slice(0, 10)));
+}
+
+// ========== FORMULAIRE DE CONNEXION ==========
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -20,6 +45,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         const result = await window.api.login(email, password);
         
         if (result.success) {
+            // Mémoriser l'email sur ce poste
+            saveEmailToLocal(email);
             // Stocker les infos utilisateur en session
             sessionStorage.setItem('user', JSON.stringify(result.user));
             

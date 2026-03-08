@@ -16,7 +16,7 @@ document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
     const saved = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     const icon = document.querySelector('#btnThemeToggle i');
-    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
 })();
 
 document.getElementById('btnThemeToggle').addEventListener('click', () => {
@@ -25,7 +25,7 @@ document.getElementById('btnThemeToggle').addEventListener('click', () => {
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     const icon = document.querySelector('#btnThemeToggle i');
-    icon.className = next === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    icon.className = next === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
 });
 
 // Variables globales — années par section
@@ -607,7 +607,7 @@ async function chargerJoursFeries() {
     document.getElementById('btnAjouterFerie').addEventListener('click', ouvrirModal);
     document.getElementById('closeFerieModal').addEventListener('click', fermerModal);
     document.getElementById('btnAnnulerFerie').addEventListener('click', fermerModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) fermerModal(); });
+    // Fermeture au clic extérieur désactivée
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -875,12 +875,7 @@ document.getElementById('cancelModal').addEventListener('click', () => {
     modal.style.display = 'none';
 });
 
-// Clic en dehors de la modale pour fermer
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-        modal.style.display = 'none';
-    }
-});
+// Fermeture au clic extérieur désactivée
 
 // Soumission du formulaire
 formSalarie.addEventListener('submit', async (e) => {
@@ -904,17 +899,24 @@ formSalarie.addEventListener('submit', async (e) => {
     };
     
     try {
+        let result;
         if (editingSalarieId) {
             // Modification
-            await window.api.updateSalarie(editingSalarieId, salarieData);
-            successMsg.textContent = 'Salarié modifié avec succès !';
+            result = await window.api.updateSalarie(editingSalarieId, salarieData);
         } else {
             // Création
-            await window.api.createSalarie(salarieData);
-            successMsg.textContent = 'Salarié créé avec succès !';
+            result = await window.api.createSalarie(salarieData);
         }
-        
+
+        if (result && result.success === false) {
+            errorMsg.textContent = result.message || 'Erreur lors de l\'enregistrement';
+            errorMsg.classList.add('show');
+            return;
+        }
+
+        successMsg.textContent = editingSalarieId ? 'Salarié modifié avec succès !' : 'Salarié créé avec succès !';
         successMsg.classList.add('show');
+        setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
 
         // Recharger la liste
         await chargerSalaries();
@@ -929,7 +931,7 @@ formSalarie.addEventListener('submit', async (e) => {
         setTimeout(() => {
             modal.style.display = 'none';
         }, 1000);
-        
+
     } catch (error) {
         console.error('Erreur:', error);
         errorMsg.textContent = 'Erreur lors de l\'enregistrement';
@@ -1017,43 +1019,44 @@ async function loadSoldesAdmin() {
         const salarie = await window.api.getSalarie(user.id);
         
         if (soldes) {
+            function appliquerEtatSolde(tuile, valeur) {
+                if (!tuile) return;
+                tuile.classList.remove('solde-positif', 'solde-zero', 'solde-negatif', 'sans-droit');
+                if (valeur > 0) tuile.classList.add('solde-positif');
+                else if (valeur === 0) tuile.classList.add('solde-zero');
+                else tuile.classList.add('solde-negatif');
+            }
+
             document.getElementById('solde-cp-n1-user').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n-user').textContent = soldes.cp_n.toFixed(2) + 'j';
-            document.querySelector('#mes-conges-section .solde-card-compact.cp-n1')?.classList.toggle('solde-vide', soldes.cp_n1 === 0);
-            document.querySelector('#mes-conges-section .solde-card-compact.cp-n')?.classList.toggle('solde-vide', soldes.cp_n === 0);
+            appliquerEtatSolde(document.querySelector('#mes-conges-section .solde-card-compact.cp-n1'), soldes.cp_n1);
+            appliquerEtatSolde(document.querySelector('#mes-conges-section .solde-card-compact.cp-n'), soldes.cp_n);
 
             // RTT
             const tuileRTT = document.querySelector('#mes-conges-section .solde-card-compact.rtt');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt-user').textContent = soldes.rtt.toFixed(2) + 'j';
-                if (tuileRTT) {
-                    tuileRTT.classList.remove('sans-droit');
-                    tuileRTT.classList.toggle('solde-vide', soldes.rtt === 0);
-                }
+                appliquerEtatSolde(tuileRTT, soldes.rtt);
             } else {
                 document.getElementById('solde-rtt-user').textContent = 'N/A';
                 if (tuileRTT) {
+                    tuileRTT.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRTT.classList.add('sans-droit');
-                    tuileRTT.classList.remove('solde-vide');
                 }
             }
 
             // Récup
             const tuileRecup = document.querySelector('#mes-conges-section .solde-card-compact.recup');
             if (salarie.a_droit_recup === 1) {
-                const recupJours = Math.floor(soldes.recup_heures / 7);
-                const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
+                const recupJours = (soldes.recup_heures / 7).toFixed(2);
                 document.getElementById('solde-recup-user').innerHTML =
-                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j ${recupHeuresRestantes}h)</p>`;
-                if (tuileRecup) {
-                    tuileRecup.classList.remove('sans-droit');
-                    tuileRecup.classList.toggle('solde-vide', soldes.recup_heures === 0);
-                }
+                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j)</p>`;
+                appliquerEtatSolde(tuileRecup, soldes.recup_heures);
             } else {
                 document.getElementById('solde-recup-user').textContent = 'N/A';
                 if (tuileRecup) {
+                    tuileRecup.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRecup.classList.add('sans-droit');
-                    tuileRecup.classList.remove('solde-vide');
                 }
             }
         }
@@ -1974,138 +1977,122 @@ async function chargerStatistiques() {
     }
 }
 
-// ========== MODE TEST (Ctrl+Shift+T) ==========
-
-// ========== CODE SECRET POUR OUVRIR LA MODALE TEST ==========
-// Séquence : Ctrl + DEBUG
+// ========== ÉDITEUR DE SOLDES (Ctrl+DEBUG) ==========
 
 let sequence = [];
 const secretCode = ['d', 'e', 'b', 'u', 'g'];
 let sequenceTimeout;
 
 document.addEventListener('keydown', (e) => {
-    // Détecter Ctrl + une lettre
     if (e.ctrlKey && e.key.length === 1) {
         const letter = e.key.toLowerCase();
-        
-        // Ajouter la lettre à la séquence
         sequence.push(letter);
-        
-        // Garder seulement les 4 dernières touches
-        if (sequence.length > 5) {
-            sequence.shift();
-        }
-        
-        // Vérifier si la séquence correspond
+        if (sequence.length > 5) sequence.shift();
+
         if (sequence.join('') === secretCode.join('')) {
             e.preventDefault();
-            document.getElementById('modalTest').style.display = 'flex';
-            sequence = []; // Réinitialiser
+            ouvrirEditeurSoldes();
+            sequence = [];
             clearTimeout(sequenceTimeout);
         }
-        
-        // Réinitialiser la séquence après 2 secondes d'inactivité
+
         clearTimeout(sequenceTimeout);
-        sequenceTimeout = setTimeout(() => {
-            sequence = [];
-        }, 2000);
+        sequenceTimeout = setTimeout(() => { sequence = []; }, 2000);
     }
 });
 
-// Fermer la modale de test
-document.getElementById('closeModalTest').addEventListener('click', () => {
-    document.getElementById('modalTest').style.display = 'none';
-});
+async function ouvrirEditeurSoldes() {
+    const modal = document.getElementById('modalEditSoldes');
+    const msg = document.getElementById('editSoldesMsg');
+    msg.textContent = '';
+    msg.className = 'edit-soldes-msg';
 
-// Clic en dehors pour fermer
-document.getElementById('modalTest').addEventListener('click', (e) => {
-    if (e.target.id === 'modalTest') {
-        document.getElementById('modalTest').style.display = 'none';
-    }
-});
-
-// Tester traitement CP
-document.getElementById('btnTestCP').addEventListener('click', async () => {
-    const annee = parseInt(document.getElementById('anneeTest').value);
-    
-    
-    const btn = document.getElementById('btnTestCP');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test en cours...';
-    
-    try {
-
-        const result = await window.api.executerTraitementCP(annee);
-        
-        afficherResultatTest(
-            `✅ Test traitement CP ${annee}`,
-            result.details.map(d => ({
-                titre: d.nom,
-                details: `CP transférés: ${d.cp_transferes}j → CP N-1: ${d.nouveau_cp_n1}j | Nouveaux CP N: ${d.nouveaux_cp_n}j`
-            }))
-        );
-        
-        // Recharger l'historique
-        await chargerHistoriqueTraitements();
-        
-    } catch (error) {
-        console.error('Erreur test CP:', error);
-        alert('❌ Erreur lors du test : ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-flask"></i> Tester traitement CP';
-    }
-});
-
-// Tester traitement RTT
-document.getElementById('btnTestRTT').addEventListener('click', async () => {
-    const annee = parseInt(document.getElementById('anneeTest').value);
-    
-    const btn = document.getElementById('btnTestRTT');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test en cours...';
-    
-    try {
-        
-        
-        const result = await window.api.executerTraitementRTT(annee);
-        
-        afficherResultatTest(
-            `✅ Test traitement RTT ${annee}`,
-            result.details.map(d => ({
-                titre: d.nom,
-                details: `RTT ajoutés: ${d.rtt_ajoutes}j → Nouveau solde: ${d.nouveau_solde}j`
-            }))
-        );
-        
-        // Recharger l'historique
-        await chargerHistoriqueTraitements();
-        
-    } catch (error) {
-        console.error('Erreur test RTT:', error);
-        alert('❌ Erreur lors du test : ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-flask"></i> Tester traitement RTT';
-    }
-});
-
-function afficherResultatTest(titre, details) {
-    const resultatDiv = document.getElementById('resultatTest');
-    const titreDiv = document.getElementById('resultatTestTitre');
-    const detailsDiv = document.getElementById('resultatTestDetails');
-    
-    titreDiv.textContent = titre;
-    
-    detailsDiv.innerHTML = details.map(item => `
-        <div class="resultat-test-item">
-            <strong>${item.titre}</strong>
-            <small>${item.details}</small>
-        </div>
-    `).join('');
-    
-    resultatDiv.style.display = 'block';
+    await chargerTableSoldes(new Date().getFullYear());
+    modal.style.display = 'flex';
 }
+
+async function chargerTableSoldes(annee) {
+    const container = document.getElementById('editSoldesTable');
+    try {
+        const salaries = await window.api.getAllSalaries();
+        let html = `<table class="soldes-edit-table">
+            <thead><tr>
+                <th>Salarié</th>
+                <th>CP N-1</th>
+                <th>CP N</th>
+                <th>RTT</th>
+                <th>Récup (h)</th>
+            </tr></thead><tbody>`;
+
+        for (const s of salaries) {
+            const soldes = await window.api.getSoldes(s.id, annee);
+            const cpN1 = soldes ? soldes.cp_n1 : 0;
+            const cpN = soldes ? soldes.cp_n : 0;
+            const rtt = soldes ? soldes.rtt : 0;
+            const recup = soldes ? soldes.recup_heures : 0;
+
+            html += `<tr data-salarie-id="${s.id}">
+                <td class="salarie-name">${s.nom} ${s.prenom}</td>
+                <td><input type="number" step="0.01" class="edit-cp-n1" value="${cpN1}"></td>
+                <td><input type="number" step="0.01" class="edit-cp-n" value="${cpN}"></td>
+                <td><input type="number" step="0.01" class="edit-rtt" value="${rtt}" ${s.a_droit_rtt ? '' : 'disabled title="Pas de droit RTT"'}></td>
+                <td><input type="number" step="0.1" class="edit-recup" value="${recup}" ${s.a_droit_recup ? '' : 'disabled title="Pas de droit récup"'}></td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (err) {
+        console.error('Erreur chargement soldes:', err);
+        container.innerHTML = '<p style="color:red">Erreur au chargement des soldes</p>';
+    }
+}
+
+// Fermer
+document.getElementById('closeModalEditSoldes').addEventListener('click', () => {
+    document.getElementById('modalEditSoldes').style.display = 'none';
+});
+document.getElementById('btnAnnulerSoldes').addEventListener('click', () => {
+    document.getElementById('modalEditSoldes').style.display = 'none';
+});
+
+// Sauvegarder
+document.getElementById('btnSauverSoldes').addEventListener('click', async () => {
+    const annee = new Date().getFullYear();
+    const rows = document.querySelectorAll('#editSoldesTable tbody tr');
+    const msg = document.getElementById('editSoldesMsg');
+    const btn = document.getElementById('btnSauverSoldes');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enregistrement...';
+
+    try {
+        for (const row of rows) {
+            const salarieId = parseInt(row.dataset.salarieId);
+            const cpN1 = parseFloat(row.querySelector('.edit-cp-n1').value) || 0;
+            const cpN = parseFloat(row.querySelector('.edit-cp-n').value) || 0;
+            const rtt = parseFloat(row.querySelector('.edit-rtt').value) || 0;
+            const recup = parseFloat(row.querySelector('.edit-recup').value) || 0;
+
+            await window.api.updateSoldes(salarieId, annee, { cp_n1: cpN1, cp_n: cpN, rtt, recup_heures: recup });
+        }
+
+        msg.textContent = 'Soldes enregistrés avec succès !';
+        msg.className = 'edit-soldes-msg success';
+        setTimeout(() => { msg.textContent = ''; msg.className = 'edit-soldes-msg'; }, 3000);
+
+        // Rafraîchir les soldes admin si on est sur l'année courante
+        await loadSoldesAdmin();
+
+    } catch (err) {
+        console.error('Erreur sauvegarde soldes:', err);
+        msg.textContent = 'Erreur lors de l\'enregistrement : ' + err.message;
+        msg.className = 'edit-soldes-msg error';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Enregistrer';
+    }
+});
 // ========== CODE SECRET POUR IMPORT EXCEL ==========
 // Séquence : Ctrl+I, Ctrl+M, Ctrl+P, Ctrl+O, Ctrl+R, Ctrl+T
 
@@ -2143,14 +2130,6 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('closeModalImport').addEventListener('click', () => {
     document.getElementById('modalImport').style.display = 'none';
     resetImportModal();
-});
-
-// Clic en dehors pour fermer
-document.getElementById('modalImport').addEventListener('click', (e) => {
-    if (e.target.id === 'modalImport') {
-        document.getElementById('modalImport').style.display = 'none';
-        resetImportModal();
-    }
 });
 
 // Sélection du fichier
@@ -3333,6 +3312,91 @@ function genererCalendrierHistorique() {
     }
 }
 
+// ========== MODAL AJOUT ARRÊT MALADIE ==========
+
+document.getElementById('btnAjouterMaladie').addEventListener('click', async () => {
+    if (!salarieHistoriqueSelectionne) return;
+    const salarie = await window.api.getSalarie(salarieHistoriqueSelectionne);
+    document.getElementById('maladieSalarieName').textContent = `${salarie.prenom} ${salarie.nom}`;
+    document.getElementById('maladieDateDebut').value = '';
+    document.getElementById('maladieDateFin').value = '';
+    document.getElementById('maladieCommentaire').value = '';
+    document.getElementById('maladieDureeInfo').textContent = '';
+    document.getElementById('maladieErreur').textContent = '';
+    document.getElementById('maladieErreur').classList.remove('show');
+    document.getElementById('modalAjoutMaladie').style.display = 'flex';
+});
+
+// Calcul durée en temps réel
+['maladieDateDebut', 'maladieDateFin'].forEach(id => {
+    document.getElementById(id).addEventListener('change', async () => {
+        const debut = document.getElementById('maladieDateDebut').value;
+        const fin = document.getElementById('maladieDateFin').value;
+        const info = document.getElementById('maladieDureeInfo');
+        if (debut && fin && fin >= debut) {
+            try {
+                const result = await window.api.calculerDuree(debut, fin, 'matin', 'fin-journee');
+                info.textContent = `Durée : ${result.dureeJours} jour(s) ouvré(s)`;
+            } catch { info.textContent = ''; }
+        } else {
+            info.textContent = '';
+        }
+    });
+});
+
+// Fermer
+document.getElementById('closeModalMaladie').addEventListener('click', () => {
+    document.getElementById('modalAjoutMaladie').style.display = 'none';
+});
+document.getElementById('btnAnnulerMaladie').addEventListener('click', () => {
+    document.getElementById('modalAjoutMaladie').style.display = 'none';
+});
+
+// Enregistrer
+document.getElementById('btnConfirmerMaladie').addEventListener('click', async () => {
+    const debut = document.getElementById('maladieDateDebut').value;
+    const fin = document.getElementById('maladieDateFin').value;
+    const commentaire = document.getElementById('maladieCommentaire').value;
+    const erreur = document.getElementById('maladieErreur');
+
+    if (!debut || !fin) {
+        erreur.textContent = 'Veuillez renseigner les dates';
+        erreur.classList.add('show');
+        return;
+    }
+    if (fin < debut) {
+        erreur.textContent = 'La date de fin doit être postérieure au début';
+        erreur.classList.add('show');
+        return;
+    }
+
+    try {
+        const duree = await window.api.calculerDuree(debut, fin, 'matin', 'fin-journee');
+
+        await window.api.createAbsence({
+            salarie_id: salarieHistoriqueSelectionne,
+            type: 'MALADIE',
+            date_debut: debut,
+            date_fin: fin,
+            duree_jours: duree.dureeJours,
+            duree_heures: duree.dureeJours * 7,
+            commentaire: commentaire || null,
+            debut_periode: 'matin',
+            fin_periode: 'fin-journee',
+            statut: 'valide',
+            skipNotification: true
+        });
+
+        document.getElementById('modalAjoutMaladie').style.display = 'none';
+        await chargerCalendrierHistorique();
+
+    } catch (error) {
+        console.error('Erreur ajout maladie:', error);
+        erreur.textContent = 'Erreur lors de l\'enregistrement';
+        erreur.classList.add('show');
+    }
+});
+
 // ========== MODAL SUPPRESSION ==========
 
 function ouvrirModalSuppression(absence, dateISO) {
@@ -3641,7 +3705,8 @@ await window.api.genererPDF(pdfData);
                 // Afficher succès
                 successMsg.textContent = '✅ Absence enregistrée avec succès ! Le PDF a été généré.';
                 successMsg.classList.add('show');
-                
+                setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
+
                 // Réinitialiser le formulaire
                 formAbsenceUser.reset();
                 document.getElementById('resumeAbsenceUser').style.display = 'none';
@@ -3686,10 +3751,6 @@ function initModalHeuresSupAdmin() {
 
     document.getElementById('btnAnnulerHeuresSupAdmin').addEventListener('click', () => {
         modal.style.display = 'none';
-    });
-
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
     });
 
     document.getElementById('btnEnregistrerHeuresSupAdmin').addEventListener('click', async () => {

@@ -1,8 +1,9 @@
 {
   "name": "conges-lce",
+  "productName": "Gestion des Congés",
   "author": "Excellium",
   "version": "1.0.0",
-  "description": "Gestionnaire de congés LCE",
+  "description": "Gestion des Congés",
   "main": "src/main.js",
   "scripts": {
     "start": "electron-forge start",

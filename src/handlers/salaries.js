@@ -29,7 +29,12 @@ module.exports = function registerSalariesHandlers(ctx, safeHandle) {
                 function(err) {
                     if (err) {
                         console.error('Erreur création salarié:', err);
-                        reject(err);
+                        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                            resolve({ success: false, message: 'Cette adresse email est déjà assignée à un salarié' });
+                        } else {
+                            resolve({ success: false, message: 'Erreur lors de l\'enregistrement : ' + err.message });
+                        }
+                        return;
                     } else {
                         console.log('Salarié créé avec ID:', this.lastID);
 
@@ -66,7 +71,12 @@ module.exports = function registerSalariesHandlers(ctx, safeHandle) {
                 function(err) {
                     if (err) {
                         console.error('Erreur modification salarié:', err);
-                        reject(err);
+                        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                            resolve({ success: false, message: 'Cette adresse email est déjà assignée à un salarié' });
+                        } else {
+                            resolve({ success: false, message: 'Erreur lors de la modification : ' + err.message });
+                        }
+                        return;
                     } else {
                         resolve({ success: true });
                     }

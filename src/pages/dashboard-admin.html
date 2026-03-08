@@ -254,7 +254,6 @@
                         <select id="typeAbsenceUser" name="typeAbsence" required>
                             <option value="">-- Sélectionner --</option>
                             <option value="CP">Congés payés (CP)</option>
-                            <option value="MALADIE">Arrêt maladie</option>
                         </select>
                     </div>
 
@@ -641,6 +640,11 @@
                 <div class="solde-value" id="soldeRecupHistorique">0h</div>
             </div>
         </div>
+        <div id="btnAjouterMaladieWrapper" style="text-align: center; margin-top: 12px;">
+            <button id="btnAjouterMaladie" class="btn-ajouter-maladie">
+                <i class="fa-solid fa-plus"></i> Arrêt maladie
+            </button>
+        </div>
     </div>
 </div>
             </section>
@@ -682,6 +686,39 @@
     </div>
 </div>
 
+<!-- Modal Ajout Arrêt Maladie -->
+<div id="modalAjoutMaladie" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 450px;">
+        <div class="modal-header">
+            <h3>Ajouter un arrêt maladie</h3>
+            <button id="closeModalMaladie" class="close-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p id="maladieSalarieName" style="font-weight:600; margin-bottom:12px;"></p>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieDateDebut">Date de début</label>
+                <input type="date" id="maladieDateDebut" required>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieDateFin">Date de fin</label>
+                <input type="date" id="maladieDateFin" required>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieCommentaire">Commentaire (optionnel)</label>
+                <input type="text" id="maladieCommentaire" placeholder="Ex: arrêt médecin">
+            </div>
+            <div id="maladieDureeInfo" style="font-size:0.9em; color:var(--text-secondary);"></div>
+            <div id="maladieErreur" class="error-message"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnAnnulerMaladie" class="btn-secondary">Annuler</button>
+            <button id="btnConfirmerMaladie" class="btn-primary">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
             <!-- Section Statistiques -->
             <section id="statistiques-section" class="content-section">
                 <div class="stats-grid">
@@ -702,40 +739,22 @@
 
         </div>
     </div>
-    <!-- Modale de test des traitements -->
-<div id="modalTest" class="modal-test" style="display: none;">
-    <div class="modal-test-content">
-        <div class="modal-test-header">
-            <h3>🧪 Mode Test - Traitements Automatiques</h3>
-            <button id="closeModalTest" class="close-modal-test">
+    <!-- Modale éditeur de soldes (Ctrl+DEBUG) -->
+<div id="modalEditSoldes" class="modal-edit-soldes" style="display: none;">
+    <div class="modal-edit-soldes-content">
+        <div class="modal-edit-soldes-header">
+            <h3><i class="fa-solid fa-sliders"></i> Éditeur de soldes</h3>
+            <button id="closeModalEditSoldes" class="close-modal-edit-soldes">
                 <i class="fa-solid fa-times"></i>
             </button>
         </div>
-        
-        <div class="modal-test-body">
-            <div class="test-annee">
-                <label>Année de test :</label>
-                <select id="anneeTest" class="select-annee">
-                    <option value="2024">2024</option>
-                    <option value="2025">2025</option>
-                    <option value="2026" selected>2026</option>
-                    <option value="2027">2027</option>
-                </select>
+        <div class="modal-edit-soldes-body">
+            <div id="editSoldesTable"></div>
+            <div class="edit-soldes-actions">
+                <button id="btnAnnulerSoldes" class="btn-secondary"><i class="fa-solid fa-xmark"></i> Annuler</button>
+                <button id="btnSauverSoldes" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
             </div>
-            
-            <div class="test-buttons">
-                <button id="btnTestCP" class="btn-test">
-                    <i class="fa-solid fa-flask"></i> Tester traitement CP
-                </button>
-                <button id="btnTestRTT" class="btn-test">
-                    <i class="fa-solid fa-flask"></i> Tester traitement RTT
-                </button>
-            </div>
-            
-            <div id="resultatTest" class="resultat-test" style="display: none;">
-                <h4 id="resultatTestTitre"></h4>
-                <div id="resultatTestDetails"></div>
-            </div>
+            <div id="editSoldesMsg" class="edit-soldes-msg"></div>
         </div>
     </div>
 </div>

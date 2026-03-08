@@ -16,7 +16,7 @@ document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
     const saved = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     const icon = document.querySelector('#btnThemeToggle i');
-    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    if (icon) icon.className = saved === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
 })();
 
 document.getElementById('btnThemeToggle').addEventListener('click', () => {
@@ -25,7 +25,7 @@ document.getElementById('btnThemeToggle').addEventListener('click', () => {
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     const icon = document.querySelector('#btnThemeToggle i');
-    icon.className = next === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    icon.className = next === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
 });
 
 // Variables globales
@@ -89,43 +89,44 @@ async function loadSoldes() {
         const salarie = await window.api.getSalarie(user.id);
         
         if (soldes) {
+            function appliquerEtatSolde(tuile, valeur) {
+                if (!tuile) return;
+                tuile.classList.remove('solde-positif', 'solde-zero', 'solde-negatif', 'sans-droit');
+                if (valeur > 0) tuile.classList.add('solde-positif');
+                else if (valeur === 0) tuile.classList.add('solde-zero');
+                else tuile.classList.add('solde-negatif');
+            }
+
             document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
-            document.querySelector('.solde-card-compact.cp-n1')?.classList.toggle('solde-vide', soldes.cp_n1 === 0);
-            document.querySelector('.solde-card-compact.cp-n')?.classList.toggle('solde-vide', soldes.cp_n === 0);
+            appliquerEtatSolde(document.querySelector('.solde-card-compact.cp-n1'), soldes.cp_n1);
+            appliquerEtatSolde(document.querySelector('.solde-card-compact.cp-n'), soldes.cp_n);
 
             // RTT
             const tuileRTT = document.querySelector('.solde-card-compact.rtt');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
-                if (tuileRTT) {
-                    tuileRTT.classList.remove('sans-droit');
-                    tuileRTT.classList.toggle('solde-vide', soldes.rtt === 0);
-                }
+                appliquerEtatSolde(tuileRTT, soldes.rtt);
             } else {
                 document.getElementById('solde-rtt').textContent = 'N/A';
                 if (tuileRTT) {
+                    tuileRTT.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRTT.classList.add('sans-droit');
-                    tuileRTT.classList.remove('solde-vide');
                 }
             }
 
             // Récup
             const tuileRecup = document.querySelector('.solde-card-compact.recup');
             if (salarie.a_droit_recup === 1) {
-                const recupJours = Math.floor(soldes.recup_heures / 7);
-                const recupHeuresRestantes = (soldes.recup_heures % 7).toFixed(1);
+                const recupJours = (soldes.recup_heures / 7).toFixed(2);
                 document.getElementById('solde-recup').innerHTML =
-                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j ${recupHeuresRestantes}h)</p>`;
-                if (tuileRecup) {
-                    tuileRecup.classList.remove('sans-droit');
-                    tuileRecup.classList.toggle('solde-vide', soldes.recup_heures === 0);
-                }
+                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j)</p>`;
+                appliquerEtatSolde(tuileRecup, soldes.recup_heures);
             } else {
                 document.getElementById('solde-recup').textContent = 'N/A';
                 if (tuileRecup) {
+                    tuileRecup.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRecup.classList.add('sans-droit');
-                    tuileRecup.classList.remove('solde-vide');
                 }
             }
         }
@@ -860,10 +861,6 @@ function initModalHeuresSup() {
 
     document.getElementById('btnAnnulerHeuresSup').addEventListener('click', () => {
         modal.style.display = 'none';
-    });
-
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
     });
 
     document.getElementById('btnEnregistrerHeuresSup').addEventListener('click', async () => {
