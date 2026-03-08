@@ -75,8 +75,9 @@ const WRITE_CHANNELS = new Set([
     'addJourFerie', 'deleteJourFerie',
     'addRTTAnnuel',
     'updateConfigTraitement', 'logHistoriqueTraitement',
-    'executerTraitementCP', 'executerTraitementRTT',
-    'marquerNotificationLue', 'creerNotification'
+    'executerTraitementCP', 'executerTraitementCPMensuel', 'executerTraitementRTT',
+    'marquerNotificationLue', 'creerNotification',
+    'updateConfigApp'
 ]);
 
 // Wrapper IPC centralisé — try/catch + logging + verrou écriture réseau
@@ -107,6 +108,7 @@ require('./handlers/jours-feries')(ctx, safeHandle);
 require('./handlers/rtt')(ctx, safeHandle);
 require('./handlers/calcul')(ctx, safeHandle);
 require('./handlers/pdf')(ctx, safeHandle);
+require('./handlers/config-app')(ctx, safeHandle);
 require('./handlers/navigation')(ctx, safeHandle);
 
 // ========== BASE DE DONNÉES ==========
@@ -309,8 +311,44 @@ const MIGRATIONS = [
         done();
     },
 
-    // v2, v3... : futures migrations (ajouter ici)
-    // function v2(db, done) { db.run('ALTER TABLE ...', done); },
+    // v2 : taux CP globaux + arrêt maladie par salarié + historique taux + traitement CP mensuel
+    function v2(db, done) {
+        db.serialize(function() {
+            // Table config applicative (taux CP globaux)
+            db.run(`CREATE TABLE IF NOT EXISTS config_app (
+                cle TEXT PRIMARY KEY,
+                valeur TEXT NOT NULL
+            )`);
+
+            // Valeurs par défaut
+            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_normal', '2.08333')`);
+            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_arret', '1.66333')`);
+
+            // Historique des changements de taux par salarié
+            db.run(`CREATE TABLE IF NOT EXISTS historique_taux (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salarie_id INTEGER NOT NULL,
+                date_effet TEXT NOT NULL,
+                ancien_taux TEXT NOT NULL,
+                nouveau_taux TEXT NOT NULL,
+                date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+            )`);
+
+            // Nouvelles colonnes sur salaries
+            const alterCols = [
+                "ALTER TABLE salaries ADD COLUMN en_arret_maladie INTEGER DEFAULT 0",
+                "ALTER TABLE salaries ADD COLUMN date_arret_maladie TEXT",
+            ];
+            alterCols.forEach(sql => {
+                db.run(sql, () => {}); // Ignorer si colonne existe déjà
+            });
+
+            // Index
+            db.run('CREATE INDEX IF NOT EXISTS idx_historique_taux_salarie ON historique_taux(salarie_id)');
+        });
+        done();
+    },
 ];
 
 function runMigrations() {

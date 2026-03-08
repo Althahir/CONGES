@@ -62,11 +62,11 @@
                 <button class="nav-btn" data-section="feries">
                     <i class="fa-regular fa-flag"></i> Jours Fériés
                 </button>
-                <button class="nav-btn" data-section="rtt">
-                    <i class="fa-regular fa-clock"></i> Planning des traitements
-                </button>
                 <button class="nav-btn" data-section="statistiques">
                     <i class="fa-solid fa-chart-pie"></i> Statistiques
+                </button>
+                <button class="nav-btn" data-section="parametres">
+                    <i class="fa-solid fa-gear"></i> Paramètres
                 </button>
             </div>
             <div class="nav-right">
@@ -121,12 +121,6 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="cp_mensuel">CP mensuels (jours) *</label>
-                        <input type="number" id="cp_mensuel" step="0.01" value="2.08333" required>
-                        <small>2.08333 pour un temps plein (25 jours / 12 mois)</small>
-                    </div>
-
                     <div class="form-row">
                         <div class="form-group">
                             <label>
@@ -139,6 +133,19 @@
                                 <input type="checkbox" id="a_droit_recup" value="1">
                                 A droit à la récupération
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row arret-maladie-row">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="en_arret_maladie" value="1">
+                                En arrêt maladie
+                            </label>
+                        </div>
+                        <div class="form-group" id="dateArretGroup" style="display: none;">
+                            <label for="date_arret_maladie" id="labelDateArret">Date d'effet *</label>
+                            <input type="date" id="date_arret_maladie">
                         </div>
                     </div>
 
@@ -389,207 +396,7 @@
         </div>
 
             <!-- Section Gestion des Types de Congés -->
-            <section id="rtt-section" class="content-section">
-    <div class="section-header">
-        <h2>Planning des traitements</h2>
-    </div>
-
-    <!-- Configuration des traitements -->
-    <div class="config-traitements">
-        <h3><i class="fa-solid fa-cog"></i> Configuration des dates de traitement automatique</h3>
-        <div class="config-cards-grid">
-        <div class="config-card">
-            <div class="config-header">
-                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des CP</h4>
-                <p>Transfert CP N → CP N-1 puis crédit des nouveaux CP N en fonction du taux de CP renseigné dans la fiche salarié</p>
-            </div>
-            <div class="config-body">
-                <div class="config-date">
-                    <label>Date de traitement :</label>
-                    <select id="cpJour" class="select-jour">
-                        <!-- Options générées en JS -->
-                    </select>
-                    <select id="cpMois" class="select-mois">
-                        <option value="1" selected>Janvier</option>
-                        <option value="2">Février</option>
-                        <option value="3">Mars</option>
-                        <option value="4">Avril</option>
-                        <option value="5">Mai</option>
-                        <option value="6">Juin</option>
-                        <option value="7">Juillet</option>
-                        <option value="8">Août</option>
-                        <option value="9">Septembre</option>
-                        <option value="10">Octobre</option>
-                        <option value="11">Novembre</option>
-                        <option value="12">Décembre</option>
-                    </select>
-                </div>
-                <div class="config-historique">
-                    <strong>Dernier traitement :</strong> <span id="cpDernierTraitement">Chargement...</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="config-card">
-            <div class="config-header">
-                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
-                <p>Ajout des RTT annuels à chaque salarié éligible</p>
-            </div>
-            <div class="config-body">
-                <div class="config-date">
-                    <label>Date de traitement :</label>
-                    <select id="rttJour" class="select-jour">
-                        <!-- Options générées en JS -->
-                    </select>
-                    <select id="rttMois" class="select-mois">
-                        <option value="1">Janvier</option>
-                        <option value="2">Février</option>
-                        <option value="3">Mars</option>
-                        <option value="4">Avril</option>
-                        <option value="5">Mai</option>
-                        <option value="6" selected>Juin</option>
-                        <option value="7">Juillet</option>
-                        <option value="8">Août</option>
-                        <option value="9">Septembre</option>
-                        <option value="10">Octobre</option>
-                        <option value="11">Novembre</option>
-                        <option value="12">Décembre</option>
-                    </select>
-                </div>
-                <div class="config-historique">
-                    <strong>Dernier traitement :</strong> <span id="rttDernierTraitement">Chargement...</span>
-                </div>
-            </div>
-        </div>
-        </div><!-- /.config-cards-grid -->
-
-        <!-- Calcul RTT : pleine largeur sous les 2 cartes -->
-        <div class="rtt-calc-card">
-            <h4><i class="fa-solid fa-calculator"></i> Calcul RTT par année</h4>
-            <div class="rtt-calc-row">
-                <div class="rtt-form-inline">
-                    <div class="form-group-inline">
-                        <label for="rttAnnee">Année</label>
-                        <input type="number" id="rttAnnee" min="2022" placeholder="2026">
-                    </div>
-                    <div class="form-group-inline">
-                        <label for="rttCPDeduire">CP</label>
-                        <input type="number" id="rttCPDeduire" min="0" max="30" value="25">
-                    </div>
-                    <div class="form-group-inline">
-                        <label for="rttForfaitJours">Forfait</label>
-                        <input type="number" id="rttForfaitJours" min="200" max="230" value="218">
-                    </div>
-                    <button id="btnCalculerRTT" class="btn-secondary">
-                        <i class="fa-solid fa-calculator"></i> Calculer
-                    </button>
-                </div>
-
-                <div id="rttDetailCalc" class="rtt-detail-calc" style="display: none;">
-                    <div class="rtt-detail-grid">
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">Période</span>
-                            <strong id="rttPeriodeLabel" class="rtt-detail-value">-</strong>
-                        </div>
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">Jours</span>
-                            <span id="rttJoursPeriode" class="rtt-detail-value">-</span>
-                        </div>
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">WE</span>
-                            <span id="rttWeekends" class="rtt-detail-value">-</span>
-                        </div>
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">Fériés</span>
-                            <span id="rttFeries" class="rtt-detail-value">-</span>
-                        </div>
-                        <div class="rtt-detail-cell rtt-cell-accent">
-                            <span class="rtt-detail-label">Jours ouvrés</span>
-                            <strong id="rttJoursOuvres" class="rtt-detail-value">-</strong>
-                        </div>
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">CP</span>
-                            <span id="rttCPAffiche" class="rtt-detail-value">-</span>
-                        </div>
-                        <div class="rtt-detail-cell">
-                            <span class="rtt-detail-label">Forfait</span>
-                            <span id="rttForfaitAffiche" class="rtt-detail-value">-</span>
-                        </div>
-                        <div class="rtt-detail-cell rtt-cell-result">
-                            <span class="rtt-detail-label">RTT</span>
-                            <strong id="rttCalcules" class="rtt-result-value">-</strong>
-                        </div>
-                        <div class="rtt-detail-cell rtt-cell-action">
-                            <button id="btnEnregistrerRTT" class="btn-primary">
-                                <i class="fa-solid fa-save"></i> Enregistrer
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="rttWarningFeries" class="rtt-warning" style="display: none;"></div>
-
-            <div id="tableRTTAnnuels" class="table-historique" style="margin-top: 16px;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Année</th>
-                            <th>Période</th>
-                            <th>Jours ouvrés</th>
-                            <th>Fériés</th>
-                            <th>CP</th>
-                            <th>Forfait</th>
-                            <th>RTT</th>
-                        </tr>
-                    </thead>
-                    <tbody id="rttAnnuelsBody">
-                        <tr>
-                            <td colspan="7" style="text-align: center; padding: 20px;">Chargement...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="config-note">
-            <i class="fa-solid fa-info-circle"></i>
-            <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine
-            si le traitement a déjà été effectué cette année.
-        </div>
-
-        <div class="config-actions">
-            <button id="btnEnregistrerConfig" class="btn-primary btn-large">
-                <i class="fa-solid fa-save"></i> Enregistrer la configuration
-            </button>
-        </div>
-    </div>
-
-    <!-- Historique des traitements -->
-    <div class="historique-traitements">
-        <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>
-        <div id="tableHistorique" class="table-historique">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Date d'exécution</th>
-                        <th>Année</th>
-                        <th>Salariés traités</th>
-                        <th>Statut</th>
-                    </tr>
-                </thead>
-                <tbody id="historiqueBody">
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 20px;">
-                            Chargement...
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-            </section>
+            <!-- rtt-section supprimée — contenu fusionné dans parametres-section -->
            
             <!-- Section Historique -->
             <section id="historique-section" class="content-section">
@@ -730,6 +537,236 @@
                     <div class="stats-card">
                         <h3>Détail des absences par salarié</h3>
                         <div id="tableAbsencesSalaries" class="table-absences-stats"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Paramètres (fusionnée avec Planning des traitements) -->
+            <section id="parametres-section" class="content-section">
+                <h2><i class="fa-solid fa-gear"></i> Paramètres</h2>
+
+                <!-- Taux CP -->
+                <div class="parametres-grid">
+                    <div class="param-card">
+                        <h3><i class="fa-solid fa-calculator"></i> Taux d'acquisition CP</h3>
+                        <p class="param-description">Ces taux sont utilisés par le traitement CP mensuel pour calculer les jours acquis par chaque salarié.</p>
+
+                        <div class="param-row">
+                            <label for="tauxCpNormal">Taux mensuel normal (jours)</label>
+                            <input type="number" id="tauxCpNormal" step="0.00001" value="2.08333">
+                            <small>25 jours / 12 mois = 2.08333</small>
+                        </div>
+
+                        <div class="param-row">
+                            <label for="tauxCpArret">Taux mensuel arrêt maladie (jours)</label>
+                            <input type="number" id="tauxCpArret" step="0.00001" value="1.66333">
+                            <small>Taux réduit appliqué pendant un arrêt maladie</small>
+                        </div>
+
+                        <div class="param-actions">
+                            <button id="btnSaveParamTaux" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+                            <span id="paramTauxMsg" class="param-msg"></span>
+                        </div>
+                    </div>
+
+                    <div class="param-card">
+                        <h3><i class="fa-solid fa-info-circle"></i> Fonctionnement CP</h3>
+                        <ul class="param-info-list">
+                            <li><strong>Chaque 1er du mois</strong>, le traitement CP mensuel s'exécute automatiquement et ajoute les CP en CP N pour chaque salarié actif.</li>
+                            <li>Si un salarié est embauché en cours de mois, le calcul est proratisé à partir de sa date d'embauche.</li>
+                            <li>Si un salarié passe en arrêt maladie en cours de mois, le taux normal s'applique jusqu'à la date d'effet et le taux arrêt pour le reste du mois.</li>
+                            <li>Le <strong>basculement annuel</strong> (CP N → CP N-1) est déclenché à la date configurée ci-dessous.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Planning des traitements -->
+                <div class="config-traitements" style="margin-top: 20px;">
+                    <h3><i class="fa-solid fa-cog"></i> Dates de traitement automatique</h3>
+                    <div class="config-cards-grid">
+                        <div class="config-card">
+                            <div class="config-header">
+                                <h4><i class="fa-solid fa-arrow-right"></i> Basculement annuel des CP</h4>
+                                <p>Transfert CP N → CP N-1</p>
+                            </div>
+                            <div class="config-body">
+                                <div class="config-date">
+                                    <label>Date de traitement :</label>
+                                    <select id="cpJour" class="select-jour"></select>
+                                    <select id="cpMois" class="select-mois">
+                                        <option value="1" selected>Janvier</option>
+                                        <option value="2">Février</option>
+                                        <option value="3">Mars</option>
+                                        <option value="4">Avril</option>
+                                        <option value="5">Mai</option>
+                                        <option value="6">Juin</option>
+                                        <option value="7">Juillet</option>
+                                        <option value="8">Août</option>
+                                        <option value="9">Septembre</option>
+                                        <option value="10">Octobre</option>
+                                        <option value="11">Novembre</option>
+                                        <option value="12">Décembre</option>
+                                    </select>
+                                </div>
+                                <div class="config-historique">
+                                    <strong>Dernier traitement :</strong> <span id="cpDernierTraitement">Chargement...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-card">
+                            <div class="config-header">
+                                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
+                                <p>Ajout des RTT annuels à chaque salarié éligible</p>
+                            </div>
+                            <div class="config-body">
+                                <div class="config-date">
+                                    <label>Date de traitement :</label>
+                                    <select id="rttJour" class="select-jour"></select>
+                                    <select id="rttMois" class="select-mois">
+                                        <option value="1">Janvier</option>
+                                        <option value="2">Février</option>
+                                        <option value="3">Mars</option>
+                                        <option value="4">Avril</option>
+                                        <option value="5">Mai</option>
+                                        <option value="6" selected>Juin</option>
+                                        <option value="7">Juillet</option>
+                                        <option value="8">Août</option>
+                                        <option value="9">Septembre</option>
+                                        <option value="10">Octobre</option>
+                                        <option value="11">Novembre</option>
+                                        <option value="12">Décembre</option>
+                                    </select>
+                                </div>
+                                <div class="config-historique">
+                                    <strong>Dernier traitement :</strong> <span id="rttDernierTraitement">Chargement...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calcul RTT -->
+                    <div class="rtt-calc-card">
+                        <h4><i class="fa-solid fa-calculator"></i> Calcul RTT par année</h4>
+                        <div class="rtt-calc-row">
+                            <div class="rtt-form-inline">
+                                <div class="form-group-inline">
+                                    <label for="rttAnnee">Année</label>
+                                    <input type="number" id="rttAnnee" min="2022" placeholder="2026">
+                                </div>
+                                <div class="form-group-inline">
+                                    <label for="rttCPDeduire">CP</label>
+                                    <input type="number" id="rttCPDeduire" min="0" max="30" value="25">
+                                </div>
+                                <div class="form-group-inline">
+                                    <label for="rttForfaitJours">Forfait</label>
+                                    <input type="number" id="rttForfaitJours" min="200" max="230" value="218">
+                                </div>
+                                <button id="btnCalculerRTT" class="btn-secondary">
+                                    <i class="fa-solid fa-calculator"></i> Calculer
+                                </button>
+                            </div>
+
+                            <div id="rttDetailCalc" class="rtt-detail-calc" style="display: none;">
+                                <div class="rtt-detail-grid">
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Période</span>
+                                        <strong id="rttPeriodeLabel" class="rtt-detail-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Jours</span>
+                                        <span id="rttJoursPeriode" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">WE</span>
+                                        <span id="rttWeekends" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Fériés</span>
+                                        <span id="rttFeries" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-accent">
+                                        <span class="rtt-detail-label">Jours ouvrés</span>
+                                        <strong id="rttJoursOuvres" class="rtt-detail-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">CP</span>
+                                        <span id="rttCPAffiche" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Forfait</span>
+                                        <span id="rttForfaitAffiche" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-result">
+                                        <span class="rtt-detail-label">RTT</span>
+                                        <strong id="rttCalcules" class="rtt-result-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-action">
+                                        <button id="btnEnregistrerRTT" class="btn-primary">
+                                            <i class="fa-solid fa-save"></i> Enregistrer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="rttWarningFeries" class="rtt-warning" style="display: none;"></div>
+
+                        <div id="tableRTTAnnuels" class="table-historique" style="margin-top: 16px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Année</th>
+                                        <th>Période</th>
+                                        <th>Jours ouvrés</th>
+                                        <th>Fériés</th>
+                                        <th>CP</th>
+                                        <th>Forfait</th>
+                                        <th>RTT</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rttAnnuelsBody">
+                                    <tr>
+                                        <td colspan="7" style="text-align: center; padding: 20px;">Chargement...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="config-note">
+                        <i class="fa-solid fa-info-circle"></i>
+                        <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine
+                        si le traitement a déjà été effectué cette année.
+                    </div>
+
+                    <div class="config-actions">
+                        <button id="btnEnregistrerConfig" class="btn-primary btn-large">
+                            <i class="fa-solid fa-save"></i> Enregistrer la configuration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Historique des traitements -->
+                <div class="historique-traitements" style="margin-top: 20px;">
+                    <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>
+                    <div id="tableHistorique" class="table-historique">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Date d'exécution</th>
+                                    <th>Année</th>
+                                    <th>Salariés traités</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historiqueBody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 20px;">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>

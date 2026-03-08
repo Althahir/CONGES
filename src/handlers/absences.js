@@ -132,8 +132,10 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
                                     let nouveauRTT = soldes.rtt;
                                     let nouvelleRecup = soldes.recup_heures;
 
-                                    if (type === 'CP_N' || type === 'CP_N1' || type === 'CP') {
+                                    if (type === 'CP_N1') {
                                         nouveauCPN1 = soldes.cp_n1 + dureeJours;
+                                    } else if (type === 'CP_N' || type === 'CP') {
+                                        nouveauCPN = soldes.cp_n + dureeJours;
                                     } else if (type === 'RTT') {
                                         nouveauRTT = soldes.rtt + dureeJours;
                                     } else if (type === 'RECUP') {

@@ -1,4 +1,10 @@
+const { calculerCPMensuel, getTauxGlobaux: getTauxGlobauxUtil, getJoursFeriesAnnee } = require('./utils-cp');
+
 module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
+
+    function getTauxGlobaux() {
+        return getTauxGlobauxUtil(ctx.db);
+    }
 
     // ========== CONFIGURATION ==========
 
@@ -50,15 +56,109 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
         });
     });
 
-    // ========== TRAITEMENT CP ANNUEL (IPC) ==========
+    // ========== TRAITEMENT CP MENSUEL (IPC) ==========
+
+    safeHandle('executerTraitementCPMensuel', async (event, annee, mois) => {
+        return new Promise((resolve, reject) => {
+            ctx.db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
+                if (err) { reject(err); return; }
+
+                try {
+                    const taux = await getTauxGlobaux();
+                    const joursFeries = await getJoursFeriesAnnee(ctx.db, annee);
+                    let nbMisAJour = 0;
+                    let details = [];
+                    let erreurs = [];
+
+                    for (const salarie of salaries) {
+                        try {
+                            // Récupérer l'historique des taux pour ce salarié
+                            const historique = await new Promise((res, rej) => {
+                                ctx.db.all(
+                                    'SELECT * FROM historique_taux WHERE salarie_id = ? ORDER BY date_effet ASC',
+                                    [salarie.id],
+                                    (err, rows) => { if (err) rej(err); else res(rows || []); }
+                                );
+                            });
+
+                            const cpAAjouter = calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries);
+
+                            if (cpAAjouter <= 0) continue;
+
+                            const soldes = await new Promise((res, rej) => {
+                                ctx.db.get(
+                                    'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                                    [salarie.id, annee],
+                                    (err, row) => { if (err) rej(err); else res(row); }
+                                );
+                            });
+
+                            if (!soldes) {
+                                // Créer la ligne soldes si elle n'existe pas
+                                await new Promise((res, rej) => {
+                                    ctx.db.run(
+                                        'INSERT INTO soldes (salarie_id, annee, cp_n, cp_n1, rtt, recup_heures) VALUES (?, ?, 0, 0, 0, 0)',
+                                        [salarie.id, annee],
+                                        (err) => { if (err) rej(err); else res(); }
+                                    );
+                                });
+                            }
+
+                            const ancienCPN = soldes ? soldes.cp_n : 0;
+                            const nouveauCPN = ancienCPN + cpAAjouter;
+
+                            await new Promise((res, rej) => {
+                                ctx.db.run(
+                                    'UPDATE soldes SET cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                    [nouveauCPN, salarie.id, annee],
+                                    (err) => { if (err) rej(err); else res(); }
+                                );
+                            });
+
+                            nbMisAJour++;
+                            details.push({
+                                salarie_id: salarie.id,
+                                nom: `${salarie.prenom} ${salarie.nom}`,
+                                cp_ajoutes: cpAAjouter.toFixed(5),
+                                nouveau_cp_n: nouveauCPN.toFixed(5)
+                            });
+
+                        } catch (error) {
+                            console.error(`Erreur CP mensuel pour ${salarie.prenom} ${salarie.nom}:`, error);
+                            erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                        }
+                    }
+
+                    const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+
+                    ctx.db.run(
+                        'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                        [`CP_MENSUEL_${mois}`, annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                        (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
+                    );
+
+                    const notifTitre = statut === 'success' ? `Traitement CP mensuel (mois ${mois}) effectué` : `Traitement CP mensuel (mois ${mois}) — erreurs`;
+                    const notifMessage = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s)` : (erreurs.join(', ') || 'Aucun salarié traité');
+                    ctx.db.run(
+                        `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
+                        [notifTitre, notifMessage, statut]
+                    );
+
+                    resolve({ success: statut !== 'error', statut, nbMisAJour, details, erreurs });
+
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+    });
+
+    // ========== TRAITEMENT CP ANNUEL (IPC) — basculement N → N-1 uniquement ==========
 
     safeHandle('executerTraitementCP', async (event, annee) => {
         return new Promise((resolve, reject) => {
             ctx.db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
+                if (err) { reject(err); return; }
 
                 let nbMisAJour = 0;
                 let details = [];
@@ -66,34 +166,24 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
                 for (const salarie of salaries) {
                     try {
-                        const dateEmbauche = new Date(salarie.date_embauche);
-                        const anneeEmbauche = dateEmbauche.getFullYear();
-
-                        let cpNouveaux = salarie.cp_mensuel * 12;
-
                         const soldes = await new Promise((res, rej) => {
                             ctx.db.get(
                                 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
                                 [salarie.id, annee],
-                                (err, row) => {
-                                    if (err) rej(err);
-                                    else res(row);
-                                }
+                                (err, row) => { if (err) rej(err); else res(row); }
                             );
                         });
 
                         if (soldes) {
+                            // Basculement : CP N → CP N-1 (cumul), CP N remis à 0
                             const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
-                            const nouveauCPN = cpNouveaux;
+                            const nouveauCPN = 0;
 
                             await new Promise((res, rej) => {
                                 ctx.db.run(
                                     'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
                                     [nouveauCPN1, nouveauCPN, salarie.id, annee],
-                                    (err) => {
-                                        if (err) rej(err);
-                                        else res();
-                                    }
+                                    (err) => { if (err) rej(err); else res(); }
                                 );
                             });
 
@@ -103,7 +193,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                 nom: `${salarie.prenom} ${salarie.nom}`,
                                 cp_transferes: soldes.cp_n.toFixed(2),
                                 nouveau_cp_n1: nouveauCPN1.toFixed(2),
-                                nouveaux_cp_n: nouveauCPN.toFixed(2)
+                                nouveaux_cp_n: '0.00'
                             });
                         }
 
@@ -118,25 +208,17 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 ctx.db.run(
                     'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
                     ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                    (err) => {
-                        if (err) console.error('Erreur enregistrement historique:', err);
-                    }
+                    (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
                 );
 
-                const notifTitreCP = statut === 'success' ? 'Traitement CP Annuel effectué' : (statut === 'partial' ? 'Traitement CP Annuel partiel' : 'Erreur traitement CP Annuel');
-                const notifMessageCP = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) avec succès` : (erreurs.join(', ') || 'Aucun salarié traité');
+                const notifTitreCP = statut === 'success' ? 'Basculement CP annuel effectué' : (statut === 'partial' ? 'Basculement CP annuel partiel' : 'Erreur basculement CP annuel');
+                const notifMessageCP = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) — CP N transférés en CP N-1` : (erreurs.join(', ') || 'Aucun salarié traité');
                 ctx.db.run(
                     `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
                     [notifTitreCP, notifMessageCP, statut]
                 );
 
-                resolve({
-                    success: statut !== 'error',
-                    statut,
-                    nbMisAJour,
-                    details,
-                    erreurs
-                });
+                resolve({ success: statut !== 'error', statut, nbMisAJour, details, erreurs });
             });
         });
     });
@@ -149,10 +231,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
             ctx.db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
                 console.log('Erreur DB:', err);
                 console.log('Résultat DB:', rttAnnuel);
-                if (err) {
-                    reject(err);
-                    return;
-                }
+                if (err) { reject(err); return; }
 
                 if (!rttAnnuel) {
                     reject(new Error(`Aucun paramètre RTT configuré pour l'année ${annee}. Rendez-vous dans Planning des traitements pour les renseigner.`));
@@ -162,10 +241,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 const nbRTT = rttAnnuel.nb_rtt != null ? rttAnnuel.nb_rtt : (rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire);
 
                 ctx.db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
+                    if (err) { reject(err); return; }
 
                     let nbMisAJour = 0;
                     let details = [];
@@ -190,10 +266,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                 ctx.db.get(
                                     'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
                                     [salarie.id, annee],
-                                    (err, row) => {
-                                        if (err) rej(err);
-                                        else res(row);
-                                    }
+                                    (err, row) => { if (err) rej(err); else res(row); }
                                 );
                             });
 
@@ -204,10 +277,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                     ctx.db.run(
                                         'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
                                         [nouveauRTT, salarie.id, annee],
-                                        (err) => {
-                                            if (err) rej(err);
-                                            else res();
-                                        }
+                                        (err) => { if (err) rej(err); else res(); }
                                     );
                                 });
 
@@ -231,9 +301,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                     ctx.db.run(
                         'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
                         ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                        (err) => {
-                            if (err) console.error('Erreur enregistrement historique:', err);
-                        }
+                        (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
                     );
 
                     const notifTitreRTT = statut === 'success' ? 'Traitement RTT Annuel effectué' : (statut === 'partial' ? 'Traitement RTT Annuel partiel' : 'Erreur traitement RTT Annuel');
@@ -243,13 +311,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                         [notifTitreRTT, notifMessageRTT, statut]
                     );
 
-                    resolve({
-                        success: statut !== 'error',
-                        statut,
-                        nbMisAJour,
-                        details,
-                        erreurs
-                    });
+                    resolve({ success: statut !== 'error', statut, nbMisAJour, details, erreurs });
                 });
             });
         });
@@ -266,6 +328,30 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
         const jour = aujourdhui.getDate();
 
         try {
+            // --- Traitement CP mensuel automatique (1er du mois) ---
+            if (jour === 1) {
+                // Traiter le mois précédent
+                let moisATraiter = mois - 1;
+                let anneeATraiter = annee;
+                if (moisATraiter === 0) { moisATraiter = 12; anneeATraiter--; }
+
+                const dejaFaitMensuel = await new Promise((resolve, reject) => {
+                    ctx.db.get(
+                        'SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = "success"',
+                        [`CP_MENSUEL_${moisATraiter}`, anneeATraiter],
+                        (err, row) => { if (err) reject(err); else resolve(row); }
+                    );
+                });
+
+                if (!dejaFaitMensuel) {
+                    console.log(`Exécution du traitement CP mensuel pour ${moisATraiter}/${anneeATraiter}...`);
+                    await executerTraitementCPMensuelAuto(anneeATraiter, moisATraiter);
+                } else {
+                    console.log(`Traitement CP mensuel ${moisATraiter}/${anneeATraiter} déjà effectué`);
+                }
+            }
+
+            // --- Traitements annuels (CP basculement + RTT) ---
             const config = await new Promise((resolve, reject) => {
                 ctx.db.all('SELECT * FROM config_traitements WHERE actif = 1', (err, rows) => {
                     if (err) reject(err);
@@ -281,10 +367,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                         ctx.db.get(
                             'SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = "success"',
                             [conf.type, annee],
-                            (err, row) => {
-                                if (err) reject(err);
-                                else resolve(row);
-                            }
+                            (err, row) => { if (err) reject(err); else resolve(row); }
                         );
                     });
 
@@ -292,7 +375,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                         console.log(`Exécution du traitement ${conf.type}...`);
 
                         if (conf.type === 'CP_ANNUEL') {
-                            await executerTraitementCPAuto(annee);
+                            await executerTraitementCPAnnuelAuto(annee);
                         } else if (conf.type === 'RTT_ANNUEL') {
                             await executerTraitementRTTAuto(annee);
                         }
@@ -302,7 +385,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 }
             }
 
-            // Vérifier si les RTT de l'année suivante ne sont toujours pas configurés
+            // Rappel RTT année suivante
             const rttConfig = config.find(c => c.type === 'RTT_ANNUEL');
             if (rttConfig) {
                 let moisRappel = rttConfig.mois + 1;
@@ -352,15 +435,14 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
         }
     }
 
-    // Traitement CP automatique
-    async function executerTraitementCPAuto(annee) {
+    // Traitement CP mensuel automatique
+    async function executerTraitementCPMensuelAuto(annee, mois) {
+        const taux = await getTauxGlobaux();
+        const joursFeries = await getJoursFeriesAnnee(ctx.db, annee);
+
         return new Promise((resolve, reject) => {
             ctx.db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
-                if (err) {
-                    console.error('Erreur récupération salariés:', err);
-                    reject(err);
-                    return;
-                }
+                if (err) { reject(err); return; }
 
                 let nbMisAJour = 0;
                 let details = [];
@@ -368,31 +450,113 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
                 for (const salarie of salaries) {
                     try {
-                        const cpNouveaux = salarie.cp_mensuel * 12;
+                        const historique = await new Promise((res, rej) => {
+                            ctx.db.all(
+                                'SELECT * FROM historique_taux WHERE salarie_id = ? ORDER BY date_effet ASC',
+                                [salarie.id],
+                                (err, rows) => { if (err) rej(err); else res(rows || []); }
+                            );
+                        });
+
+                        const cpAAjouter = calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries);
+                        if (cpAAjouter <= 0) continue;
 
                         const soldes = await new Promise((res, rej) => {
                             ctx.db.get(
                                 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
                                 [salarie.id, annee],
-                                (err, row) => {
-                                    if (err) rej(err);
-                                    else res(row);
-                                }
+                                (err, row) => { if (err) rej(err); else res(row); }
+                            );
+                        });
+
+                        if (!soldes) {
+                            await new Promise((res, rej) => {
+                                ctx.db.run(
+                                    'INSERT INTO soldes (salarie_id, annee, cp_n, cp_n1, rtt, recup_heures) VALUES (?, ?, 0, 0, 0, 0)',
+                                    [salarie.id, annee],
+                                    (err) => { if (err) rej(err); else res(); }
+                                );
+                            });
+                        }
+
+                        const ancienCPN = soldes ? soldes.cp_n : 0;
+                        const nouveauCPN = ancienCPN + cpAAjouter;
+
+                        await new Promise((res, rej) => {
+                            ctx.db.run(
+                                'UPDATE soldes SET cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
+                                [nouveauCPN, salarie.id, annee],
+                                (err) => { if (err) rej(err); else res(); }
+                            );
+                        });
+
+                        nbMisAJour++;
+                        details.push({
+                            salarie_id: salarie.id,
+                            nom: `${salarie.prenom} ${salarie.nom}`,
+                            cp_ajoutes: cpAAjouter.toFixed(5),
+                            nouveau_cp_n: nouveauCPN.toFixed(5)
+                        });
+
+                    } catch (error) {
+                        console.error(`Erreur CP mensuel pour ${salarie.prenom} ${salarie.nom}:`, error);
+                        erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
+                    }
+                }
+
+                const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
+
+                ctx.db.run(
+                    'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
+                    [`CP_MENSUEL_${mois}`, annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
+                    (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
+                );
+
+                if (ctx.mainWindow && ctx.mainWindow.webContents) {
+                    ctx.mainWindow.webContents.send('traitement-automatique', {
+                        type: `CP_MENSUEL_${mois}`,
+                        statut,
+                        nbSalaries: nbMisAJour,
+                        details,
+                        erreurs
+                    });
+                }
+
+                console.log(`Traitement CP mensuel ${mois}/${annee} terminé: ${nbMisAJour} salariés traités`);
+                resolve({ success: statut !== 'error', nbMisAJour, statut });
+            });
+        });
+    }
+
+    // Traitement CP annuel automatique (basculement N → N-1)
+    async function executerTraitementCPAnnuelAuto(annee) {
+        return new Promise((resolve, reject) => {
+            ctx.db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
+                if (err) { reject(err); return; }
+
+                let nbMisAJour = 0;
+                let details = [];
+                let erreurs = [];
+
+                for (const salarie of salaries) {
+                    try {
+                        const soldes = await new Promise((res, rej) => {
+                            ctx.db.get(
+                                'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+                                [salarie.id, annee],
+                                (err, row) => { if (err) rej(err); else res(row); }
                             );
                         });
 
                         if (soldes) {
                             const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
-                            const nouveauCPN = cpNouveaux;
+                            const nouveauCPN = 0;
 
                             await new Promise((res, rej) => {
                                 ctx.db.run(
                                     'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
                                     [nouveauCPN1, nouveauCPN, salarie.id, annee],
-                                    (err) => {
-                                        if (err) rej(err);
-                                        else res();
-                                    }
+                                    (err) => { if (err) rej(err); else res(); }
                                 );
                             });
 
@@ -402,7 +566,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                 nom: `${salarie.prenom} ${salarie.nom}`,
                                 cp_transferes: soldes.cp_n.toFixed(2),
                                 nouveau_cp_n1: nouveauCPN1.toFixed(2),
-                                nouveaux_cp_n: nouveauCPN.toFixed(2)
+                                nouveaux_cp_n: '0.00'
                             });
                         }
                     } catch (error) {
@@ -416,9 +580,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 ctx.db.run(
                     'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
                     ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                    (err) => {
-                        if (err) console.error('Erreur enregistrement historique:', err);
-                    }
+                    (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
                 );
 
                 if (ctx.mainWindow && ctx.mainWindow.webContents) {
@@ -431,7 +593,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                     });
                 }
 
-                console.log(`Traitement CP terminé: ${nbMisAJour} salariés traités`);
+                console.log(`Basculement CP annuel terminé: ${nbMisAJour} salariés traités`);
                 resolve({ success: statut !== 'error', nbMisAJour, statut });
             });
         });
@@ -441,11 +603,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
     async function executerTraitementRTTAuto(annee) {
         return new Promise((resolve, reject) => {
             ctx.db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
-                if (err) {
-                    console.error('Erreur récupération RTT:', err);
-                    reject(err);
-                    return;
-                }
+                if (err) { console.error('Erreur récupération RTT:', err); reject(err); return; }
 
                 if (!rttAnnuel) {
                     console.error(`Aucun paramètre RTT pour ${annee}`);
@@ -467,11 +625,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 const nbRTT = rttAnnuel.nb_rtt != null ? rttAnnuel.nb_rtt : (rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire);
 
                 ctx.db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
-                    if (err) {
-                        console.error('Erreur récupération salariés RTT:', err);
-                        reject(err);
-                        return;
-                    }
+                    if (err) { console.error('Erreur récupération salariés RTT:', err); reject(err); return; }
 
                     let nbMisAJour = 0;
                     let details = [];
@@ -496,10 +650,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                 ctx.db.get(
                                     'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
                                     [salarie.id, annee],
-                                    (err, row) => {
-                                        if (err) rej(err);
-                                        else res(row);
-                                    }
+                                    (err, row) => { if (err) rej(err); else res(row); }
                                 );
                             });
 
@@ -510,10 +661,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                                     ctx.db.run(
                                         'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
                                         [nouveauRTT, salarie.id, annee],
-                                        (err) => {
-                                            if (err) rej(err);
-                                            else res();
-                                        }
+                                        (err) => { if (err) rej(err); else res(); }
                                     );
                                 });
 
@@ -536,9 +684,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                     ctx.db.run(
                         'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
                         ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                        (err) => {
-                            if (err) console.error('Erreur enregistrement historique:', err);
-                        }
+                        (err) => { if (err) console.error('Erreur enregistrement historique:', err); }
                     );
 
                     if (ctx.mainWindow && ctx.mainWindow.webContents) {

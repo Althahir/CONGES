@@ -46,8 +46,8 @@ const titresSectionAdmin = {
     'historique': 'Historique',
     'salaries': 'Salariés',
     'feries': 'Jours Fériés',
-    'rtt': 'Planning des traitements',
-    'statistiques': 'Statistiques'
+    'statistiques': 'Statistiques',
+    'parametres': 'Paramètres'
 };
 
 // Sections qui utilisent la navigation par année
@@ -150,11 +150,12 @@ navBtns.forEach(btn => {
             case 'feries':
                 chargerJoursFeries();
                 break;
-            case 'rtt':
-                chargerTableauRTT();
-                break;
             case 'statistiques':
                 setTimeout(() => chargerStatistiques(), 50);
+                break;
+            case 'parametres':
+                chargerParametres();
+                chargerTableauRTT();
                 break;
             }
     });
@@ -196,9 +197,9 @@ async function chargerSalaries() {
                         📅 Embauché le ${new Date(salarie.date_embauche).toLocaleDateString('fr-FR')}
                     </div>
                     <div class="salarie-info">
-                        CP/mois: ${salarie.cp_mensuel.toFixed(2)}j | 
-                        RTT: ${salarie.a_droit_rtt ? '✅' : '❌'} | 
+                        RTT: ${salarie.a_droit_rtt ? '✅' : '❌'} |
                         Récup: ${salarie.a_droit_recup ? '✅' : '❌'}
+                        ${salarie.en_arret_maladie ? ' | <span style="color: var(--rouge);">En arrêt maladie</span>' : ''}
                     </div>
                     ${soldes ? `
                         <div class="salarie-soldes">
@@ -413,8 +414,8 @@ async function chargerCalendrierGlobal() {
                         continue; // Passer au jour suivant
                     }
                                         
-                    tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
-                    
+                    tableHTML += `<td class="${cellClass}">`;
+
                     {
                         // Calculer la lettre du jour de la semaine (format français : L-D)
                         const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -430,21 +431,25 @@ async function chargerCalendrierGlobal() {
                         const nbAbsents = new Set(absentsJour.map(a => a.salarie_id)).size;
 
                         if (nbAbsents >= 8) {
-                            // Mode dégradé avec compteur
-                            tableHTML += `<div class="indicateur-degrade">${nbAbsents}</div>`;
+                            // Mode dégradé avec compteur — tooltip avec tous les noms
+                            const nomsUniques = [...new Set(absentsJour.map(a => `${a.prenom} ${a.nom}`))];
+                            const tooltipDegrade = nomsUniques.join(', ');
+                            tableHTML += `<div class="indicateur-degrade" data-tooltip="${tooltipDegrade}">${nbAbsents}</div>`;
                         } else {
-                            // Mode indicateurs individuels
+                            // Mode indicateurs individuels — tooltip par couleur
                             const indicateurs = new Array(8).fill(null);
+                            const nomsSalaries = new Array(8).fill(null);
                             absentsJour.forEach(abs => {
                                 const position = positionsSalaries[abs.salarie_id];
                                 if (position !== undefined && position < 8) {
                                     indicateurs[position] = couleursSalaries[abs.salarie_id];
+                                    nomsSalaries[position] = `${abs.prenom} ${abs.nom}`;
                                 }
                             });
 
-                            indicateurs.forEach(couleur => {
+                            indicateurs.forEach((couleur, idx) => {
                                 if (couleur) {
-                                    tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};"></div>`;
+                                    tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};" data-tooltip="${nomsSalaries[idx]}"></div>`;
                                 } else {
                                     tableHTML += '<div class="indicateur-colonne"></div>';
                                 }
@@ -871,6 +876,9 @@ document.getElementById('btnAjouterSalarie').addEventListener('click', () => {
     modalTitle.textContent = 'Ajouter un salarié';
     formSalarie.reset();
     document.getElementById('salarieId').value = '';
+    document.getElementById('en_arret_maladie').checked = false;
+    document.getElementById('date_arret_maladie').value = '';
+    document.getElementById('dateArretGroup').style.display = 'none';
     modal.style.display = 'flex';
 });
 
@@ -885,6 +893,25 @@ document.getElementById('cancelModal').addEventListener('click', () => {
 
 // Fermeture au clic extérieur désactivée
 
+// Toggle affichage date arrêt maladie
+document.getElementById('en_arret_maladie').addEventListener('change', function() {
+    const dateGroup = document.getElementById('dateArretGroup');
+    const label = document.getElementById('labelDateArret');
+    const dateInput = document.getElementById('date_arret_maladie');
+
+    if (editingSalarieId) {
+        // En mode édition : toujours demander la date (arrêt OU reprise)
+        dateGroup.style.display = '';
+        dateInput.value = '';
+        label.textContent = this.checked ? "Date de début d'arrêt *" : 'Date de reprise *';
+    } else {
+        // En mode création : seulement si coché
+        dateGroup.style.display = this.checked ? '' : 'none';
+        label.textContent = "Date de début d'arrêt *";
+        if (!this.checked) dateInput.value = '';
+    }
+});
+
 // Soumission du formulaire
 formSalarie.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -895,15 +922,39 @@ formSalarie.addEventListener('submit', async (e) => {
     errorMsg.classList.remove('show');
     successMsg.classList.remove('show');
     
+    const enArret = document.getElementById('en_arret_maladie').checked ? 1 : 0;
+    const dateArret = document.getElementById('date_arret_maladie').value;
+
+    // Validation : la date est obligatoire si on change le statut arrêt
+    if (editingSalarieId) {
+        // En édition : date obligatoire si le statut a changé
+        const dateGroup = document.getElementById('dateArretGroup');
+        if (dateGroup.style.display !== 'none' && !dateArret) {
+            const errorMsg2 = document.getElementById('errorModalMessage');
+            errorMsg2.textContent = enArret ? 'La date de début d\'arrêt est obligatoire' : 'La date de reprise est obligatoire';
+            errorMsg2.classList.add('show');
+            return;
+        }
+    } else {
+        // En création : date obligatoire seulement si en arrêt
+        if (enArret && !dateArret) {
+            const errorMsg2 = document.getElementById('errorModalMessage');
+            errorMsg2.textContent = 'La date de début d\'arrêt est obligatoire';
+            errorMsg2.classList.add('show');
+            return;
+        }
+    }
+
     const salarieData = {
         nom: document.getElementById('nom').value.trim(),
         prenom: document.getElementById('prenom').value.trim(),
         email: document.getElementById('email').value.trim(),
         date_embauche: document.getElementById('date_embauche').value,
         type_contrat: document.getElementById('type_contrat').value,
-        cp_mensuel: parseFloat(document.getElementById('cp_mensuel').value),
         a_droit_rtt: document.getElementById('a_droit_rtt').checked ? 1 : 0,
-        a_droit_recup: document.getElementById('a_droit_recup').checked ? 1 : 0
+        a_droit_recup: document.getElementById('a_droit_recup').checked ? 1 : 0,
+        en_arret_maladie: enArret,
+        date_arret_maladie: dateArret || null
     };
     
     try {
@@ -961,9 +1012,12 @@ window.editSalarie = async (salarieId) => {
         document.getElementById('email').value = salarie.email;
         document.getElementById('date_embauche').value = salarie.date_embauche;
         document.getElementById('type_contrat').value = salarie.type_contrat;
-        document.getElementById('cp_mensuel').value = salarie.cp_mensuel;
         document.getElementById('a_droit_rtt').checked = salarie.a_droit_rtt === 1;
         document.getElementById('a_droit_recup').checked = salarie.a_droit_recup === 1;
+        document.getElementById('en_arret_maladie').checked = salarie.en_arret_maladie === 1;
+        document.getElementById('date_arret_maladie').value = '';
+        document.getElementById('dateArretGroup').style.display = 'none';
+        document.getElementById('labelDateArret').textContent = "Date de début d'arrêt *";
         
         modal.style.display = 'flex';
     } catch (error) {
@@ -2982,7 +3036,7 @@ async function executerExport() {
         
         // ========== ONGLET 1 : SOLDES ==========
         const dataSoldes = [
-            ['Nom', 'Prénom', 'Email', 'Type Contrat', 'CP/mois', 'RTT', 'Récup', 'CP N-1', 'CP N', 'RTT', 'Récup (h)']
+            ['Nom', 'Prénom', 'Email', 'Type Contrat', 'Arrêt maladie', 'RTT', 'Récup', 'CP N-1', 'CP N', 'RTT', 'Récup (h)']
         ];
         
         for (const salarie of salaries) {
@@ -2995,7 +3049,7 @@ async function executerExport() {
                 salarie.prenom,
                 salarie.email,
                 salarie.type_contrat,
-                salarie.cp_mensuel,
+                salarie.en_arret_maladie ? 'Oui' : 'Non',
                 salarie.a_droit_rtt ? 'Oui' : 'Non',
                 salarie.a_droit_recup ? 'Oui' : 'Non',
                 soldes ? soldes.cp_n1 : 0,
@@ -4079,3 +4133,33 @@ function initModalHeuresSupAdmin() {
 // ========== FIN TEST ==========
 
 initModalHeuresSupAdmin();
+
+// ========== SECTION PARAMETRES ==========
+
+async function chargerParametres() {
+    try {
+        const config = await window.api.getConfigApp();
+        document.getElementById('tauxCpNormal').value = config.taux_cp_normal || '2.08333';
+        document.getElementById('tauxCpArret').value = config.taux_cp_arret || '1.66333';
+    } catch (error) {
+        console.error('Erreur chargement paramètres:', error);
+    }
+}
+
+document.getElementById('btnSaveParamTaux')?.addEventListener('click', async () => {
+    const tauxNormal = document.getElementById('tauxCpNormal').value;
+    const tauxArret = document.getElementById('tauxCpArret').value;
+    const msg = document.getElementById('paramTauxMsg');
+
+    try {
+        await window.api.updateConfigApp('taux_cp_normal', tauxNormal);
+        await window.api.updateConfigApp('taux_cp_arret', tauxArret);
+        msg.textContent = 'Paramètres enregistrés !';
+        msg.className = 'param-msg success';
+        setTimeout(() => { msg.textContent = ''; msg.className = 'param-msg'; }, 3000);
+    } catch (error) {
+        console.error('Erreur sauvegarde paramètres:', error);
+        msg.textContent = 'Erreur lors de la sauvegarde';
+        msg.className = 'param-msg error';
+    }
+});

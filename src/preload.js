@@ -258,6 +258,8 @@ contextBridge.exposeInMainWorld('api', {
     getHistoriqueTraitements: () => ipcRenderer.invoke('getHistoriqueTraitements'),
     /** @param {number} annee @returns {Promise<TraitementResult>} */
     executerTraitementCP: (annee) => ipcRenderer.invoke('executerTraitementCP', annee),
+    /** @param {number} annee @param {number} mois @returns {Promise<TraitementResult>} */
+    executerTraitementCPMensuel: (annee, mois) => ipcRenderer.invoke('executerTraitementCPMensuel', annee, mois),
     /** @param {number} annee @returns {Promise<TraitementResult>} */
     executerTraitementRTT: (annee) => ipcRenderer.invoke('executerTraitementRTT', annee),
 
@@ -276,6 +278,15 @@ contextBridge.exposeInMainWorld('api', {
     onTraitementAutomatique: (callback) => {
         ipcRenderer.on('traitement-automatique', (event, data) => callback(data));
     },
+
+    // Configuration applicative (taux CP)
+
+    /** @returns {Promise<{taux_cp_normal: string, taux_cp_arret: string}>} */
+    getConfigApp: () => ipcRenderer.invoke('getConfigApp'),
+    /** @param {string} cle @param {string} valeur @returns {Promise<SuccessResult>} */
+    updateConfigApp: (cle, valeur) => ipcRenderer.invoke('updateConfigApp', cle, valeur),
+    /** @param {number} salarieId @returns {Promise<Array>} */
+    getHistoriqueTaux: (salarieId) => ipcRenderer.invoke('getHistoriqueTaux', salarieId),
 
     // Navigation
 

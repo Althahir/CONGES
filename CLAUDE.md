@@ -19,20 +19,36 @@
 
 ```
 src/
-├── main.js              # Processus principal Electron — tous les handlers IPC (~1530 lignes)
-├── preload.js           # Bridge contextIsolation — expose window.api au renderer
-├── assets/              # Logo, favicon
+├── main.js              # Processus principal Electron (~170 lignes) — setup, DB, migrations, fenêtre
+├── preload.js           # Bridge contextIsolation — expose window.api au renderer (~230 lignes)
+├── handlers/            # Modules IPC (12 fichiers)
+│   ├── auth.js
+│   ├── salaries.js
+│   ├── soldes.js
+│   ├── absences.js
+│   ├── heures-sup.js
+│   ├── traitements.js       # Traitements CP (mensuel + annuel) et RTT
+│   ├── config-app.js        # CRUD paramètres globaux (taux CP)
+│   ├── utils-cp.js          # Fonctions partagées calcul CP (calculerCPMensuel, etc.)
+│   ├── notifications.js
+│   ├── jours-feries.js
+│   ├── rtt.js
+│   ├── calcul.js
+│   ├── pdf.js
+│   └── navigation.js
+├── assets/              # Logo, favicon, icônes
 ├── pages/
 │   ├── login.html
 │   ├── dashboard-user.html
 │   └── dashboard-admin.html
 ├── js/
 │   ├── dashboard-user.js    # Logique UI utilisateur (~720 lignes)
-│   └── dashboard-admin.js   # Logique UI admin (~2740 lignes)
+│   ├── dashboard-admin.js   # Logique UI admin (~2800 lignes)
+│   └── chart.umd.js        # Chart.js (local)
 └── css/
     ├── common.css           # Variables CSS globales + styles partagés
     ├── dashboard-user.css   # Styles page user
-    └── dashboard-admin.css  # Styles page admin (~2900 lignes)
+    └── dashboard-admin.css  # Styles page admin (~3050 lignes)
 
 database/
 └── conges.db            # Template SQLite (gitignore: *.db)
@@ -54,9 +70,10 @@ window.api.getSoldes()  →   ipcRenderer.invoke()    →   ipcMain.handle('getS
 ```
 
 - **contextIsolation: true**, nodeIntegration: false
-- Toutes les fonctions DB passent par `ipcMain.handle` dans `main.js`
+- Handlers IPC découpés en 12 modules dans `src/handlers/` — pattern : `module.exports = function(ctx, safeHandle)`
+- `safeHandle(channel, handler)` : wrapper try/catch centralisé + logging `[IPC ERROR]`
 - Toutes exposées via `contextBridge.exposeInMainWorld('api', {...})` dans `preload.js`
-- La DB est **copiée depuis `src/conges.db` (template) vers AppData** à la première installation
+- La DB est **copiée depuis `database/conges.db` (template) vers le dossier configuré** (SharePoint/OneDrive ou AppData)
 
 ---
 
@@ -64,21 +81,32 @@ window.api.getSoldes()  →   ipcRenderer.invoke()    →   ipcMain.handle('getS
 
 ```sql
 salaries     (id, nom, prenom, email, date_embauche, cp_mensuel, a_droit_rtt,
-              a_droit_recup, actif, role)             -- role: 'admin' | 'user'
+              a_droit_recup, en_arret_maladie, date_arret_maladie, actif, role,
+              premiere_connexion)
+              -- role: 'admin' | 'utilisateur'
+              -- cp_mensuel: obsolète (mis à 0), remplacé par taux globaux
+              -- en_arret_maladie: 0|1, date_arret_maladie: date ISO
 
 soldes       (id, salarie_id, annee, cp_n1, cp_n, rtt, recup_heures)
 
 absences     (id, salarie_id, type, date_debut, date_fin, duree_jours,
-              duree_heures, commentaire, statut)
+              duree_heures, commentaire, statut, date_creation,
+              debut_periode, fin_periode)
               -- type: 'CP' | 'RTT' | 'RECUP' | 'MALADIE'
+              -- debut_periode/fin_periode: 'journee-complete' | 'midi' | 'apres-midi'
 
 jours_feries (id, date, libelle, annee)
 
+config_app            (id, cle, valeur)
+                      -- taux_cp_normal (défaut 2.08333), taux_cp_arret (défaut 1.66333)
+historique_taux       (id, salarie_id, date_effet, ancien_taux, nouveau_taux)
+                      -- Trace les passages normal↔arret avec date d'effet
 config_traitements    (id, type, jour, mois)
 historique_traitements(id, type, annee, date_execution, nb_salaries_traites, statut)
 notifications         (id, user_id, type, titre, message, date_creation, lue)
-rtt_annuels           (id, annee_debut, nb_jours_travailles, nb_cp_a_deduire)
-                      -- ⚠️ À VÉRIFIER : table peut-être absente du template DB
+rtt_annuels           (id, annee_debut, nb_jours_travailles, nb_cp_a_deduire,
+                       nb_jours_periode, nb_jours_we, nb_jours_feries_hors_we, nb_rtt)
+heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation)
 ```
 
 ---
@@ -88,26 +116,35 @@ rtt_annuels           (id, annee_debut, nb_jours_travailles, nb_cp_a_deduire)
 | Règle | Valeur |
 |---|---|
 | 1 jour ouvré | = 7 heures |
-| CP mensuel | défini par salarié (`cp_mensuel` dans `salaries`) |
+| Taux CP normal | 2.08333 j/mois (configurable dans Paramètres, table `config_app`) |
+| Taux CP arrêt maladie | 1.66333 j/mois (configurable dans Paramètres, table `config_app`) |
+| Calcul CP mensuel | Pro-rata en **jours ouvrés** (lun-ven hors fériés), segments par taux si changement mid-mois |
+| Traitement CP mensuel | Auto le 1er de chaque mois, calcule le mois précédent → ajoute à `cp_n` |
+| Traitement CP annuel | Transfert N→N-1 (cp_n ajouté à cp_n1, cp_n remis à 0) |
 | Période CP | N-1 (1 juin → 31 mai) → alimente `cp_n1` ; N = en cours |
 | RTT | annuel, calculé par traitement auto |
 | RECUP | en **heures** dans la DB (`duree_heures`), converti en jours pour affichage |
-| MALADIE | ne débite aucun solde |
+| MALADIE | ne débite aucun solde, géré via case à cocher dans la fiche salarié |
 | Solde négatif | autorisé techniquement, à contrôler côté UI |
 
 ---
 
-## Handlers IPC dans main.js (tous présents)
+## Handlers IPC (dans `src/handlers/`)
 
-**Auth** : `login`, `logout`, `checkFirstLogin`, `setPassword`, `resetPassword`
-**Salariés** : `getSalarie`, `getAllSalaries`, `createSalarie`, `updateSalarie`, `deactivateSalarie`
-**Soldes** : `getSoldes`, `updateSoldes`, `updateSoldesAfterAbsence`
-**Absences** : `createAbsence`, `getAbsences`, `getAllAbsences`, `deleteAbsence`, `updateAbsence`
-**Jours fériés** : `getJoursFeries`, `addJourFerie`
-**RTT** : `getRTTAnnuels`, `addRTTAnnuel`
-**Traitements** : `executerTraitementCP`, `executerTraitementRTT`, `getConfigTraitements`, `updateConfigTraitement`, `getHistoriqueTraitements`
-**Notifications** : `getNotificationsNonLues`, `marquerNotificationLue`, `creerNotification`
-**Divers** : `calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode)`, `genererPDF`, `navigateTo`
+**Auth** (`auth.js`) : `login`, `logout`, `checkFirstLogin`, `setPassword`, `resetPassword`
+**Salariés** (`salaries.js`) : `getSalarie`, `getAllSalaries`, `createSalarie`, `updateSalarie`, `deactivateSalarie`
+**Soldes** (`soldes.js`) : `getSoldes`, `updateSoldes`, `updateSoldesAfterAbsence`
+**Absences** (`absences.js`) : `createAbsence`, `getAbsences`, `getAllAbsences`, `deleteAbsence`, `updateAbsence`
+**Heures sup** (`heures-sup.js`) : `ajouter-recup`, `getHeuresSup`
+**Jours fériés** (`jours-feries.js`) : `getJoursFeries`, `addJourFerie`, `deleteJourFerie`
+**RTT** (`rtt.js`) : `getRTTAnnuels`, `addRTTAnnuel`
+**Traitements** (`traitements.js`) : `executerTraitementCP`, `executerTraitementCPMensuel`, `executerTraitementRTT`, `getConfigTraitements`, `updateConfigTraitement`, `getHistoriqueTraitements`, `logHistoriqueTraitement`
+**Config** (`config-app.js`) : `getConfigApp`, `updateConfigApp`, `getHistoriqueTaux`
+**Notifications** (`notifications.js`) : `getNotificationsNonLues`, `marquerNotificationLue`, `creerNotification`
+**Calcul** (`calcul.js`) : `calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode)`
+**PDF** (`pdf.js`) : `genererPDF`, `exporterRecapPDF`
+**Navigation** (`navigation.js`) : `navigateTo`
+**Utilitaires** (`utils-cp.js`) : `calculerCPMensuel`, `getTauxGlobaux`, `getJoursFeriesAnnee` (non IPC, utilisé par traitements.js et salaries.js)
 
 ---
 
@@ -145,20 +182,23 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (03/03/2026)
+## État actuel du projet (08/03/2026)
 
-**Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/MALADIE), calendrier annuel, soldes compacts, traitements automatiques CP+RTT, export PDF, notifications DB, jours fériés.
+**Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles, traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié), notifications DB + toasts, jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, DB réseau (SharePoint/OneDrive), drag-to-select calendrier, demi-journées (AM/PM).
+
+**Onglet Paramètres** (admin) : regroupe les taux CP globaux, les dates de traitement (CP annuel + RTT), le calcul RTT, et l'historique des traitements.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
-Priorité haute : modal heures supplémentaires (bouton présent, handler IPC absent), vérification table `rtt_annuels` en DB, UI notifications.
 
 ---
 
 ## Conventions de code
 
 - Pas de framework JS — vanilla ES6+ avec `async/await`
-- Toutes les requêtes DB dans `main.js` via callbacks SQLite3 wrappés en `Promise`
+- Requêtes DB via callbacks SQLite3 wrappés en `Promise` dans les handlers `src/handlers/`
 - CSS scopé par section (`#mes-conges-section .ma-classe`) pour éviter les conflits admin/user
 - Les commentaires de section CSS suivent le pattern `/* ========== TITRE ========== */`
 - `bcrypt` : 10 rounds pour le hachage des mots de passe
-- Fenêtre Electron : démarrage en `maximize()`, pas de `minWidth`/`minHeight` défini (TODO)
+- Fenêtre Electron : démarrage en `maximize()`, `minWidth: 900`, `minHeight: 600`
+- Migrations DB versionnées : tableau `MIGRATIONS[]` dans `main.js`, table `db_version`
+- Mode WAL + verrou `.lock` pour accès réseau concurrent

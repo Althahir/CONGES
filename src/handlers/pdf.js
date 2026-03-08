@@ -164,23 +164,18 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     doc.fillColor('#666').fontSize(9).font('Helvetica')
                        .text('Date : _______________', margin + colW + 10, ySign + 85, { lineBreak: false });
                 } else {
-                    // User : 3 colonnes — Salarié(e) + Responsable + Président(e)
-                    const colW = contentW / 3;
+                    // User : 2 colonnes — Salarié(e) + Responsable
+                    const colW = contentW / 2;
 
                     doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Salarié(e)', margin + 5, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(8).font('Helvetica')
-                       .text('Date : _______________', margin + 5, ySign + 85, { lineBreak: false });
+                       .text('Salarié(e)', margin + 10, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(9).font('Helvetica')
+                       .text('Date : _______________', margin + 10, ySign + 85, { lineBreak: false });
 
                     doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Responsable', margin + colW + 5, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(8).font('Helvetica')
-                       .text('Date : _______________', margin + colW + 5, ySign + 85, { lineBreak: false });
-
-                    doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Président(e)', margin + colW * 2 + 5, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(8).font('Helvetica')
-                       .text('Date : _______________', margin + colW * 2 + 5, ySign + 85, { lineBreak: false });
+                       .text('Responsable', margin + colW + 10, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(9).font('Helvetica')
+                       .text('Date : _______________', margin + colW + 10, ySign + 85, { lineBreak: false });
                 }
 
                 doc.end();
