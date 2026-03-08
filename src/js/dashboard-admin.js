@@ -415,14 +415,7 @@ async function chargerCalendrierGlobal() {
                                         
                     tableHTML += `<td class="${cellClass}" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>`;
                     
-                    if (absentsJour.length > 8) {
-                        // Plus de 8 absents : afficher "8+"
-                        const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-                        let jourSemaineIndex = dayOfWeek - 1;
-                        if (jourSemaineIndex === -1) jourSemaineIndex = 6;
-                        const lettreJour = lettresJours[jourSemaineIndex];
-                        tableHTML += `<div class="jour-cell"><span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span><span class="surcharge">8+</span></div>`;
-                    } else {
+                    {
                         // Calculer la lettre du jour de la semaine (format français : L-D)
                         const lettresJours = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
                         let jourSemaineIndex = dayOfWeek - 1;
@@ -432,7 +425,7 @@ async function chargerCalendrierGlobal() {
                         tableHTML += `<div class="${jourCellClass}">`;
                         tableHTML += `<span class="jour-numero">${lettreJour} ${String(jour).padStart(2, '0')}</span>`;
                         tableHTML += '<div class="indicateurs-wrapper">';
-    
+
                         // Compter les absents uniques ce jour
                         const nbAbsents = new Set(absentsJour.map(a => a.salarie_id)).size;
 
