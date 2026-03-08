@@ -23,52 +23,51 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 doc.pipe(stream);
 
                 const bleu = '#006C89';
-                const orange = '#ED7111';
+                const pageW = doc.page.width;
+                const margin = 50;
+                const contentW = pageW - margin * 2;
+                const logoPath = path.join(__dirname, '..', 'assets', 'logo.png');
 
-                // En-tête avec fond coloré
-                doc.rect(0, 0, doc.page.width, 100)
-                   .fill(bleu);
+                // === EN-TÊTE (fond blanc, style stats) ===
+                try {
+                    doc.image(logoPath, margin, 15, { fit: [120, 60] });
+                } catch (e) { /* logo absent */ }
 
-                doc.fillColor('white')
-                   .fontSize(24)
-                   .font('Helvetica-Bold')
-                   .text('DEMANDE DE CONGÉS', 50, 35, { align: 'center' })
-                   .fontSize(10)
-                   .font('Helvetica')
-                   .text('La Ciotat Entreprendre', 50, 65, { align: 'center' });
+                doc.fillColor(bleu)
+                   .fontSize(20).font('Helvetica-Bold')
+                   .text('DEMANDE DE CONGÉS', 200, 20, { width: pageW - 250, align: 'right' })
+                   .fontSize(9).font('Helvetica').fillColor('#888')
+                   .text('La Ciotat Entreprendre', 200, 45, { width: pageW - 250, align: 'right' });
 
-                doc.fillColor('black');
-                doc.moveDown(4);
+                // Ligne bleue de séparation
+                doc.moveTo(margin, 80).lineTo(pageW - margin, 80).lineWidth(2).strokeColor(bleu).stroke();
 
-                // Cadre informations salarié
-                const yStart = doc.y;
-                doc.rect(50, yStart, doc.page.width - 100, 80)
-                   .lineWidth(1)
-                   .stroke(bleu);
+                let yPos = 95;
 
-                doc.fontSize(14)
-                   .font('Helvetica-Bold')
-                   .fillColor(bleu)
-                   .text('INFORMATIONS DU SALARIÉ', 60, yStart + 10);
+                // Helper : dessiner un en-tête de section arrondi en haut
+                function drawSectionHeader(y, h, title) {
+                    doc.save();
+                    doc.roundedRect(margin, y, contentW, h, 5).clip();
+                    doc.rect(margin, y, contentW, 22).fill(bleu);
+                    doc.restore();
+                    doc.roundedRect(margin, y, contentW, h, 5).lineWidth(1).stroke(bleu);
+                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold')
+                       .text(title, margin + 12, y + 6, { lineBreak: false });
+                }
 
-                doc.fontSize(11)
-                   .font('Helvetica')
-                   .fillColor('black')
-                   .text(`Nom : ${salarie.nom.toUpperCase()}`, 60, yStart + 35)
-                   .text(`Prénom : ${salarie.prenom}`, 60, yStart + 55);
+                // === INFORMATIONS DU SALARIÉ ===
+                drawSectionHeader(yPos, 70, 'INFORMATIONS DU SALARIÉ');
 
-                doc.moveDown(3);
+                doc.fillColor('black').fontSize(11).font('Helvetica')
+                   .text(`Nom : ${salarie.nom.toUpperCase()}`, margin + 12, yPos + 30, { lineBreak: false })
+                   .text(`Prénom : ${salarie.prenom}`, margin + 12, yPos + 48, { lineBreak: false });
 
-                // Cadre période de congés
-                const yPeriode = doc.y;
-                doc.rect(50, yPeriode, doc.page.width - 100, 150)
-                   .lineWidth(1)
-                   .stroke(orange);
+                yPos += 80;
 
-                doc.fontSize(14)
-                   .font('Helvetica-Bold')
-                   .fillColor(orange)
-                   .text('PÉRIODE DE CONGÉS', 60, yPeriode + 10);
+                // === PÉRIODE DE CONGÉS ===
+                drawSectionHeader(yPos, 140, 'PÉRIODE DE CONGÉS');
+
+                const yPeriode = yPos;
 
                 const typeLabels = {
                     'CP': 'Congés Payés',
@@ -79,10 +78,8 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     'MALADIE': 'Arrêt Maladie'
                 };
 
-                doc.fontSize(11)
-                   .font('Helvetica-Bold')
-                   .fillColor('black')
-                   .text('Type de congé : ', 60, yPeriode + 40, { continued: true })
+                doc.fontSize(11).fillColor('black').font('Helvetica-Bold')
+                   .text('Type de congé : ', margin + 12, yPeriode + 30, { continued: true })
                    .font('Helvetica')
                    .text(typeLabels[absence.type] || absence.type);
 
@@ -94,17 +91,15 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 });
 
                 doc.font('Helvetica-Bold')
-                   .text('Du : ', 60, yPeriode + 65, { continued: true })
-                   .font('Helvetica')
-                   .text(dateD);
+                   .text('Du : ', margin + 12, yPeriode + 55, { continued: true })
+                   .font('Helvetica').text(dateD);
 
                 doc.font('Helvetica-Bold')
-                   .text('Au : ', 60, yPeriode + 85, { continued: true })
-                   .font('Helvetica')
-                   .text(dateF);
+                   .text('Au : ', margin + 12, yPeriode + 75, { continued: true })
+                   .font('Helvetica').text(dateF);
 
                 doc.font('Helvetica-Bold')
-                   .text('Durée : ', 60, yPeriode + 110, { continued: true })
+                   .text('Durée : ', margin + 12, yPeriode + 100, { continued: true })
                    .font('Helvetica');
 
                 if (absence.duree_jours) {
@@ -113,32 +108,17 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     doc.text(`${absence.duree_heures.toFixed(1)} heure(s)`);
                 }
 
-                doc.moveDown(3);
+                yPos += 150;
 
-                // Tableau des soldes
-                const ySoldes = doc.y;
-                doc.fontSize(14)
-                   .font('Helvetica-Bold')
-                   .fillColor(bleu)
-                   .text('SOLDES APRÈS DÉDUCTION', 60, ySoldes);
-
-                doc.moveDown(0.5);
-
-                const tableTop = doc.y;
-                const col1 = 60;
-                const col2 = 250;
+                // === SOLDES APRÈS DÉDUCTION ===
                 const rowHeight = 25;
+                const soldesH = 22 + rowHeight * 4;
+                drawSectionHeader(yPos, soldesH, 'SOLDES APRÈS DÉDUCTION');
 
-                doc.rect(col1, tableTop, doc.page.width - 120, rowHeight)
-                   .fill(bleu);
-
-                doc.fillColor('white')
-                   .fontSize(10)
-                   .font('Helvetica-Bold')
-                   .text('Type de congé', col1 + 10, tableTop + 8)
-                   .text('Solde restant', col2, tableTop + 8);
-
-                doc.fillColor('black');
+                // En-tête colonnes
+                const col1 = margin + 12;
+                const col2 = margin + contentW / 2;
+                const tableTop = yPos + 22;
 
                 const soldesData = [
                     ['CP N-1', `${soldes.cp_n1.toFixed(2)} jours`],
@@ -148,48 +128,60 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 ];
 
                 soldesData.forEach((row, i) => {
-                    const y = tableTop + rowHeight + (i * rowHeight);
-
+                    const y = tableTop + (i * rowHeight);
                     if (i % 2 === 0) {
-                        doc.rect(col1, y, doc.page.width - 120, rowHeight)
-                           .fill('#f5f5f5');
+                        doc.rect(margin + 1, y, contentW - 2, rowHeight).fill('#f0f7f9');
                     }
-
-                    doc.fillColor('black')
-                       .fontSize(10)
-                       .font('Helvetica')
-                       .text(row[0], col1 + 10, y + 8)
-                       .font('Helvetica-Bold')
-                       .text(row[1], col2, y + 8);
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text(row[0], col1, y + 8, { lineBreak: false });
+                    doc.fillColor(bleu).font('Helvetica-Bold')
+                       .text(row[1], col2, y + 8, { lineBreak: false });
                 });
 
-                // Commentaire si présent
-                if (absence.commentaire) {
-                    doc.moveDown(3);
-                    doc.fontSize(11)
-                       .font('Helvetica-Bold')
-                       .fillColor('black')
-                       .text('Commentaire : ')
-                       .moveDown(0.3)
-                       .font('Helvetica')
-                       .fontSize(10)
-                       .text(absence.commentaire, { width: doc.page.width - 100 });
+                yPos += soldesH + 15;
+
+                // === SIGNATURES (selon le rôle) ===
+                const isAdmin = salarie.role === 'admin';
+                const ySign = doc.page.height - 160;
+
+                doc.moveTo(margin, ySign).lineTo(pageW - margin, ySign).lineWidth(0.5).strokeColor(bleu).stroke();
+
+                // Titre de section
+                doc.fillColor(bleu).fontSize(11).font('Helvetica-Bold')
+                   .text('Signatures :', margin + 10, ySign + 10, { lineBreak: false });
+
+                if (isAdmin) {
+                    // Admin : 2 colonnes — Salarié(e) + Président(e)
+                    const colW = contentW / 2;
+
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text('Salarié(e)', margin + 10, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(9).font('Helvetica')
+                       .text('Date : _______________', margin + 10, ySign + 85, { lineBreak: false });
+
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text('Président(e)', margin + colW + 10, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(9).font('Helvetica')
+                       .text('Date : _______________', margin + colW + 10, ySign + 85, { lineBreak: false });
+                } else {
+                    // User : 3 colonnes — Salarié(e) + Responsable + Président(e)
+                    const colW = contentW / 3;
+
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text('Salarié(e)', margin + 5, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(8).font('Helvetica')
+                       .text('Date : _______________', margin + 5, ySign + 85, { lineBreak: false });
+
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text('Responsable', margin + colW + 5, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(8).font('Helvetica')
+                       .text('Date : _______________', margin + colW + 5, ySign + 85, { lineBreak: false });
+
+                    doc.fillColor('#333').fontSize(10).font('Helvetica')
+                       .text('Président(e)', margin + colW * 2 + 5, ySign + 30, { lineBreak: false });
+                    doc.fillColor('#666').fontSize(8).font('Helvetica')
+                       .text('Date : _______________', margin + colW * 2 + 5, ySign + 85, { lineBreak: false });
                 }
-
-                // Signatures
-                const ySign = doc.page.height - 180;
-
-                doc.moveTo(50, ySign).lineTo(doc.page.width - 50, ySign).stroke();
-
-                doc.fontSize(11)
-                   .font('Helvetica-Bold')
-                   .text('Signature du salarié', 60, ySign + 20)
-                   .text('Signature du responsable', 340, ySign + 20);
-
-                doc.fontSize(9)
-                   .font('Helvetica')
-                   .text('Date : _______________', 60, ySign + 80)
-                   .text('Date : _______________', 340, ySign + 80);
 
                 doc.end();
 
@@ -365,6 +357,181 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     setTimeout(() => {
                         dialog.showSaveDialog(ctx.mainWindow, {
                             title: 'Enregistrer le récapitulatif PDF',
+                            defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+                        }).then(result => {
+                            if (!result.canceled && result.filePath) {
+                                fs.copyFileSync(filePath, result.filePath);
+                                shell.openPath(result.filePath);
+                            }
+                        });
+                    }, 500);
+                    resolve({ success: true, filePath });
+                });
+
+                stream.on('error', (err) => reject(err));
+
+            } catch (error) {
+                reject(error);
+            }
+        });
+    });
+
+    // === EXPORT PDF STATISTIQUES ABSENCES ===
+    safeHandle('exporterStatsPDF', async (event, data) => {
+        const { annee, mois, types, absences } = data;
+
+        return new Promise(async (resolve, reject) => {
+            try {
+                const moisNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                const periodeLabel = mois > 0 ? `${moisNoms[mois]} ${annee}` : `Année ${annee}`;
+                const typesLabel = types.join(', ');
+
+                const ts = Date.now();
+                const fileName = `stats_absences_${annee}${mois > 0 ? '_' + String(mois).padStart(2, '0') : ''}_${ts}.pdf`;
+                const filePath = path.join(os.tmpdir(), fileName);
+                const doc = new PDFDocument({ size: 'A4', margin: 50 });
+                const stream = fs.createWriteStream(filePath);
+                doc.pipe(stream);
+
+                const bleu = '#006C89';
+                const grisClair = '#f8f9fa';
+                const logoPath = path.join(__dirname, '..', 'assets', 'logo.png');
+                const pageW = doc.page.width;
+                const pageH = doc.page.height;
+                const margin = 50;
+                const contentW = pageW - margin * 2;
+                const headerH = 80;
+
+                // === EN-TÊTE (fond blanc) ===
+                // Logo à gauche, pleine hauteur sans déformation
+                try {
+                    doc.image(logoPath, margin, 15, { fit: [120, headerH - 20], valign: 'center' });
+                } catch (e) { /* logo absent */ }
+
+                // Titre à droite
+                doc.fillColor(bleu)
+                   .fontSize(18).font('Helvetica-Bold')
+                   .text('DÉTAIL DES ABSENCES', 200, 18, { width: pageW - 250, align: 'right' })
+                   .fontSize(11).font('Helvetica')
+                   .text('PAR SALARIÉ', 200, 40, { width: pageW - 250, align: 'right' });
+
+                // Sous-titre : période et types
+                doc.fontSize(9).fillColor('#888')
+                   .text(`${periodeLabel}  |  ${typesLabel}`, 200, 58, { width: pageW - 250, align: 'right' });
+
+                // Ligne bleue de séparation sous l'en-tête
+                doc.moveTo(margin, headerH + 10).lineTo(pageW - margin, headerH + 10).lineWidth(2).strokeColor(bleu).stroke();
+
+                doc.fillColor('black');
+                let yPos = headerH + 20;
+
+                // === RÉSUMÉ ===
+                const compteurs = {};
+                let totalJours = 0;
+                absences.forEach(a => {
+                    if (!compteurs[a.type]) compteurs[a.type] = { count: 0, jours: 0 };
+                    compteurs[a.type].count++;
+                    compteurs[a.type].jours += parseFloat(a.jours) || 0;
+                    totalJours += parseFloat(a.jours) || 0;
+                });
+
+                const typesCouleurs = { CP: bleu, RTT: bleu, RECUP: bleu, MALADIE: bleu };
+                const resumeTypes = Object.keys(compteurs);
+                const cardW = (contentW - (resumeTypes.length) * 10) / (resumeTypes.length + 1);
+
+                // Card total
+                doc.roundedRect(margin, yPos, cardW, 50, 5).fill(bleu);
+                doc.fillColor('white').fontSize(8).font('Helvetica')
+                   .text('TOTAL', margin + 8, yPos + 8, { width: cardW - 16 });
+                doc.fontSize(16).font('Helvetica-Bold')
+                   .text(`${Math.round(totalJours * 100) / 100}j`, margin + 8, yPos + 24, { width: cardW - 16 });
+
+                // Cards par type — couleur de la tuile
+                resumeTypes.forEach((t, i) => {
+                    const x = margin + (i + 1) * (cardW + 10);
+                    const couleur = typesCouleurs[t] || bleu;
+                    doc.roundedRect(x, yPos, cardW, 50, 5).lineWidth(1.5).stroke(couleur);
+                    doc.fillColor(couleur).fontSize(8).font('Helvetica-Bold')
+                       .text(t, x + 8, yPos + 8, { width: cardW - 16 });
+                    doc.fillColor(couleur).fontSize(14).font('Helvetica-Bold')
+                       .text(`${Math.round(compteurs[t].jours * 100) / 100}j`, x + 8, yPos + 24, { width: cardW - 16 });
+                    doc.fillColor('#999').fontSize(7).font('Helvetica')
+                       .text(`${compteurs[t].count} absence(s)`, x + 8, yPos + 40, { width: cardW - 16 });
+                });
+
+                yPos += 65;
+
+                // Ligne de séparation fine
+                doc.moveTo(margin, yPos).lineTo(pageW - margin, yPos).lineWidth(0.5).strokeColor('#ddd').stroke();
+                yPos += 10;
+
+                // === TABLEAU ===
+                const cols = [margin, margin + 160, margin + 230, margin + 330, margin + 430];
+                const hdrs = ['Salarié', 'Type', 'Du', 'Au', 'Jours'];
+                const colWidths = [160, 70, 100, 100, contentW - 430 + margin];
+                const rowH = 22;
+                function drawTableHeader(y) {
+                    doc.roundedRect(margin, y, contentW, rowH, 3).fill(bleu);
+                    doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+                    hdrs.forEach((h, i) => doc.text(h, cols[i] + 8, y + 7, { width: colWidths[i], lineBreak: false }));
+                    return y + rowH;
+                }
+
+                yPos = drawTableHeader(yPos);
+
+                let currentSalarie = '';
+                let salarieIdx = 0;
+                absences.forEach((a) => {
+                    if (yPos + rowH > pageH - 50) {
+                        doc.addPage();
+                        yPos = 50;
+                        yPos = drawTableHeader(yPos);
+                        currentSalarie = '';
+                    }
+
+                    const newSalarie = a.salarie !== currentSalarie;
+                    if (newSalarie) {
+                        if (currentSalarie !== '') {
+                            doc.moveTo(margin, yPos).lineTo(pageW - margin, yPos).lineWidth(0.3).strokeColor('#ccc').stroke();
+                            yPos += 1;
+                        }
+                        currentSalarie = a.salarie;
+                        salarieIdx++;
+                    }
+
+                    const bgColor = salarieIdx % 2 === 0 ? grisClair : 'white';
+                    doc.rect(margin, yPos, contentW, rowH).fill(bgColor);
+
+                    if (newSalarie) {
+                        doc.rect(margin, yPos, 3, rowH).fill(bleu);
+                    }
+
+                    const typeColor = typesCouleurs[a.type] || '#333';
+
+                    doc.fillColor('#333').fontSize(9).font(newSalarie ? 'Helvetica-Bold' : 'Helvetica')
+                       .text(newSalarie ? a.salarie : '', cols[0] + 8, yPos + 7, { width: colWidths[0], lineBreak: false });
+                    doc.fillColor(typeColor).fontSize(9).font('Helvetica-Bold')
+                       .text(a.type, cols[1] + 8, yPos + 7, { width: colWidths[1], lineBreak: false });
+                    doc.fillColor('#333').fontSize(9).font('Helvetica')
+                       .text(a.du, cols[2] + 8, yPos + 7, { width: colWidths[2], lineBreak: false })
+                       .text(a.au, cols[3] + 8, yPos + 7, { width: colWidths[3], lineBreak: false })
+                       .text(a.jours, cols[4] + 8, yPos + 7, { width: colWidths[4], lineBreak: false });
+
+                    yPos += rowH;
+                });
+
+                // Ligne de fermeture du tableau
+                doc.moveTo(margin, yPos).lineTo(pageW - margin, yPos).lineWidth(0.5).strokeColor(bleu).stroke();
+
+
+                doc.end();
+
+                stream.on('finish', () => {
+                    shell.openPath(filePath);
+                    setTimeout(() => {
+                        dialog.showSaveDialog(ctx.mainWindow, {
+                            title: 'Enregistrer le PDF',
                             defaultPath: path.join(os.homedir(), 'Documents', fileName),
                             filters: [{ name: 'PDF', extensions: ['pdf'] }]
                         }).then(result => {

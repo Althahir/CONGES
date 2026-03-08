@@ -244,6 +244,7 @@ contextBridge.exposeInMainWorld('api', {
     genererPDF: (absenceData) => ipcRenderer.invoke('genererPDF', absenceData),
     /** @param {{salarie_id: number, annee: number}} data @returns {Promise<SuccessResult>} */
     exporterRecapPDF: (data) => ipcRenderer.invoke('exporterRecapPDF', data),
+    exporterStatsPDF: (data) => ipcRenderer.invoke('exporterStatsPDF', data),
 
     // Gestion des traitements automatiques
 

@@ -344,9 +344,6 @@
 
             <!-- Section Calendrier Global -->
             <section id="calendrier-section" class="content-section">
-                <div class="section-header">
-                    <h2>Calendrier Global</h2>
-                </div>
                 <div id="calendrierGlobal" class="calendrier-global">
                     <!-- Sera rempli dynamiquement -->
                 </div>
@@ -555,16 +552,16 @@
             </div>
         </div>
 
-        <div class="config-actions">
-            <button id="btnEnregistrerConfig" class="btn-primary btn-large">
-                <i class="fa-solid fa-save"></i> Enregistrer la configuration
-            </button>
-        </div>
-
         <div class="config-note">
             <i class="fa-solid fa-info-circle"></i>
             <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine
             si le traitement a déjà été effectué cette année.
+        </div>
+
+        <div class="config-actions">
+            <button id="btnEnregistrerConfig" class="btn-primary btn-large">
+                <i class="fa-solid fa-save"></i> Enregistrer la configuration
+            </button>
         </div>
     </div>
 
@@ -731,8 +728,8 @@
                         <div class="chart-container"><canvas id="chartRepartitionType"></canvas></div>
                     </div>
                     <div class="stats-card">
-                        <h3>Soldes restants par salarié</h3>
-                        <div class="chart-container"><canvas id="chartSoldesSalaries"></canvas></div>
+                        <h3>Détail des absences par salarié</h3>
+                        <div id="tableAbsencesSalaries" class="table-absences-stats"></div>
                     </div>
                 </div>
             </section>

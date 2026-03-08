@@ -350,20 +350,20 @@ async function initFormAbsence() {
         const salarie = await window.api.getSalarie(user.id);
         const typeAbsenceSelect = document.getElementById('typeAbsence');
         
+        // Ajouter Récup si le salarié y a droit (ordre alpha : CP, Récup, RTT)
+        if (salarie.a_droit_recup === 1) {
+            const optionRecup = document.createElement('option');
+            optionRecup.value = 'RECUP';
+            optionRecup.textContent = 'Récupération';
+            typeAbsenceSelect.appendChild(optionRecup);
+        }
+
         // Ajouter RTT si le salarié y a droit
         if (salarie.a_droit_rtt === 1) {
             const optionRTT = document.createElement('option');
             optionRTT.value = 'RTT';
             optionRTT.textContent = 'RTT';
-            typeAbsenceSelect.insertBefore(optionRTT, typeAbsenceSelect.lastElementChild);
-        }
-        
-        // Ajouter Récup si le salarié y a droit
-        if (salarie.a_droit_recup === 1) {
-            const optionRecup = document.createElement('option');
-            optionRecup.value = 'RECUP';
-            optionRecup.textContent = 'Récupération';
-            typeAbsenceSelect.insertBefore(optionRecup, typeAbsenceSelect.lastElementChild);
+            typeAbsenceSelect.appendChild(optionRTT);
         }
     } catch (error) {
         console.error('Erreur lors du chargement des infos salarié:', error);
@@ -733,7 +733,8 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
             const pdfData = {
                 salarie: {
                     nom: user.nom,
-                    prenom: user.prenom
+                    prenom: user.prenom,
+                    role: 'user'
                 },
                 absence: {
                     type: typeToSave,
@@ -743,7 +744,12 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
                     duree_heures: typeAbsence === 'RECUP' ? dureeHeures : null,
                     commentaire: commentaire || null
                 },
-                soldes: resultSoldes.nouveaux_soldes
+                soldes: {
+                    cp_n1: resultSoldes.cp_n1,
+                    cp_n: resultSoldes.cp_n,
+                    rtt: resultSoldes.rtt,
+                    recup_heures: resultSoldes.recup_heures
+                }
             };
             
             try {

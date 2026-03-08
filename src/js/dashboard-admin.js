@@ -26,6 +26,10 @@ document.getElementById('btnThemeToggle').addEventListener('click', () => {
     localStorage.setItem('theme', next);
     const icon = document.querySelector('#btnThemeToggle i');
     icon.className = next === 'dark' ? 'fa-solid fa-lightbulb' : 'fa-solid fa-moon';
+    // Rafraîchir les graphiques si la section stats est active
+    if (document.getElementById('statistiques-section')?.classList.contains('active')) {
+        setTimeout(() => chargerStatistiques(), 50);
+    }
 });
 
 // Variables globales — années par section
@@ -505,7 +509,12 @@ function getFeriesLegaux(annee) {
     const lundiPaques = new Date(paques.getTime() + 1 * jourMs);
     const lundiPentecote = new Date(paques.getTime() + 50 * jourMs);
 
-    const fmt = (d) => d.toISOString().split('T')[0];
+    const fmt = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const j = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${j}`;
+    };
 
     return [
         { date: `${annee}-01-01`, libelle: "Jour de l'An" },
@@ -799,7 +808,7 @@ function initRTTParams() {
             const btn = document.getElementById('btnEnregistrerRTT');
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Enregistré !';
             setTimeout(() => {
-                btn.innerHTML = '<i class="fa-solid fa-save"></i> Enregistrer pour cette année';
+                btn.innerHTML = '<i class="fa-solid fa-save"></i> Enregistrer';
             }, 1500);
         } catch (error) {
             console.error('Erreur ajout RTT:', error);
@@ -842,7 +851,7 @@ async function chargerRTTAnnuels() {
                 <td>${r.nb_jours_feries_hors_we != null ? r.nb_jours_feries_hors_we : '-'}</td>
                 <td>${r.nb_cp_a_deduire || 25}</td>
                 <td>${r.nb_jours_travailles || '-'}</td>
-                <td><strong style="color: var(--mauve);">${isOldFormat ? '-' : rtt + 'j'}</strong></td>
+                <td><strong class="rtt-recap-value">${isOldFormat ? '-' : rtt + 'j'}</strong></td>
             </tr>
         `;
     } catch (error) {
@@ -1258,28 +1267,25 @@ async function initFormAbsenceAdmin() {
         
         if (!typeAbsenceSelect) return;
         
+        // Supprimer les options dynamiques existantes
         const existingRTT = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RTT');
-        if (salarie.a_droit_rtt === 1) {
-            if (!existingRTT) {
-                const optionRTT = document.createElement('option');
-                optionRTT.value = 'RTT';
-                optionRTT.textContent = 'RTT';
-                typeAbsenceSelect.insertBefore(optionRTT, typeAbsenceSelect.lastElementChild);
-            }
-        } else if (existingRTT) {
-            existingRTT.remove();
+        if (existingRTT) existingRTT.remove();
+        const existingRecup = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RECUP');
+        if (existingRecup) existingRecup.remove();
+
+        // Réajouter dans l'ordre alpha : CP (déjà en dur), Récupération, RTT
+        if (salarie.a_droit_recup === 1) {
+            const optionRecup = document.createElement('option');
+            optionRecup.value = 'RECUP';
+            optionRecup.textContent = 'Récupération';
+            typeAbsenceSelect.appendChild(optionRecup);
         }
 
-        const existingRecup = Array.from(typeAbsenceSelect.options).find(opt => opt.value === 'RECUP');
-        if (salarie.a_droit_recup === 1) {
-            if (!existingRecup) {
-                const optionRecup = document.createElement('option');
-                optionRecup.value = 'RECUP';
-                optionRecup.textContent = 'Récupération';
-                typeAbsenceSelect.insertBefore(optionRecup, typeAbsenceSelect.lastElementChild);
-            }
-        } else if (existingRecup) {
-            existingRecup.remove();
+        if (salarie.a_droit_rtt === 1) {
+            const optionRTT = document.createElement('option');
+            optionRTT.value = 'RTT';
+            optionRTT.textContent = 'RTT';
+            typeAbsenceSelect.appendChild(optionRTT);
         }
     } catch (error) {
         console.error('Erreur init formulaire:', error);
@@ -1652,19 +1658,22 @@ async function chargerHistoriqueTraitements() {
         const historique = await window.api.getHistoriqueTraitements();
         const tbody = document.getElementById('historiqueBody');
         
-        if (historique.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">Aucun traitement effectué</td></tr>';
-            document.getElementById('cpDernierTraitement').textContent = 'Jamais effectué';
-            document.getElementById('rttDernierTraitement').textContent = 'Jamais effectué';
-            return;
-        }
-        
+        const historiqueContainer = document.querySelector('.historique-traitements');
+
         // Garder uniquement le traitement le plus récent par type
         const dernierParType = [];
         ['CP_ANNUEL', 'RTT_ANNUEL'].forEach(type => {
             const derniere = historique.find(h => h.type === type);
             if (derniere) dernierParType.push(derniere);
         });
+
+        if (dernierParType.length === 0) {
+            historiqueContainer.style.display = 'none';
+            document.getElementById('cpDernierTraitement').textContent = 'Jamais effectué';
+            document.getElementById('rttDernierTraitement').textContent = 'Jamais effectué';
+            return;
+        }
+        historiqueContainer.style.display = '';
 
         tbody.innerHTML = dernierParType.map(h => {
             const dateStr = h.date_execution.includes('Z') ? h.date_execution : h.date_execution + 'Z';
@@ -1816,7 +1825,6 @@ function _rendreToast(type, titre, message) {
 
 let chartAbsencesMois = null;
 let chartRepartitionType = null;
-let chartSoldesSalaries = null;
 
 async function chargerStatistiques() {
     const annee = anneeStatistiques;
@@ -1829,6 +1837,11 @@ async function chargerStatistiques() {
     // Forcer le recalcul du layout avant de créer les graphiques
     const section = document.getElementById('statistiques-section');
     section.offsetHeight; // Force reflow
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    const tickColor = isDark ? '#ccc' : '#666';
+    const borderColorChart = isDark ? '#1a1a1a' : '#fff';
 
     try {
         const [absences, salaries] = await Promise.all([
@@ -1845,9 +1858,9 @@ async function chargerStatistiques() {
         const couleurs = {
             CP_N: 'rgb(0, 108, 137)',
             CP_N1: 'rgb(0, 140, 178)',
-            RTT: 'rgb(116, 43, 135)',
+            RTT: isDark ? 'rgb(237, 113, 17)' : 'rgb(116, 43, 135)',
             RECUP: 'rgb(181, 22, 63)',
-            MALADIE: 'rgb(237, 113, 17)'
+            MALADIE: isDark ? 'rgb(116, 43, 135)' : 'rgb(237, 113, 17)'
         };
         const labels = {
             CP_N: 'CP N',
@@ -1881,21 +1894,23 @@ async function chargerStatistiques() {
                     label: labels[t],
                     data: dataMois[t],
                     backgroundColor: couleurs[t],
+                    borderColor: borderColorChart,
+                    borderWidth: { top: 1, left: 0, right: 0, bottom: 0 },
                     borderRadius: 3
                 }))
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } },
+                plugins: { legend: { position: 'bottom', labels: { color: tickColor } } },
                 scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Jours' } }
+                    x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+                    y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Jours', color: tickColor }, grid: { color: gridColor }, ticks: { color: tickColor } }
                 }
             }
         });
 
-        // === 2. Répartition par type (donut) ===
+        // === 2. Répartition par type (donut) avec soldes restants ===
         const totauxParType = {};
         types.forEach(t => { totauxParType[t] = 0; });
         absencesAnnee.forEach(a => {
@@ -1904,24 +1919,106 @@ async function chargerStatistiques() {
             }
         });
 
-        const typesActifs = types.filter(t => totauxParType[t] > 0);
+        // Calculer les soldes restants globaux (CP + RTT)
+        const salariesActifs = salaries.filter(s => s.actif === 1);
+        let totalSoldeCP = 0;
+        let totalSoldeRTT = 0;
+        for (const s of salariesActifs) {
+            const soldes = await window.api.getSoldes(s.id, new Date().getFullYear());
+            if (soldes) {
+                totalSoldeCP += (soldes.cp_n1 + soldes.cp_n);
+                totalSoldeRTT += soldes.rtt;
+            }
+        }
+        totalSoldeCP = Math.round(totalSoldeCP * 100) / 100;
+        totalSoldeRTT = Math.round(totalSoldeRTT * 100) / 100;
+
+        // Créer un motif hachuré à partir d'une couleur
+        function createHatchPattern(color) {
+            const c = document.createElement('canvas');
+            c.width = 10; c.height = 10;
+            const cx = c.getContext('2d');
+            cx.fillStyle = color;
+            cx.fillRect(0, 0, 10, 10);
+            cx.strokeStyle = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';
+            cx.lineWidth = 2.5;
+            cx.beginPath();
+            cx.moveTo(0, 10); cx.lineTo(10, 0); cx.stroke();
+            cx.beginPath();
+            cx.moveTo(-3, 3); cx.lineTo(3, -3); cx.stroke();
+            cx.beginPath();
+            cx.moveTo(7, 13); cx.lineTo(13, 7); cx.stroke();
+            return cx.createPattern(c, 'repeat');
+        }
+
+        // Construire segments groupés par type : posés puis restants (adjacents)
+        const donutLabels = [];
+        const donutData = [];
+        const donutColors = [];
+        const donutBorderWidths = [];
+
+        // CP : posés + restants (adjacents, pas de bordure entre eux)
+        const cpPose = (totauxParType['CP_N'] || 0) + (totauxParType['CP_N1'] || 0);
+        if (cpPose > 0 || totalSoldeCP > 0) {
+            if (cpPose > 0) {
+                donutLabels.push('CP posés');
+                donutData.push(Math.round(cpPose * 100) / 100);
+                donutColors.push(couleurs['CP_N']);
+                donutBorderWidths.push(2);
+            }
+            if (totalSoldeCP > 0) {
+                donutLabels.push('CP restants');
+                donutData.push(totalSoldeCP);
+                donutColors.push(createHatchPattern(couleurs['CP_N']));
+                donutBorderWidths.push(cpPose > 0 ? 0 : 2);
+            }
+        }
+
+        // RTT : posés + restants
+        const rttPose = totauxParType['RTT'] || 0;
+        if (rttPose > 0 || totalSoldeRTT > 0) {
+            if (rttPose > 0) {
+                donutLabels.push('RTT posés');
+                donutData.push(Math.round(rttPose * 100) / 100);
+                donutColors.push(couleurs['RTT']);
+                donutBorderWidths.push(2);
+            }
+            if (totalSoldeRTT > 0) {
+                donutLabels.push('RTT restants');
+                donutData.push(totalSoldeRTT);
+                donutColors.push(createHatchPattern(couleurs['RTT']));
+                donutBorderWidths.push(rttPose > 0 ? 0 : 2);
+            }
+        }
+
+        // RECUP et MALADIE (pas de solde restant)
+        ['RECUP', 'MALADIE'].forEach(t => {
+            if (totauxParType[t] > 0) {
+                donutLabels.push(labels[t]);
+                donutData.push(Math.round(totauxParType[t] * 100) / 100);
+                donutColors.push(couleurs[t]);
+                donutBorderWidths.push(2);
+            }
+        });
+
         const ctxType = document.getElementById('chartRepartitionType');
         if (chartRepartitionType) chartRepartitionType.destroy();
         chartRepartitionType = new Chart(ctxType, {
             type: 'doughnut',
             data: {
-                labels: typesActifs.map(t => labels[t]),
+                labels: donutLabels,
                 datasets: [{
-                    data: typesActifs.map(t => Math.round(totauxParType[t] * 100) / 100),
-                    backgroundColor: typesActifs.map(t => couleurs[t]),
-                    borderWidth: 2
+                    data: donutData,
+                    backgroundColor: donutColors,
+                    borderColor: borderColorChart,
+                    borderWidth: donutBorderWidths
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'bottom' },
+                    legend: { position: 'bottom', labels: { color: tickColor } },
                     tooltip: {
                         callbacks: {
                             label: (ctx) => `${ctx.label} : ${ctx.parsed} jours`
@@ -1931,46 +2028,191 @@ async function chargerStatistiques() {
             }
         });
 
-        // === 3. Soldes restants par salarié (barres horizontales) ===
-        const salariesActifs = salaries.filter(s => s.actif === 1);
-        const nomsLabels = salariesActifs.map(s => `${s.prenom} ${s.nom.charAt(0)}.`);
-        const soldesData = { cp: [], rtt: [], recup: [] };
+        // === 3. Détail des absences par salarié (tableau avec filtres) ===
+        const tableContainer = document.getElementById('tableAbsencesSalaries');
+        const absencesDetail = absencesAnnee
+            .filter(a => a.statut === 'valide')
+            .sort((a, b) => a.date_debut.localeCompare(b.date_debut));
 
-        for (const s of salariesActifs) {
-            const soldes = await window.api.getSoldes(s.id, new Date().getFullYear());
-            if (soldes) {
-                soldesData.cp.push(Math.round((soldes.cp_n1 + soldes.cp_n) * 100) / 100);
-                soldesData.rtt.push(Math.round(soldes.rtt * 100) / 100);
-                soldesData.recup.push(Math.round((soldes.recup_heures / 7) * 100) / 100);
+        // Associer les noms des salariés
+        const salariesMap = {};
+        salaries.forEach(s => { salariesMap[s.id] = `${s.prenom} ${s.nom}`; });
+
+        const formatDate = (d) => {
+            const dt = new Date(d + 'T00:00:00');
+            return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        };
+
+        const typeColors = {
+            CP: 'var(--bleu)', CP_N: 'var(--bleu)', CP_N1: 'var(--bleu)',
+            RTT: isDark ? 'var(--orange)' : 'var(--mauve)',
+            RECUP: 'var(--rouge)', MALADIE: isDark ? 'var(--mauve)' : 'var(--orange)'
+        };
+
+        const filtreTypes = ['CP', 'RTT', 'RECUP', 'MALADIE'];
+        const filtreLabels = { CP: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+
+        function renderTableauAbsences() {
+            const typesCoches = filtreTypes.filter(t => {
+                const cb = document.getElementById('filtreStats_' + t);
+                return cb && cb.checked;
+            });
+
+            const moisFiltre = parseInt(document.getElementById('filtreStatsMois').value);
+
+            const filtered = absencesDetail.filter(a => {
+                const typeOk = (a.type === 'CP_N' || a.type === 'CP_N1' || a.type === 'CP') ? typesCoches.includes('CP') : typesCoches.includes(a.type);
+                if (!typeOk) return false;
+                if (moisFiltre > 0) {
+                    const moisDebut = parseInt(a.date_debut.substring(5, 7));
+                    const moisFin = parseInt(a.date_fin.substring(5, 7));
+                    if (moisDebut !== moisFiltre && moisFin !== moisFiltre) return false;
+                }
+                return true;
+            });
+
+            const tbody = tableContainer.querySelector('.stats-absences-tbody');
+            if (!tbody) return;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#999; padding:20px;">Aucune absence pour cette sélection</td></tr>';
             } else {
-                soldesData.cp.push(0);
-                soldesData.rtt.push(0);
-                soldesData.recup.push(0);
+                // Grouper par salarié puis par type
+                const grouped = {};
+                filtered.forEach(a => {
+                    const nom = salariesMap[a.salarie_id] || 'Inconnu';
+                    if (!grouped[nom]) grouped[nom] = {};
+                    const typeLabel = (a.type === 'CP_N' || a.type === 'CP_N1') ? 'CP' : a.type;
+                    if (!grouped[nom][typeLabel]) grouped[nom][typeLabel] = [];
+                    grouped[nom][typeLabel].push(a);
+                });
+
+                let html = '';
+                const nomsTriés = Object.keys(grouped).sort();
+                const typeOrdre = ['CP', 'RTT', 'RECUP', 'MALADIE'];
+
+                nomsTriés.forEach(nom => {
+                    const typesPresents = typeOrdre.filter(t => grouped[nom][t]);
+                    const nbLignes = typesPresents.reduce((sum, t) => sum + grouped[nom][t].length, 0);
+
+                    let first = true;
+                    typesPresents.forEach(typeLabel => {
+                        const absences = grouped[nom][typeLabel];
+                        absences.forEach((a, i) => {
+                            html += '<tr>';
+                            if (first) {
+                                html += `<td class="stats-cell-salarie" rowspan="${nbLignes}"><strong>${nom}</strong></td>`;
+                                first = false;
+                            }
+                            if (i === 0) {
+                                html += `<td rowspan="${absences.length}"><span style="color:${typeColors[typeLabel] || '#333'}; font-weight:600;">${typeLabel}</span></td>`;
+                            }
+                            html += `<td>${formatDate(a.date_debut)}</td>`;
+                            html += `<td>${formatDate(a.date_fin)}</td>`;
+                            html += `<td>${a.duree_jours || '-'}</td>`;
+                            html += '</tr>';
+                        });
+                    });
+                });
+
+                tbody.innerHTML = html;
             }
         }
 
-        const ctxSoldes = document.getElementById('chartSoldesSalaries');
-        if (chartSoldesSalaries) chartSoldesSalaries.destroy();
-        chartSoldesSalaries = new Chart(ctxSoldes, {
-            type: 'bar',
-            data: {
-                labels: nomsLabels,
-                datasets: [
-                    { label: 'CP (N-1 + N)', data: soldesData.cp, backgroundColor: 'rgb(0, 108, 137)', borderRadius: 3 },
-                    { label: 'RTT', data: soldesData.rtt, backgroundColor: 'rgb(116, 43, 135)', borderRadius: 3 },
-                    { label: 'Récup (jours)', data: soldesData.recup, backgroundColor: 'rgb(181, 22, 63)', borderRadius: 3 }
-                ]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } },
-                scales: {
-                    x: { beginAtZero: true, title: { display: true, text: 'Jours' } }
+        const moisOptions = ['Tous', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+        // Construire les checkboxes + select mois + tableau
+        tableContainer.innerHTML = `
+            <div class="stats-filtres">
+                <span class="stats-filtre-titre">Type :</span>
+                ${filtreTypes.map(t => `
+                    <label class="stats-filtre-label">
+                        <input type="checkbox" id="filtreStats_${t}" checked>
+                        <span style="color:${typeColors[t]}">${filtreLabels[t]}</span>
+                    </label>
+                `).join('')}
+                <div class="stats-filtre-right">
+                    <span class="stats-filtre-titre">Période :</span>
+                    <select id="filtreStatsMois" class="stats-filtre-mois">
+                        ${moisOptions.map((m, i) => `<option value="${i}">${m}</option>`).join('')}
+                    </select>
+                    <button id="btnExportStatsPDF" class="btn-stats-pdf" title="Exporter en PDF">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="stats-table-scroll">
+                <table class="table-stats-absences">
+                    <thead>
+                        <tr>
+                            <th>Salarié</th>
+                            <th>Type</th>
+                            <th>Du</th>
+                            <th>Au</th>
+                            <th>Jours</th>
+                        </tr>
+                    </thead>
+                    <tbody class="stats-absences-tbody"></tbody>
+                </table>
+            </div>
+        `;
+
+        // Listeners sur les checkboxes et le select mois
+        filtreTypes.forEach(t => {
+            document.getElementById('filtreStats_' + t).addEventListener('change', renderTableauAbsences);
+        });
+        document.getElementById('filtreStatsMois').addEventListener('change', renderTableauAbsences);
+
+        document.getElementById('btnExportStatsPDF').addEventListener('click', async () => {
+            const typesCoches = filtreTypes.filter(t => {
+                const cb = document.getElementById('filtreStats_' + t);
+                return cb && cb.checked;
+            });
+            const moisFiltre = parseInt(document.getElementById('filtreStatsMois').value);
+
+            const filtered = absencesDetail.filter(a => {
+                const typeOk = (a.type === 'CP_N' || a.type === 'CP_N1' || a.type === 'CP') ? typesCoches.includes('CP') : typesCoches.includes(a.type);
+                if (!typeOk) return false;
+                if (moisFiltre > 0) {
+                    const moisDebut = parseInt(a.date_debut.substring(5, 7));
+                    const moisFin = parseInt(a.date_fin.substring(5, 7));
+                    if (moisDebut !== moisFiltre && moisFin !== moisFiltre) return false;
                 }
+                return true;
+            });
+
+            // Trier par salarié puis par type puis par date
+            filtered.sort((a, b) => {
+                const nomA = salariesMap[a.salarie_id] || '';
+                const nomB = salariesMap[b.salarie_id] || '';
+                if (nomA !== nomB) return nomA.localeCompare(nomB);
+                const tA = (a.type === 'CP_N' || a.type === 'CP_N1') ? 'CP' : a.type;
+                const tB = (b.type === 'CP_N' || b.type === 'CP_N1') ? 'CP' : b.type;
+                if (tA !== tB) return tA.localeCompare(tB);
+                return a.date_debut.localeCompare(b.date_debut);
+            });
+
+            const pdfData = filtered.map(a => ({
+                salarie: salariesMap[a.salarie_id] || 'Inconnu',
+                type: (a.type === 'CP_N' || a.type === 'CP_N1') ? 'CP' : a.type,
+                du: formatDate(a.date_debut),
+                au: formatDate(a.date_fin),
+                jours: String(a.duree_jours || '-')
+            }));
+
+            try {
+                await window.api.exporterStatsPDF({
+                    annee: anneeStatistiques,
+                    mois: moisFiltre,
+                    types: typesCoches,
+                    absences: pdfData
+                });
+            } catch (err) {
+                console.error('Erreur export PDF stats:', err);
             }
         });
+
+        renderTableauAbsences();
 
     } catch (error) {
         console.error('Erreur chargement statistiques:', error);
@@ -3682,7 +3924,8 @@ if (formAbsenceUser) {
                 const pdfData = {
                     salarie: {
                         nom: salarieInfo.nom,
-                        prenom: salarieInfo.prenom
+                        prenom: salarieInfo.prenom,
+                        role: 'admin'
                     },
                     absence: {
                         type: typeAbsenceFinal,

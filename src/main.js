@@ -65,10 +65,27 @@ async function getDbFolder() {
     return folder;
 }
 
-// Wrapper IPC centralisé — try/catch + logging sur tous les handlers
+// Channels qui font des écritures DB (INSERT/UPDATE/DELETE)
+const WRITE_CHANNELS = new Set([
+    'login', 'setPassword', 'resetPassword',
+    'createSalarie', 'updateSalarie', 'deactivateSalarie',
+    'updateSoldes', 'updateSoldesAfterAbsence',
+    'createAbsence', 'deleteAbsence', 'updateAbsence',
+    'ajouter-recup',
+    'addJourFerie', 'deleteJourFerie',
+    'addRTTAnnuel',
+    'updateConfigTraitement', 'logHistoriqueTraitement',
+    'executerTraitementCP', 'executerTraitementRTT',
+    'marquerNotificationLue', 'creerNotification'
+]);
+
+// Wrapper IPC centralisé — try/catch + logging + verrou écriture réseau
 function safeHandle(channel, handler) {
     ipcMain.handle(channel, async (event, ...args) => {
         try {
+            if (WRITE_CHANNELS.has(channel)) {
+                return await ctx.withWriteLock(() => handler(event, ...args));
+            }
             return await handler(event, ...args);
         } catch (err) {
             console.error(`[IPC ERROR] ${channel}:`, err);
@@ -131,8 +148,73 @@ function backupDatabase(dbFolder) {
     }
 }
 
+// ========== VERROU ÉCRITURE DB RÉSEAU ==========
+
+const LOCK_TIMEOUT = 5000; // Timeout max 5s pour obtenir le verrou
+const LOCK_RETRY = 100;    // Réessayer toutes les 100ms
+
+let lockFilePath = null;
+
+function acquireLock() {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+
+        function tryLock() {
+            try {
+                // O_CREAT | O_EXCL = création exclusive (échoue si fichier existe)
+                const fd = fs.openSync(lockFilePath, 'wx');
+                fs.writeFileSync(lockFilePath, `${process.pid}-${Date.now()}`);
+                fs.closeSync(fd);
+                resolve();
+            } catch (err) {
+                if (err.code === 'EEXIST') {
+                    // Vérifier si le lock est périmé (>30s = processus probablement crashé)
+                    try {
+                        const stat = fs.statSync(lockFilePath);
+                        if (Date.now() - stat.mtimeMs > 30000) {
+                            fs.unlinkSync(lockFilePath);
+                            return tryLock();
+                        }
+                    } catch (e) { /* fichier supprimé entre-temps */ }
+
+                    if (Date.now() - start > LOCK_TIMEOUT) {
+                        reject(new Error('Impossible d\'accéder à la base de données : un autre poste est en cours d\'écriture. Réessayez dans quelques secondes.'));
+                    } else {
+                        setTimeout(tryLock, LOCK_RETRY);
+                    }
+                } else {
+                    reject(err);
+                }
+            }
+        }
+
+        tryLock();
+    });
+}
+
+function releaseLock() {
+    try {
+        if (lockFilePath && fs.existsSync(lockFilePath)) {
+            fs.unlinkSync(lockFilePath);
+        }
+    } catch (e) {
+        console.error('Erreur libération lock :', e);
+    }
+}
+
+// Wrapper pour les écritures DB — acquiert le verrou, exécute, relâche
+function withWriteLock(fn) {
+    return acquireLock()
+        .then(() => fn())
+        .finally(() => releaseLock());
+}
+
+// Exposer withWriteLock dans le contexte pour les handlers
+ctx.withWriteLock = withWriteLock;
+
 function connectDatabase(dbFolder) {
     const dbPath = path.join(dbFolder, 'conges.db');
+    lockFilePath = path.join(dbFolder, 'conges.db.lock');
 
     if (!fs.existsSync(dbPath)) {
         const templatePath = path.join(__dirname, 'conges.db');
@@ -149,6 +231,12 @@ function connectDatabase(dbFolder) {
             console.error("Erreur de connexion SQLite :", err);
         } else {
             console.log("Base de données active : " + dbPath);
+            // Activer WAL pour lectures simultanées sans blocage
+            ctx.db.run('PRAGMA journal_mode = WAL', (err) => {
+                if (err) console.error('Erreur activation WAL :', err);
+                else console.log('Mode WAL activé');
+            });
+            ctx.db.run('PRAGMA busy_timeout = 5000'); // Attendre 5s si DB occupée
             runMigrations();
         }
     });
@@ -304,6 +392,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', function () {
+    releaseLock(); // Nettoyer le verrou réseau
     if (ctx.db) ctx.db.close();
     if (process.platform !== 'darwin') app.quit();
 });
