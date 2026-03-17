@@ -30,58 +30,80 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
     });
 
     safeHandle('createAbsence', async (event, absenceData) => {
-        return new Promise((resolve, reject) => {
-            const { salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire, debut_periode, fin_periode, skipNotification } = absenceData;
+        const { salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire, debut_periode, fin_periode, skipNotification } = absenceData;
 
+        // 1. Insérer l'absence
+        const result = await new Promise((resolve, reject) => {
             ctx.db.run(
                 `INSERT INTO absences (salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire, debut_periode, fin_periode)
                  VALUES (?, ?, ?, ?, ?, ?, 'valide', ?, ?, ?)`,
                 [salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire, debut_periode || 'journee-complete', fin_periode || 'journee-complete'],
                 function(err) {
-                    if (err) {
-                        console.error('Erreur création absence:', err);
-                        reject(err);
-                    } else {
-                        console.log('Absence créée avec ID:', this.lastID);
-                        resolve({ success: true, id: this.lastID });
-
-                        // Notification absence (sauf si l'admin pose pour lui-même)
-                        if (skipNotification) return;
-                        const anneeAbsence = new Date(date_debut).getFullYear();
-                        ctx.db.get('SELECT nom, prenom FROM salaries WHERE id = ?', [salarie_id], (err2, salarie) => {
-                            if (err2 || !salarie) return;
-                            ctx.db.get('SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?', [salarie_id, anneeAbsence], (err3, soldes) => {
-                                const formatDate = (d) => { const [y, m, j] = d.split('-'); return `${j}/${m}`; };
-                                const labels = { CP_N: 'CP', CP_N1: 'CP', CP: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
-                                const typeLabel = labels[type] || type;
-                                const dureeStr = (type === 'RECUP' && !duree_jours) ? `${duree_heures}h` : `${duree_jours}j`;
-
-                                let soldeStr = '';
-                                if (soldes && type !== 'MALADIE') {
-                                    if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
-                                        const restant = (soldes.cp_n1 + soldes.cp_n) - (duree_jours || 0);
-                                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
-                                    } else if (type === 'RTT') {
-                                        const restant = soldes.rtt - (duree_jours || 0);
-                                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
-                                    } else if (type === 'RECUP') {
-                                        const restant = soldes.recup_heures - (duree_heures || 0);
-                                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}h`;
-                                    }
-                                }
-
-                                const titre = `Absence posée — ${salarie.prenom} ${salarie.nom}`;
-                                const message = `${typeLabel} · du ${formatDate(date_debut)} au ${formatDate(date_fin)} (${dureeStr})${soldeStr}`;
-                                ctx.db.run(
-                                    `INSERT INTO notifications (type, titre, message, statut) VALUES ('absence', ?, ?, 'success')`,
-                                    [titre, message]
-                                );
-                            });
-                        });
-                    }
+                    if (err) reject(err);
+                    else resolve({ success: true, id: this.lastID });
                 }
             );
         });
+
+        console.log('Absence créée avec ID:', result.id);
+
+        // 2. Créer la notification (dans le même verrou)
+        if (!skipNotification) {
+            try {
+                const salarie = await new Promise((resolve, reject) => {
+                    ctx.db.get('SELECT nom, prenom FROM salaries WHERE id = ?', [salarie_id], (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    });
+                });
+
+                if (salarie) {
+                    const anneeAbsence = new Date(date_debut).getFullYear();
+                    const soldes = await new Promise((resolve, reject) => {
+                        ctx.db.get('SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?', [salarie_id, anneeAbsence], (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row);
+                        });
+                    });
+
+                    const formatDate = (d) => { const [y, m, j] = d.split('-'); return `${j}/${m}`; };
+                    const labels = { CP_N: 'CP', CP_N1: 'CP', CP: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+                    const typeLabel = labels[type] || type;
+                    const dureeStr = (type === 'RECUP' && !duree_jours) ? `${duree_heures}h` : `${duree_jours}j`;
+
+                    let soldeStr = '';
+                    if (soldes && type !== 'MALADIE') {
+                        if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
+                            const restant = (soldes.cp_n1 + soldes.cp_n) - (duree_jours || 0);
+                            soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                        } else if (type === 'RTT') {
+                            const restant = soldes.rtt - (duree_jours || 0);
+                            soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                        } else if (type === 'RECUP') {
+                            const restant = soldes.recup_heures - (duree_heures || 0);
+                            soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}h`;
+                        }
+                    }
+
+                    const titre = `Absence posée — ${salarie.prenom} ${salarie.nom}`;
+                    const message = `${typeLabel} · du ${formatDate(date_debut)} au ${formatDate(date_fin)} (${dureeStr})${soldeStr}`;
+                    await new Promise((resolve, reject) => {
+                        ctx.db.run(
+                            `INSERT INTO notifications (type, titre, message, statut) VALUES ('absence', ?, ?, 'success')`,
+                            [titre, message],
+                            (err) => {
+                                if (err) { console.error('Erreur notification absence:', err); reject(err); }
+                                else { console.log('Notification absence créée'); resolve(); }
+                            }
+                        );
+                    });
+                }
+            } catch (errNotif) {
+                console.error('Erreur création notification absence:', errNotif);
+            }
+        }
+
+        return result;
     });
 
     safeHandle('deleteAbsence', async (event, absenceId) => {

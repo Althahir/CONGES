@@ -15,7 +15,11 @@
       "Bash(pip show:*)",
       "Bash(pip install:*)",
       "Bash(ls:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git commit:*)",
+      "Bash(xargs grep:*)",
+      "Bash(git add:*)",
+      "Bash(git:*)"
     ]
   }
 }

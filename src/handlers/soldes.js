@@ -7,7 +7,7 @@ module.exports = function registerSoldesHandlers(ctx, safeHandle) {
                 [salarieId, annee],
                 (err, row) => {
                     if (err) reject(err);
-                    else resolve(row);
+                    else resolve(row || { salarie_id: salarieId, annee, cp_n1: 0, cp_n: 0, rtt: 0, recup_heures: 0 });
                 }
             );
         });
