@@ -1058,6 +1058,18 @@ async function init() {
     await initFormAbsence();
     await chargerCalendrier();
     initModalHeuresSup();
+
+    // Polling toutes les 30s pour détecter les changements depuis d'autres postes
+    setInterval(async () => {
+        try {
+            const calGlobal = document.getElementById('calendrier-global-section');
+            if (calGlobal && calGlobal.classList.contains('active')) {
+                await chargerCalendrierGlobal();
+            }
+        } catch (e) {
+            console.error('[POLLING] Erreur:', e);
+        }
+    }, 30000);
 }
 
 init();

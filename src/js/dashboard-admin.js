@@ -1545,12 +1545,12 @@ async function calculerDureeAbsenceAdmin() {
 
         // Récupérer les soldes actuels
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
-        
+
         // Afficher la durée
-        resumeDuree.textContent = typeAbsence === 'RECUP' && recupType === 'heures' 
-            ? `${dureeHeures.toFixed(1)} heure(s)` 
+        resumeDuree.textContent = typeAbsence === 'RECUP' && recupType === 'heures'
+            ? `${dureeHeures.toFixed(1)} heure(s)`
             : `${dureeJours.toFixed(2)} jour(s)`;
-        
+
         // Calculer et afficher le décompte selon le type
         let soldeNegatif = false;
 
@@ -3389,6 +3389,37 @@ async function init() {
 
     // Charger les notifications non lues
     await chargerNotificationsNonLues();
+
+    // Polling toutes les 30s pour détecter les changements depuis d'autres postes
+    let _dernierNbNotifs = (window._notificationsEnAttente || []).length;
+    setInterval(async () => {
+        try {
+            const anciennes = _dernierNbNotifs;
+            const notifications = await window.api.getNotificationsNonLues(user.id);
+            const nouvelles = notifications.length;
+            _dernierNbNotifs = nouvelles;
+
+            // Mettre à jour le badge et le cache
+            window._notificationsEnAttente = notifications;
+            mettreAJourBadge(nouvelles);
+
+            // Afficher un toast pour chaque nouvelle notification
+            if (nouvelles > anciennes) {
+                const nouvellesNotifs = notifications.slice(0, nouvelles - anciennes);
+                for (const notif of nouvellesNotifs) {
+                    afficherNotificationPersistante('success', notif.titre, notif.message);
+                }
+            }
+
+            // Rafraîchir le calendrier global si la section est active
+            const calGlobal = document.getElementById('calendrier-global-section');
+            if (calGlobal && calGlobal.classList.contains('active')) {
+                await chargerCalendrierGlobal();
+            }
+        } catch (e) {
+            console.error('[POLLING] Erreur:', e);
+        }
+    }, 30000);
 }
 // ========== SECTION HISTORIQUE COMPLET ==========
 

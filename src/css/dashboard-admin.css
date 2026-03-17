@@ -2660,6 +2660,11 @@ h2 {
     border: 1px solid #f0f0f0;
 }
 
+.table-historique table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
 .table-historique th {
     background: var(--bleu);
     color: white;

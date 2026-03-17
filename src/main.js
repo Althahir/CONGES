@@ -80,14 +80,89 @@ const WRITE_CHANNELS = new Set([
     'updateConfigApp'
 ]);
 
+// File d'attente pour sérialiser les accès DB (éviter les ouvertures/fermetures concurrentes)
+let dbQueue = Promise.resolve();
+let dbOpenCount = 0; // Compteur de références — ferme la DB quand il retombe à 0
+let dbCloseTimer = null; // Timer pour fermer la DB après un délai d'inactivité
+const DB_CLOSE_DELAY = 2000; // Fermer la DB 2s après la dernière opération
+
+function withDatabase(fn) {
+    const task = dbQueue.then(() => {
+        return new Promise((resolve, reject) => {
+            if (!ctx.dbPath) return reject(new Error('DB non configurée'));
+
+            // Annuler le timer de fermeture si la DB est encore ouverte
+            if (dbCloseTimer) {
+                clearTimeout(dbCloseTimer);
+                dbCloseTimer = null;
+            }
+
+            dbOpenCount++;
+
+            function onDbReady() {
+                Promise.resolve()
+                    .then(() => fn())
+                    .then(result => {
+                        dbOpenCount--;
+                        scheduleClose();
+                        resolve(result);
+                    })
+                    .catch(err => {
+                        dbOpenCount--;
+                        scheduleClose();
+                        reject(err);
+                    });
+            }
+
+            // Si la DB est déjà ouverte, réutiliser la connexion
+            if (ctx.db) {
+                onDbReady();
+            } else {
+                ctx.db = new sqlite3.Database(ctx.dbPath, (err) => {
+                    if (err) {
+                        dbOpenCount--;
+                        return reject(err);
+                    }
+                    ctx.db.run('PRAGMA journal_mode = DELETE');
+                    ctx.db.run('PRAGMA busy_timeout = 5000', () => {
+                        onDbReady();
+                    });
+                });
+            }
+        });
+    });
+
+    // Mettre à jour la queue pour que le prochain appel attende la fin de celui-ci
+    dbQueue = task.catch(() => {});
+    return task;
+}
+
+// Ferme la DB après un délai d'inactivité pour libérer le fichier (synchro OneDrive)
+function scheduleClose() {
+    if (dbOpenCount > 0) return; // D'autres opérations sont en cours
+    if (dbCloseTimer) clearTimeout(dbCloseTimer);
+    dbCloseTimer = setTimeout(() => {
+        if (ctx.db && dbOpenCount === 0) {
+            ctx.db.close((err) => {
+                if (err) console.error('Erreur fermeture DB :', err);
+                ctx.db = null;
+                dbCloseTimer = null;
+            });
+        }
+    }, DB_CLOSE_DELAY);
+}
+
 // Wrapper IPC centralisé — try/catch + logging + verrou écriture réseau
+// Ouvre la DB pour chaque opération puis la ferme → libère le fichier pour la synchro OneDrive
 function safeHandle(channel, handler) {
     ipcMain.handle(channel, async (event, ...args) => {
         try {
             if (WRITE_CHANNELS.has(channel)) {
-                return await ctx.withWriteLock(() => handler(event, ...args));
+                return await ctx.withWriteLock(() =>
+                    withDatabase(() => handler(event, ...args))
+                );
             }
-            return await handler(event, ...args);
+            return await withDatabase(() => handler(event, ...args));
         } catch (err) {
             console.error(`[IPC ERROR] ${channel}:`, err);
             throw err;
@@ -214,33 +289,45 @@ function withWriteLock(fn) {
 // Exposer withWriteLock dans le contexte pour les handlers
 ctx.withWriteLock = withWriteLock;
 
+// Initialise la DB : copie le template si besoin, lance les migrations, puis FERME la connexion
 function connectDatabase(dbFolder) {
-    const dbPath = path.join(dbFolder, 'conges.db');
-    lockFilePath = path.join(dbFolder, 'conges.db.lock');
+    return new Promise((resolve, reject) => {
+        const dbPath = path.join(dbFolder, 'conges.db');
+        lockFilePath = path.join(dbFolder, 'conges.db.lock');
+        ctx.dbPath = dbPath; // Stocké pour withDatabase()
 
-    if (!fs.existsSync(dbPath)) {
-        const templatePath = path.join(__dirname, 'conges.db');
-        try {
-            fs.copyFileSync(templatePath, dbPath);
-            console.log("Première installation : Base de données copiée dans " + dbFolder);
-        } catch (err) {
-            console.error("Erreur lors de la copie de la base :", err);
+        if (!fs.existsSync(dbPath)) {
+            const templatePath = path.join(__dirname, 'conges.db');
+            try {
+                fs.copyFileSync(templatePath, dbPath);
+                console.log("Première installation : Base de données copiée dans " + dbFolder);
+            } catch (err) {
+                console.error("Erreur lors de la copie de la base :", err);
+            }
         }
-    }
 
-    ctx.db = new sqlite3.Database(dbPath, (err) => {
-        if (err) {
-            console.error("Erreur de connexion SQLite :", err);
-        } else {
+        ctx.db = new sqlite3.Database(dbPath, (err) => {
+            if (err) {
+                console.error("Erreur de connexion SQLite :", err);
+                return reject(err);
+            }
             console.log("Base de données active : " + dbPath);
-            // Activer WAL pour lectures simultanées sans blocage
-            ctx.db.run('PRAGMA journal_mode = WAL', (err) => {
-                if (err) console.error('Erreur activation WAL :', err);
-                else console.log('Mode WAL activé');
+            ctx.db.run('PRAGMA journal_mode = DELETE', (err) => {
+                if (err) console.error('Erreur configuration journal_mode :', err);
+                else console.log('Mode journal DELETE activé (compatible réseau)');
             });
-            ctx.db.run('PRAGMA busy_timeout = 5000'); // Attendre 5s si DB occupée
-            runMigrations();
-        }
+            ctx.db.run('PRAGMA busy_timeout = 5000', () => {
+                runMigrations(() => {
+                    // Migrations terminées → fermer la connexion (libérer le fichier pour OneDrive)
+                    ctx.db.close((closeErr) => {
+                        ctx.db = null;
+                        if (closeErr) console.error('Erreur fermeture DB post-migrations :', closeErr);
+                        else console.log('DB fermée après migrations (fichier libéré pour synchro OneDrive)');
+                        resolve();
+                    });
+                });
+            });
+        });
     });
 }
 
@@ -351,7 +438,7 @@ const MIGRATIONS = [
     },
 ];
 
-function runMigrations() {
+function runMigrations(onDone) {
     const db = ctx.db;
 
     // S'assurer que la table db_version existe
@@ -361,6 +448,7 @@ function runMigrations() {
 
             if (currentVersion >= MIGRATIONS.length) {
                 console.log(`DB version ${currentVersion} — à jour`);
+                if (onDone) onDone();
                 return;
             }
 
@@ -369,15 +457,13 @@ function runMigrations() {
             function applyNext(v) {
                 if (v >= MIGRATIONS.length) {
                     // Mettre à jour la version
-                    if (currentVersion === 0) {
-                        db.run('INSERT INTO db_version VALUES (?)', [MIGRATIONS.length], () => {
-                            console.log(`DB migrée vers version ${MIGRATIONS.length}`);
-                        });
-                    } else {
-                        db.run('UPDATE db_version SET version = ?', [MIGRATIONS.length], () => {
-                            console.log(`DB migrée vers version ${MIGRATIONS.length}`);
-                        });
-                    }
+                    const sql = currentVersion === 0
+                        ? 'INSERT INTO db_version VALUES (?)'
+                        : 'UPDATE db_version SET version = ?';
+                    db.run(sql, [MIGRATIONS.length], () => {
+                        console.log(`DB migrée vers version ${MIGRATIONS.length}`);
+                        if (onDone) onDone();
+                    });
                     return;
                 }
 
@@ -417,11 +503,13 @@ app.whenReady().then(async () => {
     if (!dbFolder) return; // L'utilisateur a annulé → app.quit() déjà appelé
 
     backupDatabase(dbFolder);
-    connectDatabase(dbFolder);
+    await connectDatabase(dbFolder);
     createWindow();
 
     setTimeout(() => {
-        verifierTraitementsAutomatiques();
+        withDatabase(() => verifierTraitementsAutomatiques()).catch(err => {
+            console.error('Erreur vérification traitements auto :', err);
+        });
     }, 2000);
 
     app.on('activate', function () {
@@ -431,6 +519,6 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', function () {
     releaseLock(); // Nettoyer le verrou réseau
-    if (ctx.db) ctx.db.close();
+    if (ctx.db) ctx.db.close(() => { ctx.db = null; });
     if (process.platform !== 'darwin') app.quit();
 });
