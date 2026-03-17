@@ -1,58 +1,490 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
-const PDFDocument = require('pdfkit');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
 if (require('electron-squirrel-startup')) {
   app.quit();
-  return; // Arrête l'exécution si Squirrel est en train d'installer/configurer
-}
-let mainWindow;
-let db;
-
-// Connexion à la base de données
-
-
-function connectDatabase() {
-    // 1. Déterminer le chemin vers le dossier de données utilisateur (AppData)
-    // C'est ici que la base doit vivre pour être modifiable
-    const userDataPath = app.getPath('userData'); 
-const dbPath = path.join(userDataPath, 'conges.db');
-
-// 1. Vérifier si le dossier dans AppData existe, sinon le créer
-if (!fs.existsSync(userDataPath)) {
-    fs.mkdirSync(userDataPath, { recursive: true });
+  return;
 }
 
-// 2. Si la DB n'est pas encore dans AppData, on la copie depuis le dossier de l'app
-if (!fs.existsSync(dbPath)) {
-    // __dirname pointe vers l'intérieur du ASAR en production
-    const templatePath = path.join(__dirname, 'conges.db'); 
-    
+// Forcer le dossier userData à "conges-lce" quel que soit le productName
+app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
+
+// Contexte partagé avec les handlers
+const ctx = { db: null, mainWindow: null };
+
+// ========== CONFIGURATION CHEMIN DB ==========
+
+const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
+
+function readConfig() {
     try {
-        fs.copyFileSync(templatePath, dbPath);
-        console.log("Première installation : Base de données copiée dans AppData.");
+        if (fs.existsSync(CONFIG_PATH)) {
+            return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Erreur lecture config.json :', e);
+    }
+    return null;
+}
+
+function saveConfig(config) {
+    const dir = path.dirname(CONFIG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+async function getDbFolder() {
+    // Vérifier si un chemin est déjà configuré et valide
+    const config = readConfig();
+    if (config && config.dbFolder && fs.existsSync(config.dbFolder)) {
+        console.log('Dossier DB (config) :', config.dbFolder);
+        return config.dbFolder;
+    }
+
+    // Premier lancement ou dossier introuvable — demander à l'utilisateur
+    const msg = config && config.dbFolder
+        ? `Le dossier configuré est introuvable :\n${config.dbFolder}\n\nVeuillez sélectionner le dossier contenant la base de données.`
+        : 'Premier lancement : sélectionnez le dossier réseau (SharePoint/OneDrive) où stocker la base de données.';
+
+    const result = await dialog.showOpenDialog({
+        title: 'Dossier de la base de données',
+        message: msg,
+        properties: ['openDirectory'],
+        buttonLabel: 'Sélectionner ce dossier'
+    });
+
+    if (result.canceled || !result.filePaths.length) {
+        app.quit();
+        return null;
+    }
+
+    const folder = result.filePaths[0];
+    saveConfig({ dbFolder: folder });
+    console.log('Dossier DB configuré :', folder);
+    return folder;
+}
+
+// Channels qui font des écritures DB (INSERT/UPDATE/DELETE)
+const WRITE_CHANNELS = new Set([
+    'login', 'setPassword', 'resetPassword',
+    'createSalarie', 'updateSalarie', 'deactivateSalarie',
+    'updateSoldes', 'updateSoldesAfterAbsence',
+    'createAbsence', 'deleteAbsence', 'updateAbsence',
+    'ajouter-recup',
+    'addJourFerie', 'deleteJourFerie',
+    'addRTTAnnuel',
+    'updateConfigTraitement', 'logHistoriqueTraitement',
+    'executerTraitementCP', 'executerTraitementCPMensuel', 'executerTraitementRTT',
+    'marquerNotificationLue', 'creerNotification',
+    'updateConfigApp'
+]);
+
+// File d'attente pour sérialiser les accès DB (éviter les ouvertures/fermetures concurrentes)
+let dbQueue = Promise.resolve();
+let dbOpenCount = 0; // Compteur de références — ferme la DB quand il retombe à 0
+let dbCloseTimer = null; // Timer pour fermer la DB après un délai d'inactivité
+const DB_CLOSE_DELAY = 2000; // Fermer la DB 2s après la dernière opération
+
+function withDatabase(fn) {
+    const task = dbQueue.then(() => {
+        return new Promise((resolve, reject) => {
+            if (!ctx.dbPath) return reject(new Error('DB non configurée'));
+
+            // Annuler le timer de fermeture si la DB est encore ouverte
+            if (dbCloseTimer) {
+                clearTimeout(dbCloseTimer);
+                dbCloseTimer = null;
+            }
+
+            dbOpenCount++;
+
+            function onDbReady() {
+                Promise.resolve()
+                    .then(() => fn())
+                    .then(result => {
+                        dbOpenCount--;
+                        scheduleClose();
+                        resolve(result);
+                    })
+                    .catch(err => {
+                        dbOpenCount--;
+                        scheduleClose();
+                        reject(err);
+                    });
+            }
+
+            // Si la DB est déjà ouverte, réutiliser la connexion
+            if (ctx.db) {
+                onDbReady();
+            } else {
+                ctx.db = new sqlite3.Database(ctx.dbPath, (err) => {
+                    if (err) {
+                        dbOpenCount--;
+                        return reject(err);
+                    }
+                    ctx.db.run('PRAGMA journal_mode = DELETE');
+                    ctx.db.run('PRAGMA busy_timeout = 5000', () => {
+                        onDbReady();
+                    });
+                });
+            }
+        });
+    });
+
+    // Mettre à jour la queue pour que le prochain appel attende la fin de celui-ci
+    dbQueue = task.catch(() => {});
+    return task;
+}
+
+// Ferme la DB après un délai d'inactivité pour libérer le fichier (synchro OneDrive)
+function scheduleClose() {
+    if (dbOpenCount > 0) return; // D'autres opérations sont en cours
+    if (dbCloseTimer) clearTimeout(dbCloseTimer);
+    dbCloseTimer = setTimeout(() => {
+        if (ctx.db && dbOpenCount === 0) {
+            ctx.db.close((err) => {
+                if (err) console.error('Erreur fermeture DB :', err);
+                ctx.db = null;
+                dbCloseTimer = null;
+            });
+        }
+    }, DB_CLOSE_DELAY);
+}
+
+// Wrapper IPC centralisé — try/catch + logging + verrou écriture réseau
+// Ouvre la DB pour chaque opération puis la ferme → libère le fichier pour la synchro OneDrive
+function safeHandle(channel, handler) {
+    ipcMain.handle(channel, async (event, ...args) => {
+        try {
+            if (WRITE_CHANNELS.has(channel)) {
+                return await ctx.withWriteLock(() =>
+                    withDatabase(() => handler(event, ...args))
+                );
+            }
+            return await withDatabase(() => handler(event, ...args));
+        } catch (err) {
+            console.error(`[IPC ERROR] ${channel}:`, err);
+            throw err;
+        }
+    });
+}
+
+// ========== ENREGISTREMENT DES HANDLERS ==========
+
+const { verifierTraitementsAutomatiques } = require('./handlers/traitements')(ctx, safeHandle);
+require('./handlers/auth')(ctx, safeHandle);
+require('./handlers/salaries')(ctx, safeHandle);
+require('./handlers/soldes')(ctx, safeHandle);
+require('./handlers/absences')(ctx, safeHandle);
+require('./handlers/heures-sup')(ctx, safeHandle);
+require('./handlers/notifications')(ctx, safeHandle);
+require('./handlers/jours-feries')(ctx, safeHandle);
+require('./handlers/rtt')(ctx, safeHandle);
+require('./handlers/calcul')(ctx, safeHandle);
+require('./handlers/pdf')(ctx, safeHandle);
+require('./handlers/config-app')(ctx, safeHandle);
+require('./handlers/navigation')(ctx, safeHandle);
+
+// ========== BASE DE DONNÉES ==========
+
+function backupDatabase(dbFolder) {
+    const dbPath = path.join(dbFolder, 'conges.db');
+    if (!fs.existsSync(dbPath)) return;
+
+    // Backups en local (AppData), pas sur le réseau
+    const backupDir = path.join(app.getPath('userData'), 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const backupPath = path.join(backupDir, `conges_${today}.db`);
+    if (!fs.existsSync(backupPath)) {
+        try {
+            fs.copyFileSync(dbPath, backupPath);
+            console.log(`Backup créé : ${backupPath}`);
+        } catch (err) {
+            console.error('Erreur backup DB :', err);
+        }
+    }
+
+    const now = Date.now();
+    const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
+    try {
+        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('conges_') && f.endsWith('.db'));
+        for (const file of files) {
+            const match = file.match(/conges_(\d{4}-\d{2}-\d{2})\.db/);
+            if (!match) continue;
+            const fileAge = now - new Date(match[1]).getTime();
+            if (fileAge > SIXTY_DAYS) {
+                fs.unlinkSync(path.join(backupDir, file));
+                console.log(`Backup supprimé (>60j) : ${file}`);
+            }
+        }
     } catch (err) {
-        console.error("Erreur lors de la copie de la base :", err);
+        console.error('Erreur nettoyage backups :', err);
     }
 }
 
-// 3. Connexion à la base "extérieure" (celle que vous pourrez modifier)
-db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error("Erreur de connexion SQLite :", err);
-    } else {
-        console.log("Base de données active : " + dbPath);
-    }
-});
+// ========== VERROU ÉCRITURE DB RÉSEAU ==========
+
+const LOCK_TIMEOUT = 5000; // Timeout max 5s pour obtenir le verrou
+const LOCK_RETRY = 100;    // Réessayer toutes les 100ms
+
+let lockFilePath = null;
+
+function acquireLock() {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+
+        function tryLock() {
+            try {
+                // O_CREAT | O_EXCL = création exclusive (échoue si fichier existe)
+                const fd = fs.openSync(lockFilePath, 'wx');
+                fs.writeFileSync(lockFilePath, `${process.pid}-${Date.now()}`);
+                fs.closeSync(fd);
+                resolve();
+            } catch (err) {
+                if (err.code === 'EEXIST') {
+                    // Vérifier si le lock est périmé (>30s = processus probablement crashé)
+                    try {
+                        const stat = fs.statSync(lockFilePath);
+                        if (Date.now() - stat.mtimeMs > 30000) {
+                            fs.unlinkSync(lockFilePath);
+                            return tryLock();
+                        }
+                    } catch (e) { /* fichier supprimé entre-temps */ }
+
+                    if (Date.now() - start > LOCK_TIMEOUT) {
+                        reject(new Error('Impossible d\'accéder à la base de données : un autre poste est en cours d\'écriture. Réessayez dans quelques secondes.'));
+                    } else {
+                        setTimeout(tryLock, LOCK_RETRY);
+                    }
+                } else {
+                    reject(err);
+                }
+            }
+        }
+
+        tryLock();
+    });
 }
+
+function releaseLock() {
+    try {
+        if (lockFilePath && fs.existsSync(lockFilePath)) {
+            fs.unlinkSync(lockFilePath);
+        }
+    } catch (e) {
+        console.error('Erreur libération lock :', e);
+    }
+}
+
+// Wrapper pour les écritures DB — acquiert le verrou, exécute, relâche
+function withWriteLock(fn) {
+    return acquireLock()
+        .then(() => fn())
+        .finally(() => releaseLock());
+}
+
+// Exposer withWriteLock dans le contexte pour les handlers
+ctx.withWriteLock = withWriteLock;
+
+// Initialise la DB : copie le template si besoin, lance les migrations, puis FERME la connexion
+function connectDatabase(dbFolder) {
+    return new Promise((resolve, reject) => {
+        const dbPath = path.join(dbFolder, 'conges.db');
+        lockFilePath = path.join(dbFolder, 'conges.db.lock');
+        ctx.dbPath = dbPath; // Stocké pour withDatabase()
+
+        if (!fs.existsSync(dbPath)) {
+            const templatePath = path.join(__dirname, 'conges.db');
+            try {
+                fs.copyFileSync(templatePath, dbPath);
+                console.log("Première installation : Base de données copiée dans " + dbFolder);
+            } catch (err) {
+                console.error("Erreur lors de la copie de la base :", err);
+            }
+        }
+
+        ctx.db = new sqlite3.Database(dbPath, (err) => {
+            if (err) {
+                console.error("Erreur de connexion SQLite :", err);
+                return reject(err);
+            }
+            console.log("Base de données active : " + dbPath);
+            ctx.db.run('PRAGMA journal_mode = DELETE', (err) => {
+                if (err) console.error('Erreur configuration journal_mode :', err);
+                else console.log('Mode journal DELETE activé (compatible réseau)');
+            });
+            ctx.db.run('PRAGMA busy_timeout = 5000', () => {
+                runMigrations(() => {
+                    // Migrations terminées → fermer la connexion (libérer le fichier pour OneDrive)
+                    ctx.db.close((closeErr) => {
+                        ctx.db = null;
+                        if (closeErr) console.error('Erreur fermeture DB post-migrations :', closeErr);
+                        else console.log('DB fermée après migrations (fichier libéré pour synchro OneDrive)');
+                        resolve();
+                    });
+                });
+            });
+        });
+    });
+}
+
+// ========== SYSTEME DE MIGRATIONS ==========
+
+// Chaque entrée = une migration. L'index+1 = le numéro de version cible.
+// La version 1 correspond au template DB complet (toutes les tables déjà présentes).
+// Les migrations suivantes sont pour les DB existantes qui doivent évoluer.
+const MIGRATIONS = [
+    // v1 : schéma initial complet (template DB) — rien à faire pour les nouvelles installations
+    function v1(db, done) {
+        // Pour les anciennes DB sans db_version : s'assurer que toutes les tables/colonnes existent
+        db.serialize(function() {
+            db.run(`CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS rtt_annuels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                annee_debut INTEGER NOT NULL UNIQUE,
+                date_debut DATE NOT NULL DEFAULT '',
+                date_fin DATE NOT NULL DEFAULT '',
+                nb_jours_periode INTEGER,
+                nb_jours_we INTEGER,
+                nb_jours_feries_hors_we INTEGER,
+                nb_jours_travailles INTEGER,
+                nb_cp_a_deduire INTEGER DEFAULT 25,
+                nb_rtt INTEGER
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS heures_supplementaires (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salarie_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                heures REAL NOT NULL,
+                commentaire TEXT,
+                date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS historique_modifs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salarie_id INTEGER,
+                action TEXT NOT NULL,
+                table_concernee TEXT NOT NULL,
+                details TEXT,
+                date_modif DATETIME DEFAULT CURRENT_TIMESTAMP,
+                modifie_par INTEGER,
+                FOREIGN KEY (salarie_id) REFERENCES salaries(id),
+                FOREIGN KEY (modifie_par) REFERENCES salaries(id)
+            )`);
+
+            // Colonnes potentiellement manquantes
+            const alterCols = [
+                "ALTER TABLE absences ADD COLUMN debut_periode TEXT DEFAULT 'journee-complete'",
+                "ALTER TABLE absences ADD COLUMN fin_periode TEXT DEFAULT 'journee-complete'",
+                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_periode INTEGER",
+                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_we INTEGER",
+                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_feries_hors_we INTEGER",
+                "ALTER TABLE rtt_annuels ADD COLUMN nb_rtt INTEGER",
+            ];
+            alterCols.forEach(sql => {
+                db.run(sql, () => {}); // Ignorer les erreurs duplicate column
+            });
+
+            // Index
+            db.run('CREATE INDEX IF NOT EXISTS idx_absences_salarie ON absences(salarie_id)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_soldes_salarie_annee ON soldes(salarie_id, annee)');
+        });
+        done();
+    },
+
+    // v2 : taux CP globaux + arrêt maladie par salarié + historique taux + traitement CP mensuel
+    function v2(db, done) {
+        db.serialize(function() {
+            // Table config applicative (taux CP globaux)
+            db.run(`CREATE TABLE IF NOT EXISTS config_app (
+                cle TEXT PRIMARY KEY,
+                valeur TEXT NOT NULL
+            )`);
+
+            // Valeurs par défaut
+            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_normal', '2.08333')`);
+            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_arret', '1.66333')`);
+
+            // Historique des changements de taux par salarié
+            db.run(`CREATE TABLE IF NOT EXISTS historique_taux (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salarie_id INTEGER NOT NULL,
+                date_effet TEXT NOT NULL,
+                ancien_taux TEXT NOT NULL,
+                nouveau_taux TEXT NOT NULL,
+                date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+            )`);
+
+            // Nouvelles colonnes sur salaries
+            const alterCols = [
+                "ALTER TABLE salaries ADD COLUMN en_arret_maladie INTEGER DEFAULT 0",
+                "ALTER TABLE salaries ADD COLUMN date_arret_maladie TEXT",
+            ];
+            alterCols.forEach(sql => {
+                db.run(sql, () => {}); // Ignorer si colonne existe déjà
+            });
+
+            // Index
+            db.run('CREATE INDEX IF NOT EXISTS idx_historique_taux_salarie ON historique_taux(salarie_id)');
+        });
+        done();
+    },
+];
+
+function runMigrations(onDone) {
+    const db = ctx.db;
+
+    // S'assurer que la table db_version existe
+    db.run('CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)', () => {
+        db.get('SELECT version FROM db_version', (err, row) => {
+            let currentVersion = (row && row.version) ? row.version : 0;
+
+            if (currentVersion >= MIGRATIONS.length) {
+                console.log(`DB version ${currentVersion} — à jour`);
+                if (onDone) onDone();
+                return;
+            }
+
+            console.log(`DB version ${currentVersion} — ${MIGRATIONS.length - currentVersion} migration(s) à appliquer`);
+
+            function applyNext(v) {
+                if (v >= MIGRATIONS.length) {
+                    // Mettre à jour la version
+                    const sql = currentVersion === 0
+                        ? 'INSERT INTO db_version VALUES (?)'
+                        : 'UPDATE db_version SET version = ?';
+                    db.run(sql, [MIGRATIONS.length], () => {
+                        console.log(`DB migrée vers version ${MIGRATIONS.length}`);
+                        if (onDone) onDone();
+                    });
+                    return;
+                }
+
+                console.log(`Application migration v${v + 1}...`);
+                MIGRATIONS[v](db, () => applyNext(v + 1));
+            }
+
+            applyNext(currentVersion);
+        });
+    });
+}
+
+// ========== FENÊTRE ==========
 
 function createWindow() {
-    mainWindow = new BrowserWindow({
+    ctx.mainWindow = new BrowserWindow({
+        title: 'Gestionnaire de congés EXCELLIUM',
         fullscreen: false,
-        icon: path.join(__dirname, 'assets/favicon2.ico'),
+        minWidth: 900,
+        minHeight: 600,
+        icon: path.join(__dirname, 'assets/app.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -60,726 +492,25 @@ function createWindow() {
         }
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'pages', 'login.html'));
-    
-    // Maximiser la fenêtre au démarrage (s'adapte à la taille de l'écran)
-    mainWindow.maximize();
+    ctx.mainWindow.loadFile(path.join(__dirname, 'pages', 'login.html'));
+    ctx.mainWindow.maximize();
 }
 
-// ========== GESTION CONFIGURATION TRAITEMENTS ==========
+// ========== DÉMARRAGE ==========
 
-ipcMain.handle('getConfigTraitements', async (event) => {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM config_traitements ORDER BY type', (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
-    });
-});
+app.whenReady().then(async () => {
+    const dbFolder = await getDbFolder();
+    if (!dbFolder) return; // L'utilisateur a annulé → app.quit() déjà appelé
 
-ipcMain.handle('updateConfigTraitement', async (event, type, jour, mois) => {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'UPDATE config_traitements SET jour = ?, mois = ?, derniere_maj = CURRENT_TIMESTAMP WHERE type = ?',
-            [jour, mois, type],
-            (err) => {
-                if (err) reject(err);
-                else resolve({ success: true });
-            }
-        );
-    });
-});
-
-ipcMain.handle('getHistoriqueTraitements', async (event) => {
-    return new Promise((resolve, reject) => {
-        db.all(
-            'SELECT * FROM historique_traitements ORDER BY date_execution DESC LIMIT 20',
-            (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            }
-        );
-    });
-});
-
-// ========== GESTION DES NOTIFICATIONS ==========
-
-ipcMain.handle('getNotificationsNonLues', async (event, userId) => {
-    return new Promise((resolve, reject) => {
-        // Récupérer les notifications non lues pour cet admin (ou pour tous si user_id IS NULL)
-        db.all(
-            `SELECT * FROM notifications 
-             WHERE lue = 0 AND (user_id IS NULL OR user_id = ?) 
-             ORDER BY date_creation DESC`,
-            [userId],
-            (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            }
-        );
-    });
-});
-
-ipcMain.handle('marquerNotificationLue', async (event, notificationId) => {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'UPDATE notifications SET lue = 1 WHERE id = ?',
-            [notificationId],
-            (err) => {
-                if (err) reject(err);
-                else resolve({ success: true });
-            }
-        );
-    });
-});
-
-ipcMain.handle('creerNotification', async (event, notificationData) => {
-    return new Promise((resolve, reject) => {
-        const { type, titre, message, details, statut } = notificationData;
-        
-        db.run(
-            `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
-             VALUES (?, ?, ?, ?, ?, NULL)`,
-            [type, titre, message, details, statut],
-            function(err) {
-                if (err) reject(err);
-                else resolve({ success: true, id: this.lastID });
-            }
-        );
-    });
-});
-// ========== TRAITEMENTS AUTOMATIQUES ==========
-
-// Traitement CP Annuel (transfert + crédit)
-ipcMain.handle('executerTraitementCP', async (event, annee) => {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            
-            let nbMisAJour = 0;
-            let details = [];
-            let erreurs = [];
-            
-            for (const salarie of salaries) {
-                try {
-                    const dateEmbauche = new Date(salarie.date_embauche);
-                    const anneeEmbauche = dateEmbauche.getFullYear();
-                    
-                    // Calculer les CP à créditer pour la nouvelle année
-                    let cpNouveaux = salarie.cp_mensuel * 12; // 100% même si embauché en cours d'année précédente
-                    
-                    // Récupérer soldes actuels
-                    const soldes = await new Promise((res, rej) => {
-                        db.get(
-                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                            [salarie.id, annee],
-                            (err, row) => {
-                                if (err) rej(err);
-                                else res(row);
-                            }
-                        );
-                    });
-                    
-                    if (soldes) {
-                        // Transfert CP N → CP N-1 et crédit nouveaux CP N
-                        const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
-                        const nouveauCPN = cpNouveaux;
-                        
-                        await new Promise((res, rej) => {
-                            db.run(
-                                'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
-                                [nouveauCPN1, nouveauCPN, salarie.id, annee],
-                                (err) => {
-                                    if (err) rej(err);
-                                    else res();
-                                }
-                            );
-                        });
-                        
-                        nbMisAJour++;
-                        details.push({
-                            salarie_id: salarie.id,
-                            nom: `${salarie.prenom} ${salarie.nom}`,
-                            cp_transferes: soldes.cp_n.toFixed(2),
-                            nouveau_cp_n1: nouveauCPN1.toFixed(2),
-                            nouveaux_cp_n: nouveauCPN.toFixed(2)
-                        });
-                    }
-                    
-                } catch (error) {
-                    console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
-                    erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
-                }
-            }
-            
-            // Enregistrer dans l'historique
-            const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
-            
-            db.run(
-                'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                (err) => {
-                    if (err) console.error('Erreur enregistrement historique:', err);
-                }
-            );
-            
-            resolve({
-                success: statut !== 'error',
-                statut,
-                nbMisAJour,
-                details,
-                erreurs
-            });
-        });
-    });
-});
-// ========== SUPPRESSION D'ABSENCE AVEC RECALCUL ==========
-
-ipcMain.handle('deleteAbsence', async (event, absenceId) => {
-    return new Promise((resolve, reject) => {
-        // 1. Récupérer l'absence avant de la supprimer
-        db.get('SELECT * FROM absences WHERE id = ?', [absenceId], async (err, absence) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            
-            if (!absence) {
-                reject(new Error('Absence introuvable'));
-                return;
-            }
-            
-            const salarieId = absence.salarie_id;
-            const type = absence.type;
-            const dureeJours = absence.duree_jours || 0;
-            const dureeHeures = absence.duree_heures || 0;
-            
-            // CORRECTION ICI : Toujours utiliser l'année en cours pour les soldes
-            const anneeEnCours = new Date().getFullYear();
-            
-            try {
-                // 2. Supprimer l'absence
-                await new Promise((res, rej) => {
-                    db.run('DELETE FROM absences WHERE id = ?', [absenceId], (err) => {
-                        if (err) rej(err);
-                        else res();
-                    });
-                });
-                
-                // 3. Recréditer les soldes de l'année en cours si ce n'est pas une maladie
-                if (type !== 'MALADIE') {
-                    await new Promise((res, rej) => {
-                        db.get(
-                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                            [salarieId, anneeEnCours],
-                            (err, soldes) => {
-                                if (err) {
-                                    rej(err);
-                                    return;
-                                }
-                                
-                                if (!soldes) {
-                                    rej(new Error('Soldes introuvables pour l\'année en cours'));
-                                    return;
-                                }
-                                
-                                // Recréditer selon le type
-                                let nouveauCPN1 = soldes.cp_n1;
-                                let nouveauCPN = soldes.cp_n;
-                                let nouveauRTT = soldes.rtt;
-                                let nouvelleRecup = soldes.recup_heures;
-                                
-                                if (type === 'CP_N' || type === 'CP_N1' || type === 'CP') {
-                                    nouveauCPN = soldes.cp_n + dureeJours;
-                                } else if (type === 'RTT') {
-                                    nouveauRTT = soldes.rtt + dureeJours;
-                                } else if (type === 'RECUP') {
-                                    nouvelleRecup = soldes.recup_heures + dureeHeures;
-                                }
-                                
-                                // Mettre à jour
-                                db.run(
-                                    `UPDATE soldes 
-                                     SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP 
-                                     WHERE salarie_id = ? AND annee = ?`,
-                                    [nouveauCPN1, nouveauCPN, nouveauRTT, nouvelleRecup, salarieId, anneeEnCours],
-                                    (err) => {
-                                        if (err) rej(err);
-                                        else res();
-                                    }
-                                );
-                            }
-                        );
-                    });
-                }
-                
-                resolve({ 
-                    success: true, 
-                    absence,
-                    message: 'Absence supprimée et soldes recalculés'
-                });
-                
-            } catch (error) {
-                reject(error);
-            }
-        });
-    });
-});
-
-
-// Modifier une absence
-ipcMain.handle('updateAbsence', async (event, absenceId, updates) => {
-    return new Promise((resolve, reject) => {
-        const fields = [];
-        const values = [];
-        
-        if (updates.date_debut !== undefined) {
-            fields.push('date_debut = ?');
-            values.push(updates.date_debut);
-        }
-        if (updates.date_fin !== undefined) {
-            fields.push('date_fin = ?');
-            values.push(updates.date_fin);
-        }
-        if (updates.duree_jours !== undefined) {
-            fields.push('duree_jours = ?');
-            values.push(updates.duree_jours);
-        }
-        if (updates.duree_heures !== undefined) {
-            fields.push('duree_heures = ?');
-            values.push(updates.duree_heures);
-        }
-        
-        values.push(absenceId);
-        
-        const sql = `UPDATE absences SET ${fields.join(', ')} WHERE id = ?`;
-        
-        db.run(sql, values, (err) => {
-            if (err) reject(err);
-            else resolve({ success: true });
-        });
-    });
-});
-// Traitement RTT Annuel
-ipcMain.handle('executerTraitementRTT', async (event, annee) => {
-    return new Promise((resolve, reject) => {
-        console.log('🔍 Recherche RTT pour annee:', annee, 'type:', typeof annee);
-        db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
-            console.log('🔍 Erreur DB:', err);
-            console.log('🔍 Résultat DB:', rttAnnuel);
-            if (err) {
-                reject(err);
-                return;
-            }
-            
-            if (!rttAnnuel) {
-                reject(new Error(`Aucun paramètre RTT trouvé pour l'année ${annee}`));
-                return;
-            }
-            
-            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
-            
-            db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                
-                let nbMisAJour = 0;
-                let details = [];
-                let erreurs = [];
-                
-                for (const salarie of salaries) {
-                    try {
-                        const dateEmbauche = new Date(salarie.date_embauche);
-                        const anneeEmbauche = dateEmbauche.getFullYear();
-                        
-                        let rttAjouter = nbRTT;
-                        
-                        // Prorata si embauché en cours d'année
-                        if (anneeEmbauche === annee) {
-                            const dateDebut = new Date(annee, 0, 1);
-                            const dateFin = new Date(annee, 11, 31);
-                            const joursAnneeTravailles = Math.ceil((dateFin - dateEmbauche) / (1000 * 60 * 60 * 24));
-                            const joursAnnee = Math.ceil((dateFin - dateDebut) / (1000 * 60 * 60 * 24));
-                            rttAjouter = (nbRTT * joursAnneeTravailles) / joursAnnee;
-                        }
-                        
-                        const soldes = await new Promise((res, rej) => {
-                            db.get(
-                                'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                                [salarie.id, annee],
-                                (err, row) => {
-                                    if (err) rej(err);
-                                    else res(row);
-                                }
-                            );
-                        });
-                        
-                        if (soldes) {
-                            const nouveauRTT = soldes.rtt + rttAjouter;
-                            
-                            await new Promise((res, rej) => {
-                                db.run(
-                                    'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
-                                    [nouveauRTT, salarie.id, annee],
-                                    (err) => {
-                                        if (err) rej(err);
-                                        else res();
-                                    }
-                                );
-                            });
-                            
-                            nbMisAJour++;
-                            details.push({
-                                salarie_id: salarie.id,
-                                nom: `${salarie.prenom} ${salarie.nom}`,
-                                rtt_ajoutes: rttAjouter.toFixed(2),
-                                nouveau_solde: nouveauRTT.toFixed(2)
-                            });
-                        }
-                        
-                    } catch (error) {
-                        console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
-                        erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
-                    }
-                }
-                
-                const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
-                
-                db.run(
-                    'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                    ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                    (err) => {
-                        if (err) console.error('Erreur enregistrement historique:', err);
-                    }
-                );
-                
-                resolve({
-                    success: statut !== 'error',
-                    statut,
-                    nbMisAJour,
-                    details,
-                    erreurs
-                });
-            });
-        });
-    });
-});
-
-// ========== VÉRIFICATION AUTOMATIQUE DES TRAITEMENTS ==========
-
-async function verifierTraitementsAutomatiques() {
-    console.log('🔍 Vérification des traitements automatiques...');
-    
-    const aujourdhui = new Date();
-    const annee = aujourdhui.getFullYear();
-    const mois = aujourdhui.getMonth() + 1; // 1-12
-    const jour = aujourdhui.getDate();
-    
-    try {
-        // Récupérer la configuration
-        const config = await new Promise((resolve, reject) => {
-            db.all('SELECT * FROM config_traitements WHERE actif = 1', (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
-        
-        for (const conf of config) {
-            // Vérifier si on est à la date de traitement
-            if (conf.jour === jour && conf.mois === mois) {
-                console.log(`📅 Date de traitement ${conf.type} atteinte !`);
-                
-                // Vérifier si déjà fait cette année
-                const dejaFait = await new Promise((resolve, reject) => {
-                    db.get(
-                        'SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = "success"',
-                        [conf.type, annee],
-                        (err, row) => {
-                            if (err) reject(err);
-                            else resolve(row);
-                        }
-                    );
-                });
-                
-                if (!dejaFait) {
-                    console.log(`✅ Exécution du traitement ${conf.type}...`);
-                    
-                    // Exécuter le traitement
-                    if (conf.type === 'CP_ANNUEL') {
-                        await executerTraitementCPAuto(annee);
-                    } else if (conf.type === 'RTT_ANNUEL') {
-                        await executerTraitementRTTAuto(annee);
-                    }
-                } else {
-                    console.log(`⏭️ Traitement ${conf.type} déjà effectué cette année`);
-                }
-            }
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur vérification traitements:', error);
-    }
-}
-
-// Fonction pour exécuter le traitement CP automatiquement
-async function executerTraitementCPAuto(annee) {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM salaries WHERE actif = 1', async (err, salaries) => {
-            if (err) {
-                console.error('Erreur récupération salariés:', err);
-                reject(err);
-                return;
-            }
-            
-            let nbMisAJour = 0;
-            let details = [];
-            let erreurs = [];
-            
-            for (const salarie of salaries) {
-                try {
-                    const cpNouveaux = salarie.cp_mensuel * 12;
-                    
-                    const soldes = await new Promise((res, rej) => {
-                        db.get(
-                            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                            [salarie.id, annee],
-                            (err, row) => {
-                                if (err) rej(err);
-                                else res(row);
-                            }
-                        );
-                    });
-                    
-                    if (soldes) {
-                        const nouveauCPN1 = soldes.cp_n1 + soldes.cp_n;
-                        const nouveauCPN = cpNouveaux;
-                        
-                        await new Promise((res, rej) => {
-                            db.run(
-                                'UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
-                                [nouveauCPN1, nouveauCPN, salarie.id, annee],
-                                (err) => {
-                                    if (err) rej(err);
-                                    else res();
-                                }
-                            );
-                        });
-                        
-                        nbMisAJour++;
-                        details.push({
-                            salarie_id: salarie.id,
-                            nom: `${salarie.prenom} ${salarie.nom}`,
-                            cp_transferes: soldes.cp_n.toFixed(2),
-                            nouveau_cp_n1: nouveauCPN1.toFixed(2),
-                            nouveaux_cp_n: nouveauCPN.toFixed(2)
-                        });
-                    }
-                    db.run(
-                        'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                        ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                        (err) => {
-                            if (err) console.error('Erreur enregistrement historique:', err);
-                        }
-                    );
-
-                    // AJOUTE ICI : Créer une notification pour les admins
-                    db.run(
-                        `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
-                        VALUES (?, ?, ?, ?, ?, NULL)`,
-                        [
-                            'CP_ANNUEL',
-                            statut === 'success' ? '✅ Traitement CP Annuel effectué' : '❌ Erreur traitement CP Annuel',
-                            `${nbMisAJour} salarié(s) traité(s)`,
-                            JSON.stringify(details),
-                            statut
-                        ],
-                    (err) => {
-                        if (err) console.error('Erreur création notification:', err);
-                    }
-                );
-                } catch (error) {
-                    console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
-                    erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
-                }
-            }
-            
-            const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
-            
-            // Enregistrer dans l'historique
-            db.run(
-                'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                (err) => {
-                    if (err) console.error('Erreur enregistrement historique:', err);
-                }
-            );
-            
-            // Envoyer notification au renderer
-            if (mainWindow && mainWindow.webContents) {
-                mainWindow.webContents.send('traitement-automatique', {
-                    type: 'CP_ANNUEL',
-                    statut,
-                    nbSalaries: nbMisAJour,
-                    details,
-                    erreurs
-                });
-            }
-            
-            console.log(`✅ Traitement CP terminé: ${nbMisAJour} salariés traités`);
-            resolve({ success: statut !== 'error', nbMisAJour, statut });
-        });
-    });
-}
-
-// Fonction pour exécuter le traitement RTT automatiquement
-async function executerTraitementRTTAuto(annee) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM rtt_annuels WHERE annee_debut = ?', [annee], async (err, rttAnnuel) => {
-            if (err) {
-                console.error('Erreur récupération RTT:', err);
-                reject(err);
-                return;
-            }
-            
-            if (!rttAnnuel) {
-                console.error(`Aucun paramètre RTT pour ${annee}`);
-                reject(new Error(`Aucun paramètre RTT pour ${annee}`));
-                return;
-            }
-            
-            const nbRTT = rttAnnuel.nb_jours_travailles - rttAnnuel.nb_cp_a_deduire;
-            
-            db.all('SELECT * FROM salaries WHERE actif = 1 AND a_droit_rtt = 1', async (err, salaries) => {
-                if (err) {
-                    console.error('Erreur récupération salariés RTT:', err);
-                    reject(err);
-                    return;
-                }
-                
-                let nbMisAJour = 0;
-                let details = [];
-                let erreurs = [];
-                
-                for (const salarie of salaries) {
-                    try {
-                        const dateEmbauche = new Date(salarie.date_embauche);
-                        const anneeEmbauche = dateEmbauche.getFullYear();
-                        
-                        let rttAjouter = nbRTT;
-                        
-                        if (anneeEmbauche === annee) {
-                            const dateDebut = new Date(annee, 0, 1);
-                            const dateFin = new Date(annee, 11, 31);
-                            const joursAnneeTravailles = Math.ceil((dateFin - dateEmbauche) / (1000 * 60 * 60 * 24));
-                            const joursAnnee = Math.ceil((dateFin - dateDebut) / (1000 * 60 * 60 * 24));
-                            rttAjouter = (nbRTT * joursAnneeTravailles) / joursAnnee;
-                        }
-                        
-                        const soldes = await new Promise((res, rej) => {
-                            db.get(
-                                'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                                [salarie.id, annee],
-                                (err, row) => {
-                                    if (err) rej(err);
-                                    else res(row);
-                                }
-                            );
-                        });
-                        
-                        if (soldes) {
-                            const nouveauRTT = soldes.rtt + rttAjouter;
-                            
-                            await new Promise((res, rej) => {
-                                db.run(
-                                    'UPDATE soldes SET rtt = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?',
-                                    [nouveauRTT, salarie.id, annee],
-                                    (err) => {
-                                        if (err) rej(err);
-                                        else res();
-                                    }
-                                );
-                            });
-                            
-                            nbMisAJour++;
-                            details.push({
-                                salarie_id: salarie.id,
-                                nom: `${salarie.prenom} ${salarie.nom}`,
-                                rtt_ajoutes: rttAjouter.toFixed(2),
-                                nouveau_solde: nouveauRTT.toFixed(2)
-                            });
-                        }
-                        // Enregistrer dans l'historique
-                        db.run(
-                            'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                            ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                            (err) => {
-                                if (err) console.error('Erreur enregistrement historique:', err);
-                            }
-                        );
-
-                        // AJOUTE ICI : Créer une notification pour les admins
-                        db.run(
-                            `INSERT INTO notifications (type, titre, message, details, statut, user_id) 
-                            VALUES (?, ?, ?, ?, ?, NULL)`,
-                                [
-                                    'RTT_ANNUEL',
-                                    statut === 'success' ? '✅ Traitement RTT Annuel effectué' : '❌ Erreur traitement RTT Annuel',
-                                    `${nbMisAJour} salarié(s) traité(s)`,
-                                    JSON.stringify(details),
-                                    statut
-                                ],                          
-                            (err) => {
-                                if (err) console.error('Erreur création notification:', err);
-                            }
-                        );
-                        
-                    } catch (error) {
-                        console.error(`Erreur pour ${salarie.prenom} ${salarie.nom}:`, error);
-                        erreurs.push(`${salarie.prenom} ${salarie.nom}: ${error.message}`);
-                    }
-                }
-                
-                const statut = erreurs.length > 0 ? (nbMisAJour > 0 ? 'partial' : 'error') : 'success';
-                
-                db.run(
-                    'INSERT INTO historique_traitements (type, annee, nb_salaries_traites, details, statut, message_erreur) VALUES (?, ?, ?, ?, ?, ?)',
-                    ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null],
-                    (err) => {
-                        if (err) console.error('Erreur enregistrement historique:', err);
-                    }
-                );
-                
-                // Envoyer notification au renderer
-                if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send('traitement-automatique', {
-                        type: 'RTT_ANNUEL',
-                        statut,
-                        nbSalaries: nbMisAJour,
-                        details,
-                        erreurs
-                    });
-                }
-                
-                console.log(`✅ Traitement RTT terminé: ${nbMisAJour} salariés traités`);
-                resolve({ success: statut !== 'error', nbMisAJour, statut });
-            });
-        });
-    });
-}
-
-app.whenReady().then(() => {
-    connectDatabase();
+    backupDatabase(dbFolder);
+    await connectDatabase(dbFolder);
     createWindow();
-    
-    // Vérifier les traitements automatiques après création de la fenêtre
+
     setTimeout(() => {
-        verifierTraitementsAutomatiques();
-    }, 2000); // Attendre 2 secondes que l'app soit bien lancée
+        withDatabase(() => verifierTraitementsAutomatiques()).catch(err => {
+            console.error('Erreur vérification traitements auto :', err);
+        });
+    }, 2000);
 
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -787,742 +518,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', function () {
-    if (db) db.close();
+    releaseLock(); // Nettoyer le verrou réseau
+    if (ctx.db) ctx.db.close(() => { ctx.db = null; });
     if (process.platform !== 'darwin') app.quit();
-});
-
-// ========== FONCTIONS UTILITAIRES ==========
-
-// Calculer le nombre de jours ouvrés entre deux dates
-function calculerJoursOuvres(dateDebut, dateFin, joursFeries) {
-    console.log('=== CALCUL JOURS OUVRES ===');
-    console.log('dateDebut reçu:', dateDebut);
-    console.log('dateFin reçu:', dateFin);
-    
-    let joursOuvres = 0;
-    
-    // Convertir les jours fériés en Set pour recherche rapide
-    const feriesSet = new Set(joursFeries.map(f => f.date));
-    
-    // Parser les dates
-    const [anneeD, moisD, jourD] = dateDebut.split('-').map(Number);
-    const [anneeF, moisF, jourF] = dateFin.split('-').map(Number);
-    
-    // Créer des dates à midi pour éviter les problèmes de fuseau
-    let currentDate = new Date(Date.UTC(anneeD, moisD - 1, jourD, 12, 0, 0));
-    const endDate = new Date(Date.UTC(anneeF, moisF - 1, jourF, 12, 0, 0));
-    
-    while (currentDate <= endDate) {
-        // Utiliser les méthodes UTC pour éviter les décalages
-        const year = currentDate.getUTCFullYear();
-        const month = String(currentDate.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getUTCDate()).padStart(2, '0');
-        const dateISO = `${year}-${month}-${day}`;
-        const dayOfWeek = currentDate.getUTCDay();
-        
-        console.log(`Jour: ${dateISO}, dayOfWeek: ${dayOfWeek}, férié: ${feriesSet.has(dateISO)}`);
-        
-        // Exclure samedi (6) et dimanche (0)
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-            // Exclure les jours fériés
-            if (!feriesSet.has(dateISO)) {
-                joursOuvres++;
-            }
-        }
-        
-        // Passer au jour suivant
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-    }
-    
-    console.log('Total jours ouvrés:', joursOuvres);
-    
-    return joursOuvres;
-}
-// ========== NAVIGATION ==========
-
-ipcMain.handle('navigateTo', async (event, page) => {
-    const pagePath = path.join(__dirname, 'pages', page);
-    mainWindow.loadFile(pagePath);
-    return { success: true };
-});
-// ========== GESTION DE L'AUTHENTIFICATION ==========
-
-ipcMain.handle('login', async (event, email, password) => {
-    return new Promise((resolve, reject) => {
-        console.log('Tentative de connexion avec email:', email);
-        db.get('SELECT * FROM salaries WHERE LOWER(email) = LOWER(?) AND actif = 1', [email], async (err, user) => {
-            if (err) {
-                console.error('Erreur DB:', err);
-                reject(err);
-                return;
-            }
-            
-            console.log('Utilisateur trouvé:', user);
-            
-            if (!user) {
-                console.log('Aucun utilisateur trouvé');
-                resolve({ success: false, message: 'Email ou mot de passe incorrect' });
-                return;
-            }
-            
-            if (!user) {
-                resolve({ success: false, message: 'Email ou mot de passe incorrect' });
-                return;
-            }
-            
-            // Si première connexion (pas de mot de passe)
-            if (!user.mot_de_passe) {
-                resolve({ 
-                    success: true, 
-                    firstLogin: true,
-                    user: {
-                        id: user.id,
-                        nom: user.nom,
-                        prenom: user.prenom,
-                        email: user.email,
-                        role: user.role
-                    }
-                });
-                return;
-            }
-            
-            // Vérifier le mot de passe
-            const match = await bcrypt.compare(password, user.mot_de_passe);
-            
-            if (match) {
-                resolve({ 
-                    success: true,
-                    firstLogin: false,
-                    user: {
-                        id: user.id,
-                        nom: user.nom,
-                        prenom: user.prenom,
-                        email: user.email,
-                        role: user.role
-                    }
-                });
-            } else {
-                resolve({ success: false, message: 'Email ou mot de passe incorrect' });
-            }
-        });
-    });
-});
-
-ipcMain.handle('checkFirstLogin', async (event, userId) => {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT premiere_connexion FROM salaries WHERE id = ?', [userId], (err, row) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(row ? row.premiere_connexion === 1 : false);
-            }
-        });
-    });
-});
-
-ipcMain.handle('setPassword', async (event, userId, password) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            
-            db.run(
-                'UPDATE salaries SET mot_de_passe = ?, premiere_connexion = 0 WHERE id = ?',
-                [hashedPassword, userId],
-                (err) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve({ success: true });
-                    }
-                }
-            );
-        } catch (error) {
-            reject(error);
-        }
-    });
-});
-
-// ========== GESTION DES SALARIÉS ==========
-
-ipcMain.handle('getSalarie', async (event, id) => {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM salaries WHERE id = ?', [id], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-        });
-    });
-});
-
-ipcMain.handle('getAllSalaries', async (event) => {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM salaries WHERE actif = 1 ORDER BY nom, prenom', (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
-    });
-});
-
-// ========== GESTION DES SOLDES ==========
-
-ipcMain.handle('getSoldes', async (event, salarieId, annee) => {
-    return new Promise((resolve, reject) => {
-        db.get(
-            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-            [salarieId, annee],
-            (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            }
-        );
-    });
-});
-ipcMain.handle('updateSoldes', async (event, salarieId, annee, soldes) => {
-    return new Promise((resolve, reject) => {
-        // Vérifier si le solde existe déjà
-        db.get(
-            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-            [salarieId, annee],
-            (err, row) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                
-                if (row) {
-                    // Mettre à jour
-                    db.run(
-                        `UPDATE soldes 
-                         SET cp_n = ?, cp_n1 = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP
-                         WHERE salarie_id = ? AND annee = ?`,
-                        [soldes.cp_n, soldes.cp_n1, soldes.rtt, soldes.recup_heures, salarieId, annee],
-                        (err) => {
-                            if (err) reject(err);
-                            else resolve({ success: true });
-                        }
-                    );
-                } else {
-                    // Créer
-                    db.run(
-                        `INSERT INTO soldes (salarie_id, annee, cp_n, cp_n1, rtt, recup_heures)
-                         VALUES (?, ?, ?, ?, ?, ?)`,
-                        [salarieId, annee, soldes.cp_n, soldes.cp_n1, soldes.rtt, soldes.recup_heures],
-                        (err) => {
-                            if (err) reject(err);
-                            else resolve({ success: true });
-                        }
-                    );
-                }
-            }
-        );
-    });
-});
-// ========== GESTION DES ABSENCES ==========
-
-ipcMain.handle('getAbsences', async (event, salarieId) => {
-    return new Promise((resolve, reject) => {
-        db.all(
-            'SELECT * FROM absences WHERE salarie_id = ? AND statut = "valide" ORDER BY date_debut DESC',
-            [salarieId],
-            (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            }
-        );
-    });
-});
-
-ipcMain.handle('getAllAbsences', async (event) => {
-    return new Promise((resolve, reject) => {
-        db.all(
-            `SELECT a.*, s.nom, s.prenom 
-             FROM absences a 
-             JOIN salaries s ON a.salarie_id = s.id 
-             WHERE a.statut = "valide" 
-             ORDER BY a.date_debut DESC`,
-            (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            }
-        );
-    });
-});
-// ========== CRÉATION D'ABSENCE ==========
-
-ipcMain.handle('createAbsence', async (event, absenceData) => {
-    return new Promise((resolve, reject) => {
-        const { salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire } = absenceData;
-        
-        db.run(
-            `INSERT INTO absences (salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire)
-             VALUES (?, ?, ?, ?, ?, ?, 'valide', ?)`,
-            [salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, commentaire],
-            function(err) {
-                if (err) {
-                    console.error('Erreur création absence:', err);
-                    reject(err);
-                } else {
-                    console.log('Absence créée avec ID:', this.lastID);
-                    resolve({ success: true, id: this.lastID });
-                }
-            }
-        );
-    });
-});
-
-// ========== MISE À JOUR DES SOLDES APRÈS ABSENCE ==========
-
-ipcMain.handle('updateSoldesAfterAbsence', async (event, salarieId, annee, type, dureeJours, dureeHeures) => {
-    return new Promise((resolve, reject) => {
-        // Récupérer les soldes actuels
-        db.get(
-            'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-            [salarieId, annee],
-            (err, soldes) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                
-                if (!soldes) {
-                    resolve({ success: false, message: 'Soldes non trouvés' });
-                    return;
-                }
-                
-                // Calculer les nouveaux soldes selon le type
-                let nouveauCP_N1 = soldes.cp_n1;
-                let nouveauCP_N = soldes.cp_n;
-                let nouveauRTT = soldes.rtt;
-                let nouveauRecup = soldes.recup_heures;
-                
-                if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
-                    // Déduire d'abord CP N-1, puis CP N
-                    if (soldes.cp_n1 >= dureeJours) {
-                        nouveauCP_N1 = soldes.cp_n1 - dureeJours;
-                    } else {
-                        const resteADeduire = dureeJours - soldes.cp_n1;
-                        nouveauCP_N1 = 0;
-                        nouveauCP_N = soldes.cp_n - resteADeduire;
-                    }
-                } else if (type === 'RTT') {
-                    nouveauRTT = soldes.rtt - dureeJours;
-                } else if (type === 'RECUP') {
-                    nouveauRecup = soldes.recup_heures - dureeHeures;
-                }
-                // MALADIE ne déduit rien
-                
-                // Mettre à jour les soldes
-                db.run(
-                    `UPDATE soldes 
-                     SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP
-                     WHERE salarie_id = ? AND annee = ?`,
-                    [nouveauCP_N1, nouveauCP_N, nouveauRTT, nouveauRecup, salarieId, annee],
-                    (err) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve({ 
-                                success: true,
-                                nouveaux_soldes: {
-                                    cp_n1: nouveauCP_N1,
-                                    cp_n: nouveauCP_N,
-                                    rtt: nouveauRTT,
-                                    recup_heures: nouveauRecup
-                                }
-                            });
-                        }
-                    }
-                );
-            }
-        );
-    });
-});
-// ========== GÉNÉRATION PDF ==========
-ipcMain.handle('genererPDF', async (event, absenceData) => {
-    return new Promise((resolve, reject) => {
-        try {
-            const { salarie, absence, soldes } = absenceData;
-            
-            // Créer un nom de fichier unique
-            const fileName = `demande_conges_${salarie.nom}_${salarie.prenom}_${Date.now()}.pdf`;
-            const filePath = path.join(os.tmpdir(), fileName);
-            
-            // Créer le document PDF (A4)
-            const doc = new PDFDocument({ 
-                size: 'A4',
-                margin: 50 
-            });
-            const stream = fs.createWriteStream(filePath);
-            
-            doc.pipe(stream);
-            
-            // Couleurs de l'asso
-            const bleu = '#006C89';
-            const orange = '#ED7111';
-            
-            // En-tête avec fond coloré
-            doc.rect(0, 0, doc.page.width, 100)
-               .fill(bleu);
-            
-            doc.fillColor('white')
-               .fontSize(24)
-               .font('Helvetica-Bold')
-               .text('DEMANDE DE CONGÉS', 50, 35, { align: 'center' })
-               .fontSize(10)
-               .font('Helvetica')
-               .text('La Ciotat Entreprendre', 50, 65, { align: 'center' });
-            
-            // Retour à noir pour le contenu
-            doc.fillColor('black');
-            
-            // Espacement
-            doc.moveDown(4);
-            
-            // Cadre informations salarié
-            const yStart = doc.y;
-            doc.rect(50, yStart, doc.page.width - 100, 80)
-               .lineWidth(1)
-               .stroke(bleu);
-            
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor(bleu)
-               .text('INFORMATIONS DU SALARIÉ', 60, yStart + 10);
-            
-            doc.fontSize(11)
-               .font('Helvetica')
-               .fillColor('black')
-               .text(`Nom : ${salarie.nom.toUpperCase()}`, 60, yStart + 35)
-               .text(`Prénom : ${salarie.prenom}`, 60, yStart + 55);
-            
-            doc.moveDown(3);
-            
-            // Cadre période de congés
-            const yPeriode = doc.y;
-            doc.rect(50, yPeriode, doc.page.width - 100, 150)
-               .lineWidth(1)
-               .stroke(orange);
-            
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor(orange)
-               .text('PÉRIODE DE CONGÉS', 60, yPeriode + 10);
-            
-            // Type d'absence
-            const typeLabels = {
-                'CP': 'Congés Payés',
-                'CP_N': 'Congés Payés (année en cours)',
-                'CP_N1': 'Congés Payés (année précédente)',
-                'RTT': 'RTT',
-                'RECUP': 'Récupération',
-                'MALADIE': 'Arrêt Maladie'
-            };
-            
-            doc.fontSize(11)
-               .font('Helvetica-Bold')
-               .fillColor('black')
-               .text('Type de congé : ', 60, yPeriode + 40, { continued: true })
-               .font('Helvetica')
-               .text(typeLabels[absence.type] || absence.type);
-            
-            // Dates
-            const dateD = new Date(absence.date_debut).toLocaleDateString('fr-FR', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
-            const dateF = new Date(absence.date_fin).toLocaleDateString('fr-FR', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
-            
-            doc.font('Helvetica-Bold')
-               .text('Du : ', 60, yPeriode + 65, { continued: true })
-               .font('Helvetica')
-               .text(dateD);
-            
-            doc.font('Helvetica-Bold')
-               .text('Au : ', 60, yPeriode + 85, { continued: true })
-               .font('Helvetica')
-               .text(dateF);
-            
-            // Durée
-            doc.font('Helvetica-Bold')
-               .text('Durée : ', 60, yPeriode + 110, { continued: true })
-               .font('Helvetica');
-            
-            if (absence.duree_jours) {
-                doc.text(`${absence.duree_jours.toFixed(2)} jour(s)`);
-            } else if (absence.duree_heures) {
-                doc.text(`${absence.duree_heures.toFixed(1)} heure(s)`);
-            }
-            
-            doc.moveDown(3);
-            
-            // Tableau des soldes
-            const ySoldes = doc.y;
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor(bleu)
-               .text('SOLDES APRÈS DÉDUCTION', 60, ySoldes);
-            
-            doc.moveDown(0.5);
-            
-            // Tableau
-            const tableTop = doc.y;
-            const col1 = 60;
-            const col2 = 250;
-            const rowHeight = 25;
-            
-            // En-tête tableau
-            doc.rect(col1, tableTop, doc.page.width - 120, rowHeight)
-               .fill(bleu);
-            
-            doc.fillColor('white')
-               .fontSize(10)
-               .font('Helvetica-Bold')
-               .text('Type de congé', col1 + 10, tableTop + 8)
-               .text('Solde restant', col2, tableTop + 8);
-            
-            doc.fillColor('black');
-            
-            // Lignes du tableau
-            const soldesData = [
-                ['CP N-1', `${soldes.cp_n1.toFixed(2)} jours`],
-                ['CP N', `${soldes.cp_n.toFixed(2)} jours`],
-                ['RTT', `${soldes.rtt.toFixed(2)} jours`],
-                ['Récupération', `${soldes.recup_heures.toFixed(1)} heures`]
-            ];
-            
-            soldesData.forEach((row, i) => {
-                const y = tableTop + rowHeight + (i * rowHeight);
-                
-                // Fond alterné
-                if (i % 2 === 0) {
-                    doc.rect(col1, y, doc.page.width - 120, rowHeight)
-                       .fill('#f5f5f5');
-                }
-                
-                doc.fillColor('black')
-                   .fontSize(10)
-                   .font('Helvetica')
-                   .text(row[0], col1 + 10, y + 8)
-                   .font('Helvetica-Bold')
-                   .text(row[1], col2, y + 8);
-            });
-            
-            // Commentaire si présent
-            if (absence.commentaire) {
-                doc.moveDown(3);
-                doc.fontSize(11)
-                   .font('Helvetica-Bold')
-                   .fillColor('black')
-                   .text('Commentaire : ')
-                   .moveDown(0.3)
-                   .font('Helvetica')
-                   .fontSize(10)
-                   .text(absence.commentaire, { width: doc.page.width - 100 });
-            }
-            
-            // Signatures
-            const ySign = doc.page.height - 180;
-            
-            doc.moveTo(50, ySign).lineTo(doc.page.width - 50, ySign).stroke();
-            
-            doc.fontSize(11)
-               .font('Helvetica-Bold')
-               .text('Signature du salarié', 60, ySign + 20)
-               .text('Signature du responsable', 340, ySign + 20);
-            
-            doc.fontSize(9)
-               .font('Helvetica')
-               .text('Date : _______________', 60, ySign + 80)
-               .text('Date : _______________', 340, ySign + 80);
-            
-            // Pied de page
-            // doc.fontSize(8)
-            //    .fillColor('#999')
-            //    .text(`Document généré le ${new Date().toLocaleString('fr-FR')}`, 50, doc.page.height - 30, {
-            //        align: 'center',
-            //        width: doc.page.width - 100
-            //    });
-            
-            doc.end();
-            
-            stream.on('finish', () => {
-                // Ouvrir le PDF généré
-                shell.openPath(filePath).then(() => {
-                    console.log('PDF ouvert:', filePath);
-                });
-    
-                // Proposer l'enregistrement via dialogue
-                const { dialog } = require('electron');
-                
-                setTimeout(() => {
-                    dialog.showSaveDialog(mainWindow, {
-                    title: 'Enregistrer ou imprimer le PDF',
-                    defaultPath: path.join(require('os').homedir(), 'Documents', fileName),
-                    filters: [{ name: 'PDF', extensions: ['pdf'] }]
-                    }).then(result => {
-                        if (!result.canceled && result.filePath) {
-                            fs.copyFileSync(filePath, result.filePath);
-                            console.log('PDF sauvegardé à:', result.filePath);
-                            // Ouvrir le PDF sauvegardé
-                            shell.openPath(result.filePath);
-                        }
-                    });
-                }, 500); // Petit délai pour que le premier PDF s'ouvre d'abord
-    
-    resolve({ success: true, filePath });
-});
-            
-            stream.on('error', (err) => {
-                reject(err);
-            });
-            
-        } catch (error) {
-            reject(error);
-        }
-    });
-});
-// ========== JOURS FÉRIÉS ==========
-
-ipcMain.handle('getJoursFeries', async (event, annee) => {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM jours_feries WHERE annee = ? ORDER BY date', [annee], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
-    });
-});
-
-// ========== CALCUL DE DURÉE ==========
-
-ipcMain.handle('calculerDuree', async (event, dateDebut, dateFin, periodeType) => {
-    return new Promise((resolve, reject) => {
-        // Récupérer les jours fériés
-        const anneeDebut = new Date(dateDebut).getFullYear();
-        const anneeFin = new Date(dateFin).getFullYear();
-        
-        db.all(
-            'SELECT date FROM jours_feries WHERE annee IN (?, ?)',
-            [anneeDebut, anneeFin],
-            (err, joursFeries) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                
-                const joursOuvres = calculerJoursOuvres(dateDebut, dateFin, joursFeries);
-                
-                // Appliquer le coefficient selon le type de période
-                let dureeJours = joursOuvres;
-                if (periodeType === 'demi') {
-                    dureeJours = joursOuvres * 0.5;
-                }
-                
-                resolve({ 
-                    joursOuvres: joursOuvres,
-                    dureeJours: dureeJours,
-                    joursFeries: joursFeries.length
-                });
-            }
-        );
-    });
-});
-// ========== GESTION DES SALARIÉS (ADMIN) ==========
-
-// Créer un nouveau salarié
-ipcMain.handle('createSalarie', async (event, salarieData) => {
-    return new Promise((resolve, reject) => {
-        const { nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup } = salarieData;
-        
-        db.run(
-            `INSERT INTO salaries (nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup, role, actif, premiere_connexion)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'utilisateur', 1, 1)`,
-            [nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup],
-            function(err) {
-                if (err) {
-                    console.error('Erreur création salarié:', err);
-                    reject(err);
-                } else {
-                    console.log('Salarié créé avec ID:', this.lastID);
-                    
-                    // Créer les soldes pour l'année en cours
-                    const annee = new Date().getFullYear();
-                    db.run(
-                        `INSERT INTO soldes (salarie_id, annee, cp_n, cp_n1, rtt, recup_heures)
-                         VALUES (?, ?, 0, 0, 0, 0)`,
-                        [this.lastID, annee],
-                        (errSoldes) => {
-                            if (errSoldes) {
-                                console.error('Erreur création soldes:', errSoldes);
-                            }
-                        }
-                    );
-                    
-                    resolve({ success: true, id: this.lastID });
-                }
-            }
-        );
-    });
-});
-
-// Modifier un salarié
-ipcMain.handle('updateSalarie', async (event, salarieId, salarieData) => {
-    return new Promise((resolve, reject) => {
-        const { nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup } = salarieData;
-        
-        db.run(
-            `UPDATE salaries 
-             SET nom = ?, prenom = ?, email = ?, date_embauche = ?, type_contrat = ?, 
-                 cp_mensuel = ?, a_droit_rtt = ?, a_droit_recup = ?
-             WHERE id = ?`,
-            [nom, prenom, email, date_embauche, type_contrat, cp_mensuel, a_droit_rtt, a_droit_recup, salarieId],
-            function(err) {
-                if (err) {
-                    console.error('Erreur modification salarié:', err);
-                    reject(err);
-                } else {
-                    resolve({ success: true });
-                }
-            }
-        );
-    });
-});
-
-// Désactiver un salarié (ne pas supprimer pour garder l'historique)
-ipcMain.handle('deactivateSalarie', async (event, salarieId) => {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'UPDATE salaries SET actif = 0 WHERE id = ?',
-            [salarieId],
-            function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({ success: true });
-                }
-            }
-        );
-    });
-});
-
-// Réinitialiser le mot de passe d'un salarié
-ipcMain.handle('resetPassword', async (event, salarieId) => {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'UPDATE salaries SET mot_de_passe = NULL, premiere_connexion = 1 WHERE id = ?',
-            [salarieId],
-            function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({ success: true });
-                }
-            }
-        );
-    });
 });

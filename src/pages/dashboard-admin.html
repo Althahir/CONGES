@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="../css/common.css">
     <link rel="stylesheet" href="../css/dashboard-admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../../node_modules/xlsx/dist/xlsx.full.min.js"></script>
 
 </head>
 <body>
@@ -15,19 +15,30 @@
         <!-- Header -->
         <header class="dashboard-header">
     <div class="header-left">
-        <img src="../assets/logo_vert.png" alt="Logo" class="header-logo">
+        <img src="../assets/logo.png" alt="Logo" class="header-logo">
     </div>
     <div class="header-center">
-        <div id="headerAdminDefault">
-            <h1>Administration</h1>
-        </div>
-        <div id="headerAdminMesConges" style="display: none;">
-            <button id="btnPrevYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
-            <h1 id="anneeAdmin">2026</h1>
-            <button id="btnNextYearAdmin" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
-        </div>
+        <h1 id="headerTitle">Mes Congés</h1>
     </div>
     <div class="header-right">
+        <div class="notif-wrapper">
+            <button id="btnNotifications" class="btn-notif" title="Notifications">
+                <i class="fa-solid fa-bell"></i>
+                <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
+            </button>
+            <div id="notifDropdown" class="notif-dropdown" style="display:none;">
+                <div class="notif-dropdown-header">
+                    <span>Notifications</span>
+                    <button id="btnToutMarquerLu" class="btn-tout-lire">Tout marquer comme lu</button>
+                </div>
+                <div id="notifList" class="notif-list">
+                    <p class="notif-vide">Aucune notification</p>
+                </div>
+            </div>
+        </div>
+        <button id="btnThemeToggle" class="btn-theme-toggle" title="Changer de thème">
+            <i class="fa-solid fa-moon"></i>
+        </button>
         <span id="userName" class="user-name">Admin</span>
         <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
     </div>
@@ -35,24 +46,36 @@
 
         <!-- Navigation -->
         <nav class="admin-nav">
-            <button class="nav-btn active" data-section="mes-conges">
-                <i class="fa-solid fa-user"></i> Mes congés
-            </button>
-            <button class="nav-btn" data-section="calendrier">
-                <i class="fa-regular fa-calendar"></i> Calendrier Global
-            </button>
-            <button class="nav-btn" data-section="historique">
-                <i class="fa-solid fa-clock-rotate-left"></i> Historique
-            </button>
-            <button class="nav-btn" data-section="salaries">
-                <i class="fa-solid fa-users"></i> Salariés
-            </button>
-            <button class="nav-btn" data-section="feries">
-                <i class="fa-regular fa-flag"></i> Jours Fériés
-            </button>
-            <button class="nav-btn" data-section="rtt">
-                <i class="fa-regular fa-clock"></i> Planning des traitements
-            </button>
+            <div class="nav-left">
+                <button class="nav-btn active" data-section="mes-conges">
+                    <i class="fa-solid fa-user"></i> Mes congés
+                </button>
+                <button class="nav-btn" data-section="calendrier">
+                    <i class="fa-regular fa-calendar"></i> Calendrier Global
+                </button>
+                <button class="nav-btn" data-section="historique">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Historique
+                </button>
+                <button class="nav-btn" data-section="salaries">
+                    <i class="fa-solid fa-users"></i> Salariés
+                </button>
+                <button class="nav-btn" data-section="feries">
+                    <i class="fa-regular fa-flag"></i> Jours Fériés
+                </button>
+                <button class="nav-btn" data-section="statistiques">
+                    <i class="fa-solid fa-chart-pie"></i> Statistiques
+                </button>
+                <button class="nav-btn" data-section="parametres">
+                    <i class="fa-solid fa-gear"></i> Paramètres
+                </button>
+            </div>
+            <div class="nav-right">
+                <div class="year-nav" id="yearNavAdmin">
+                    <button id="btnPrevYearAdmin" class="btn-year-nav"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span id="anneeAdmin">2026</span>
+                    <button id="btnNextYearAdmin" class="btn-year-nav"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
         </nav>
 
         <!-- Modale Ajouter/Modifier Salarié -->
@@ -98,12 +121,6 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="cp_mensuel">CP mensuels (jours) *</label>
-                        <input type="number" id="cp_mensuel" step="0.01" value="2.08333" required>
-                        <small>2.08333 pour un temps plein (25 jours / 12 mois)</small>
-                    </div>
-
                     <div class="form-row">
                         <div class="form-group">
                             <label>
@@ -116,6 +133,19 @@
                                 <input type="checkbox" id="a_droit_recup" value="1">
                                 A droit à la récupération
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row arret-maladie-row">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="en_arret_maladie" value="1">
+                                En arrêt maladie
+                            </label>
+                        </div>
+                        <div class="form-group" id="dateArretGroup" style="display: none;">
+                            <label for="date_arret_maladie" id="labelDateArret">Date d'effet *</label>
+                            <input type="date" id="date_arret_maladie">
                         </div>
                     </div>
 
@@ -192,6 +222,37 @@
                 </button>
             </div>
 
+            <!-- Modal Heures Supplémentaires (admin) -->
+            <div id="modalHeuresSupAdmin" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 440px;">
+                    <div class="modal-header">
+                        <h3><i class="fa-solid fa-clock"></i> Ajouter des heures supplémentaires</h3>
+                        <button id="closeModalHeuresSupAdmin" class="close-modal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group-compact">
+                            <label for="heuresSupNbAdmin">Nombre d'heures *</label>
+                            <input type="number" id="heuresSupNbAdmin" min="0.5" step="0.5" placeholder="Ex: 3.5">
+                        </div>
+                        <div class="form-group-compact">
+                            <label for="heuresSupDateAdmin">Date *</label>
+                            <input type="date" id="heuresSupDateAdmin">
+                        </div>
+                        <div class="form-group-compact">
+                            <label for="heuresSupCommentaireAdmin">Commentaire</label>
+                            <textarea id="heuresSupCommentaireAdmin" rows="3" placeholder="Description du travail effectué..."></textarea>
+                        </div>
+                        <div id="heuresSupMsgAdmin" style="display: none;"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="btnAnnulerHeuresSupAdmin" class="btn-secondary">Annuler</button>
+                        <button id="btnEnregistrerHeuresSupAdmin" class="btn-primary">Enregistrer</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Formulaire -->
             <div class="panel-section form-section">
                 <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>
@@ -200,7 +261,6 @@
                         <select id="typeAbsenceUser" name="typeAbsence" required>
                             <option value="">-- Sélectionner --</option>
                             <option value="CP">Congés payés (CP)</option>
-                            <option value="MALADIE">Arrêt maladie</option>
                         </select>
                     </div>
 
@@ -208,18 +268,21 @@
                         <div class="form-group-compact">
                             <label for="dateDebutUser">Du *</label>
                             <input type="date" id="dateDebutUser" name="dateDebut" required>
+                            <div class="period-toggle">
+                                <button type="button" class="period-btn active" data-target="debutApremUser" data-value="am">Matin</button>
+                                <button type="button" class="period-btn" data-target="debutApremUser" data-value="pm">Après-midi</button>
+                            </div>
+                            <input type="hidden" id="debutApremUser" value="am">
                         </div>
                         <div class="form-group-compact">
                             <label for="dateFinUser">Au *</label>
                             <input type="date" id="dateFinUser" name="dateFin" required>
+                            <div class="period-toggle">
+                                <button type="button" class="period-btn" data-target="finMidiUser" data-value="am">Matin</button>
+                                <button type="button" class="period-btn active" data-target="finMidiUser" data-value="pm">Après-midi</button>
+                            </div>
+                            <input type="hidden" id="finMidiUser" value="pm">
                         </div>
-                    </div>
-
-                    <div class="form-group-compact">
-                        <select id="periodeTypeUser" name="periodeType" required>
-                            <option value="journee">Journée entière</option>
-                            <option value="demi">Demi-journée</option>
-                        </select>
                     </div>
 
                     <!-- Champs Récup -->
@@ -244,8 +307,10 @@
 
                     <!-- Résumé -->
                     <div id="resumeAbsenceUser" class="resume-compact" style="display: none;">
-                        <div><strong>Durée:</strong> <span id="resumeDureeUser">-</span></div>
-                        <div><strong>Décompte:</strong> <span id="resumeDecompteUser">-</span></div>
+                        <div class="resume-header-row">
+                            <span><strong>Durée:</strong> <span id="resumeDureeUser">-</span></span>
+                        </div>
+                        <div id="resumeDecompteUser" class="resume-decompte"></div>
                         <div id="alerteSoldeUser" class="alert-compact"></div>
                         <div id="alertePeriodeUser" class="alert-compact"></div>
                     </div>
@@ -254,7 +319,9 @@
                     <div id="successMessageUser" class="success-message"></div>
 
                     <div class="form-actions-compact">
-                        <button type="submit" class="btn-primary btn-block">Valider</button>
+                        <div class="btn-submit-wrapper" id="btnSubmitWrapperUser">
+                            <button type="submit" id="btnValiderUser" class="btn-primary btn-small" disabled>Valider</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -284,15 +351,6 @@
 
             <!-- Section Calendrier Global -->
             <section id="calendrier-section" class="content-section">
-                <div class="section-header">
-                    <!-- <h2>Calendrier Global</h2> -->
-                    <div class="year-selector">
-                        <button id="btnPrevYearCal" class="btn-year"><i class="fa-solid fa-chevron-left"></i></button>
-                        <span id="anneeCalendrier">2026</span>
-                        <button id="btnNextYearCal" class="btn-year"><i class="fa-solid fa-chevron-right"></i></button>
-                    </div>
-                </div>
-                
                 <div id="calendrierGlobal" class="calendrier-global">
                     <!-- Sera rempli dynamiquement -->
                 </div>
@@ -312,141 +370,44 @@
                 </div>
             </section>
 
+        <!-- Modale Ajouter un jour férié -->
+        <div id="modalFerie" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width:420px;">
+                <div class="modal-header">
+                    <h2>Ajouter un jour férié</h2>
+                    <button class="modal-close" id="closeFerieModal">&times;</button>
+                </div>
+                <form id="formFerie">
+                    <div class="form-group">
+                        <label for="ferieDate">Date *</label>
+                        <input type="date" id="ferieDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ferieLibelle">Libellé *</label>
+                        <input type="text" id="ferieLibelle" placeholder="ex: 1er Mai" required>
+                    </div>
+                    <p id="ferieMsgErreur" class="form-error" style="display:none;"></p>
+                    <div class="form-actions">
+                        <button type="button" id="btnAnnulerFerie" class="btn-secondary">Annuler</button>
+                        <button type="submit" id="btnSauvegarderFerie" class="btn-primary">Ajouter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
             <!-- Section Gestion des Types de Congés -->
-            <section id="rtt-section" class="content-section">
-    <h2>Gestion des Types de Congés</h2>
-    
-    <!-- Configuration des traitements -->
-    <div class="config-traitements">
-        <h3><i class="fa-solid fa-cog"></i> Configuration des dates de traitement automatique</h3>
-        
-        <div class="config-card">
-            <div class="config-header">
-                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des CP</h4>
-                <p>Transfert CP N → CP N-1 puis crédit des nouveaux CP N en fonction du taux de CP renseigné dans la fiche salarié</p>
-            </div>
-            <div class="config-body">
-                <div class="config-date">
-                    <label>Date de traitement :</label>
-                    <select id="cpJour" class="select-jour">
-                        <!-- Options générées en JS -->
-                    </select>
-                    <select id="cpMois" class="select-mois">
-                        <option value="1" selected>Janvier</option>
-                        <option value="2">Février</option>
-                        <option value="3">Mars</option>
-                        <option value="4">Avril</option>
-                        <option value="5">Mai</option>
-                        <option value="6">Juin</option>
-                        <option value="7">Juillet</option>
-                        <option value="8">Août</option>
-                        <option value="9">Septembre</option>
-                        <option value="10">Octobre</option>
-                        <option value="11">Novembre</option>
-                        <option value="12">Décembre</option>
-                    </select>
-                </div>
-                <div class="config-historique">
-                    <strong>Dernier traitement :</strong> <span id="cpDernierTraitement">Chargement...</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="config-card">
-            <div class="config-header">
-                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
-                <p>Ajout des RTT annuels à chaque salariés eligible</p>
-            </div>
-            <div class="config-body">
-                <div class="config-date">
-                    <label>Date de traitement :</label>
-                    <select id="rttJour" class="select-jour">
-                        <!-- Options générées en JS -->
-                    </select>
-                    <select id="rttMois" class="select-mois">
-                        <option value="1">Janvier</option>
-                        <option value="2">Février</option>
-                        <option value="3">Mars</option>
-                        <option value="4">Avril</option>
-                        <option value="5">Mai</option>
-                        <option value="6" selected>Juin</option>
-                        <option value="7">Juillet</option>
-                        <option value="8">Août</option>
-                        <option value="9">Septembre</option>
-                        <option value="10">Octobre</option>
-                        <option value="11">Novembre</option>
-                        <option value="12">Décembre</option>
-                    </select>
-                </div>
-                <div class="config-historique">
-                    <strong>Dernier traitement :</strong> <span id="rttDernierTraitement">Chargement...</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="config-actions">
-            <button id="btnEnregistrerConfig" class="btn-primary btn-large">
-                <i class="fa-solid fa-save"></i> Enregistrer la configuration
-            </button>
-        </div>
-        
-        <div class="config-note">
-            <i class="fa-solid fa-info-circle"></i>
-            <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine 
-            si le traitement a déjà été effectué cette année.
-        </div>
-    </div>
-    
-    <!-- Historique des traitements -->
-    <div class="historique-traitements">
-        <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>
-        <div id="tableHistorique" class="table-historique">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Date d'exécution</th>
-                        <th>Année</th>
-                        <th>Salariés traités</th>
-                        <th>Statut</th>
-                    </tr>
-                </thead>
-                <tbody id="historiqueBody">
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 20px;">
-                            Chargement...
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-            </section>
+            <!-- rtt-section supprimée — contenu fusionné dans parametres-section -->
            
             <!-- Section Historique -->
             <section id="historique-section" class="content-section">
-    <div class="historique-header">
+    <div class="section-header historique-header">
         <h2>Gestion des absences</h2>
-        
         <div class="historique-controls">
             <div class="control-group">
                 <label>Salarié :</label>
                 <select id="selectSalarieHistorique" class="select-control">
                     <option value="">Sélectionnez un salarié</option>
                 </select>
-            </div>
-            
-            <div class="control-group">
-                <label>Année :</label>
-                <div class="annee-navigation">
-                    <button id="btnPrevYearHistorique" class="btn-year">
-                        <i class="fa-solid fa-chevron-left"></i>
-                    </button>
-                    <span id="anneeHistorique" class="annee-display">2026</span>
-                    <button id="btnNextYearHistorique" class="btn-year">
-                        <i class="fa-solid fa-chevron-right"></i>
-                    </button>
-                </div>
             </div>
         </div>
     </div>
@@ -466,25 +427,32 @@
     <div id="soldesHistorique" class="soldes-historique" style="display: none;">
         <h3 id="nomSalarieHistorique"></h3>
         <div class="soldes-grid">
-            <div class="solde-card">
+            <div class="solde-card sh-cp">
                 <div class="solde-label">CP N-1</div>
                 <div class="solde-value" id="soldeCPN1Historique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-cp">
                 <div class="solde-label">CP N</div>
                 <div class="solde-value" id="soldeCPNHistorique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-rtt">
                 <div class="solde-label">RTT</div>
                 <div class="solde-value" id="soldeRTTHistorique">0j</div>
             </div>
-            <div class="solde-card">
+            <div class="solde-card sh-recup">
                 <div class="solde-label">Récupération</div>
                 <div class="solde-value" id="soldeRecupHistorique">0h</div>
             </div>
         </div>
+        <div id="btnAjouterMaladieWrapper" style="text-align: center; margin-top: 12px;">
+            <button id="btnAjouterMaladie" class="btn-ajouter-maladie">
+                <i class="fa-solid fa-plus"></i> Arrêt maladie
+            </button>
+        </div>
     </div>
 </div>
+            </section>
+
 <!-- Modal Suppression Absence -->
 <div id="modalSuppressionAbsence" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 500px;">
@@ -522,42 +490,305 @@
     </div>
 </div>
 
-        </div>
-    </div>
-    <!-- Modale de test des traitements -->
-<div id="modalTest" class="modal-test" style="display: none;">
-    <div class="modal-test-content">
-        <div class="modal-test-header">
-            <h3>🧪 Mode Test - Traitements Automatiques</h3>
-            <button id="closeModalTest" class="close-modal-test">
+<!-- Modal Ajout Arrêt Maladie -->
+<div id="modalAjoutMaladie" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 450px;">
+        <div class="modal-header">
+            <h3>Ajouter un arrêt maladie</h3>
+            <button id="closeModalMaladie" class="close-modal">
                 <i class="fa-solid fa-times"></i>
             </button>
         </div>
-        
-        <div class="modal-test-body">
-            <div class="test-annee">
-                <label>Année de test :</label>
-                <select id="anneeTest" class="select-annee">
-                    <option value="2024">2024</option>
-                    <option value="2025">2025</option>
-                    <option value="2026" selected>2026</option>
-                    <option value="2027">2027</option>
-                </select>
+        <div class="modal-body">
+            <p id="maladieSalarieName" style="font-weight:600; margin-bottom:12px;"></p>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieDateDebut">Date de début</label>
+                <input type="date" id="maladieDateDebut" required>
             </div>
-            
-            <div class="test-buttons">
-                <button id="btnTestCP" class="btn-test">
-                    <i class="fa-solid fa-flask"></i> Tester traitement CP
-                </button>
-                <button id="btnTestRTT" class="btn-test">
-                    <i class="fa-solid fa-flask"></i> Tester traitement RTT
-                </button>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieDateFin">Date de fin</label>
+                <input type="date" id="maladieDateFin" required>
             </div>
-            
-            <div id="resultatTest" class="resultat-test" style="display: none;">
-                <h4 id="resultatTestTitre"></h4>
-                <div id="resultatTestDetails"></div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="maladieCommentaire">Commentaire (optionnel)</label>
+                <input type="text" id="maladieCommentaire" placeholder="Ex: arrêt médecin">
             </div>
+            <div id="maladieDureeInfo" style="font-size:0.9em; color:var(--text-secondary);"></div>
+            <div id="maladieErreur" class="error-message"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnAnnulerMaladie" class="btn-secondary">Annuler</button>
+            <button id="btnConfirmerMaladie" class="btn-primary">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+            <!-- Section Statistiques -->
+            <section id="statistiques-section" class="content-section">
+                <div class="stats-grid">
+                    <div class="stats-card stats-card-large">
+                        <h3>Absences par mois</h3>
+                        <div class="chart-container"><canvas id="chartAbsencesMois"></canvas></div>
+                    </div>
+                    <div class="stats-card">
+                        <h3>Répartition par type (actuelle)</h3>
+                        <div class="chart-container"><canvas id="chartRepartitionType"></canvas></div>
+                    </div>
+                    <div class="stats-card">
+                        <h3>Détail des absences par salarié</h3>
+                        <div id="tableAbsencesSalaries" class="table-absences-stats"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Paramètres (fusionnée avec Planning des traitements) -->
+            <section id="parametres-section" class="content-section">
+                <h2><i class="fa-solid fa-gear"></i> Paramètres</h2>
+
+                <!-- Taux CP -->
+                <div class="parametres-grid">
+                    <div class="param-card">
+                        <h3><i class="fa-solid fa-calculator"></i> Taux d'acquisition CP</h3>
+                        <p class="param-description">Ces taux sont utilisés par le traitement CP mensuel pour calculer les jours acquis par chaque salarié.</p>
+
+                        <div class="param-row">
+                            <label for="tauxCpNormal">Taux mensuel normal (jours)</label>
+                            <input type="number" id="tauxCpNormal" step="0.00001" value="2.08333">
+                            <small>25 jours / 12 mois = 2.08333</small>
+                        </div>
+
+                        <div class="param-row">
+                            <label for="tauxCpArret">Taux mensuel arrêt maladie (jours)</label>
+                            <input type="number" id="tauxCpArret" step="0.00001" value="1.66333">
+                            <small>Taux réduit appliqué pendant un arrêt maladie</small>
+                        </div>
+
+                        <div class="param-actions">
+                            <button id="btnSaveParamTaux" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+                            <span id="paramTauxMsg" class="param-msg"></span>
+                        </div>
+                    </div>
+
+                    <div class="param-card">
+                        <h3><i class="fa-solid fa-info-circle"></i> Fonctionnement CP</h3>
+                        <ul class="param-info-list">
+                            <li><strong>Chaque 1er du mois</strong>, le traitement CP mensuel s'exécute automatiquement et ajoute les CP en CP N pour chaque salarié actif.</li>
+                            <li>Si un salarié est embauché en cours de mois, le calcul est proratisé à partir de sa date d'embauche.</li>
+                            <li>Si un salarié passe en arrêt maladie en cours de mois, le taux normal s'applique jusqu'à la date d'effet et le taux arrêt pour le reste du mois.</li>
+                            <li>Le <strong>basculement annuel</strong> (CP N → CP N-1) est déclenché à la date configurée ci-dessous.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Planning des traitements -->
+                <div class="config-traitements" style="margin-top: 20px;">
+                    <h3><i class="fa-solid fa-cog"></i> Dates de traitement automatique</h3>
+                    <div class="config-cards-grid">
+                        <div class="config-card">
+                            <div class="config-header">
+                                <h4><i class="fa-solid fa-arrow-right"></i> Basculement annuel des CP</h4>
+                                <p>Transfert CP N → CP N-1</p>
+                            </div>
+                            <div class="config-body">
+                                <div class="config-date">
+                                    <label>Date de traitement :</label>
+                                    <select id="cpJour" class="select-jour"></select>
+                                    <select id="cpMois" class="select-mois">
+                                        <option value="1" selected>Janvier</option>
+                                        <option value="2">Février</option>
+                                        <option value="3">Mars</option>
+                                        <option value="4">Avril</option>
+                                        <option value="5">Mai</option>
+                                        <option value="6">Juin</option>
+                                        <option value="7">Juillet</option>
+                                        <option value="8">Août</option>
+                                        <option value="9">Septembre</option>
+                                        <option value="10">Octobre</option>
+                                        <option value="11">Novembre</option>
+                                        <option value="12">Décembre</option>
+                                    </select>
+                                </div>
+                                <div class="config-historique">
+                                    <strong>Dernier traitement :</strong> <span id="cpDernierTraitement">Chargement...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-card">
+                            <div class="config-header">
+                                <h4><i class="fa-solid fa-arrow-right"></i> Traitement annuel des RTT</h4>
+                                <p>Ajout des RTT annuels à chaque salarié éligible</p>
+                            </div>
+                            <div class="config-body">
+                                <div class="config-date">
+                                    <label>Date de traitement :</label>
+                                    <select id="rttJour" class="select-jour"></select>
+                                    <select id="rttMois" class="select-mois">
+                                        <option value="1">Janvier</option>
+                                        <option value="2">Février</option>
+                                        <option value="3">Mars</option>
+                                        <option value="4">Avril</option>
+                                        <option value="5">Mai</option>
+                                        <option value="6" selected>Juin</option>
+                                        <option value="7">Juillet</option>
+                                        <option value="8">Août</option>
+                                        <option value="9">Septembre</option>
+                                        <option value="10">Octobre</option>
+                                        <option value="11">Novembre</option>
+                                        <option value="12">Décembre</option>
+                                    </select>
+                                </div>
+                                <div class="config-historique">
+                                    <strong>Dernier traitement :</strong> <span id="rttDernierTraitement">Chargement...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calcul RTT -->
+                    <div class="rtt-calc-card">
+                        <h4><i class="fa-solid fa-calculator"></i> Calcul RTT par année</h4>
+                        <div class="rtt-calc-row">
+                            <div class="rtt-form-inline">
+                                <div class="form-group-inline">
+                                    <label for="rttAnnee">Année</label>
+                                    <input type="number" id="rttAnnee" min="2022" placeholder="2026">
+                                </div>
+                                <div class="form-group-inline">
+                                    <label for="rttCPDeduire">CP</label>
+                                    <input type="number" id="rttCPDeduire" min="0" max="30" value="25">
+                                </div>
+                                <div class="form-group-inline">
+                                    <label for="rttForfaitJours">Forfait</label>
+                                    <input type="number" id="rttForfaitJours" min="200" max="230" value="218">
+                                </div>
+                                <button id="btnCalculerRTT" class="btn-secondary">
+                                    <i class="fa-solid fa-calculator"></i> Calculer
+                                </button>
+                            </div>
+
+                            <div id="rttDetailCalc" class="rtt-detail-calc" style="display: none;">
+                                <div class="rtt-detail-grid">
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Période</span>
+                                        <strong id="rttPeriodeLabel" class="rtt-detail-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Jours</span>
+                                        <span id="rttJoursPeriode" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">WE</span>
+                                        <span id="rttWeekends" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Fériés</span>
+                                        <span id="rttFeries" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-accent">
+                                        <span class="rtt-detail-label">Jours ouvrés</span>
+                                        <strong id="rttJoursOuvres" class="rtt-detail-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">CP</span>
+                                        <span id="rttCPAffiche" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell">
+                                        <span class="rtt-detail-label">Forfait</span>
+                                        <span id="rttForfaitAffiche" class="rtt-detail-value">-</span>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-result">
+                                        <span class="rtt-detail-label">RTT</span>
+                                        <strong id="rttCalcules" class="rtt-result-value">-</strong>
+                                    </div>
+                                    <div class="rtt-detail-cell rtt-cell-action">
+                                        <button id="btnEnregistrerRTT" class="btn-primary">
+                                            <i class="fa-solid fa-save"></i> Enregistrer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="rttWarningFeries" class="rtt-warning" style="display: none;"></div>
+
+                        <div id="tableRTTAnnuels" class="table-historique" style="margin-top: 16px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Année</th>
+                                        <th>Période</th>
+                                        <th>Jours ouvrés</th>
+                                        <th>Fériés</th>
+                                        <th>CP</th>
+                                        <th>Forfait</th>
+                                        <th>RTT</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rttAnnuelsBody">
+                                    <tr>
+                                        <td colspan="7" style="text-align: center; padding: 20px;">Chargement...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="config-note">
+                        <i class="fa-solid fa-info-circle"></i>
+                        <strong>Note :</strong> Les modifications ne seront effectives qu'à partir de l'année prochaine
+                        si le traitement a déjà été effectué cette année.
+                    </div>
+
+                    <div class="config-actions">
+                        <button id="btnEnregistrerConfig" class="btn-primary btn-large">
+                            <i class="fa-solid fa-save"></i> Enregistrer la configuration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Historique des traitements -->
+                <div class="historique-traitements" style="margin-top: 20px;">
+                    <h3><i class="fa-solid fa-history"></i> Historique des traitements</h3>
+                    <div id="tableHistorique" class="table-historique">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Date d'exécution</th>
+                                    <th>Année</th>
+                                    <th>Salariés traités</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historiqueBody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 20px;">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+    <!-- Modale éditeur de soldes (Ctrl+DEBUG) -->
+<div id="modalEditSoldes" class="modal-edit-soldes" style="display: none;">
+    <div class="modal-edit-soldes-content">
+        <div class="modal-edit-soldes-header">
+            <h3><i class="fa-solid fa-sliders"></i> Éditeur de soldes</h3>
+            <button id="closeModalEditSoldes" class="close-modal-edit-soldes">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-edit-soldes-body">
+            <div id="editSoldesTable"></div>
+            <div class="edit-soldes-actions">
+                <button id="btnAnnulerSoldes" class="btn-secondary"><i class="fa-solid fa-xmark"></i> Annuler</button>
+                <button id="btnSauverSoldes" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+            </div>
+            <div id="editSoldesMsg" class="edit-soldes-msg"></div>
         </div>
     </div>
 </div>
@@ -621,6 +852,7 @@
     </div>
 </div>
 
+    <script src="../js/chart.umd.js"></script>
     <script src="../js/dashboard-admin.js"></script>
 </body>
 </html>

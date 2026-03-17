@@ -62,3 +62,15 @@ document.getElementById('setPasswordForm').addEventListener('submit', async (e) 
         errorMessage.classList.add('show');
     }
 });
+
+// ========== AFFICHER/MASQUER MOT DE PASSE ==========
+document.querySelectorAll('.toggle-password').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const input = document.getElementById(btn.dataset.target);
+        const icon = btn.querySelector('i');
+        const isHidden = input.type === 'password';
+        input.type = isHidden ? 'text' : 'password';
+        icon.classList.toggle('fa-eye', !isHidden);
+        icon.classList.toggle('fa-eye-slash', isHidden);
+    });
+});

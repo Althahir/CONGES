@@ -94,3 +94,29 @@
         font-size: 1em;
     }
 }
+
+/* ========== DARK MODE — LOGIN ========== */
+
+[data-theme="dark"] .login-page {
+    background: linear-gradient(135deg, var(--bleu) 0%, var(--mauve) 100%);
+}
+
+[data-theme="dark"] .login-box {
+    background: var(--bg-surface);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .login-box h1,
+[data-theme="dark"] .login-box h2 {
+    color: var(--bleu);
+}
+
+[data-theme="dark"] .form-group label {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .form-group input {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}

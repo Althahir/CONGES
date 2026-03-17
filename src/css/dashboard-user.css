@@ -1,21 +1,27 @@
-/* Dashboard utilisateur - Vue unique avec calendrier annuel */
+/* Dashboard utilisateur — styles spécifiques à la page user */
+/* Les styles #mes-conges-section sont dans common.css (partagés avec admin) */
+
 body {
     margin: 0;
     overflow: hidden;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
 
 .dashboard-container {
     display: flex;
     flex-direction: column;
     height: 100vh;
-}
-#calendrier-section {
-    min-height: 80vh;
+    overflow: hidden;
 }
 
 /* ========== HEADER ========== */
 .dashboard-header {
-    background: linear-gradient(90deg, var(--bleu) 0%,var(--mauve) 25%, var(--rouge) 50%, var(--orange) 75%, var(--jaune) 100%);
+    background: linear-gradient(90deg,
+        var(--bleu), var(--mauve), var(--rouge), var(--orange), var(--jaune),
+        var(--orange), var(--rouge), var(--mauve), var(--bleu)
+    );
+    background-size: 200% 100%;
+    animation: headerGradientFlow 35s linear infinite;
     color: white;
     padding: 15px 30px;
     display: flex;
@@ -24,18 +30,21 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+@keyframes headerGradientFlow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: -200% 50%; }
+}
+
 .header-left {
     flex: 1;
 }
 
 .header-logo {
-    /* height: 40px; */
     display: flex;
     width: 80px;
     background-color: white;
     border-radius: 6px;
     padding: 2px;
-    /* height: 100%; */
 }
 
 .header-center {
@@ -43,30 +52,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 20px;
 }
 
 .header-center h1 {
     margin: 0;
     font-size: 1.8em;
-    min-width: 100px;
-    text-align: center;
-}
-
-.btn-year {
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background 0.3s;
-    font-size: 1.2em;
-}
-
-.btn-year:hover {
-    background: rgba(255, 255, 255, 0.3);
 }
 
 .header-right {
@@ -86,394 +76,290 @@ body {
     font-size: 0.9em;
 }
 
-/* ========== CONTENU PRINCIPAL ========== */
-.dashboard-content {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 350px;
-    overflow: hidden;
-}
-
-/* ========== CALENDRIER (GAUCHE) ========== */
-.calendar-section {
-    background: #f5f5f5;
-    padding: 15px;
-    overflow: hidden;
-    display: flex;
-    width: 100%;
-}
-
-.calendrier-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    height: 100%;
-    width: 100%;
-}
-
-/* Mini calendrier mensuel */
-.mois-calendrier {
+/* ========== NAVIGATION USER ========== */
+.user-nav {
     background: white;
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    min-height: 0;
-}
-
-.mois-header {
-    text-align: center;
-    font-weight: bold;
-    color: var(--bleu);
-    margin-bottom: 8px;
-    font-size: 0.9em;
-}
-
-.jours-semaine {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    margin-bottom: 3px;
-}
-
-.jour-semaine {
-    text-align: center;
-    font-size: 0.7em;
-    color: #666;
-    font-weight: 500;
-}
-
-.jours-mois {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    grid-auto-rows: 30px;
-}
-
-.jour {
-    width: 100%;
-    height: 30px;
+    border-bottom: 2px solid #e0e0e0;
+    padding: 10px 30px;
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    font-size: 0.75em;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: all 0.2s;
 }
 
-.jour:hover {
-    transform: scale(1.1);
-}
-
-.jour.vide {
-    visibility: hidden;
-}
-
-.jour.weekend {
-    color: #999;
-}
-
-.jour.ferie {
-    background: var(--jaune);
-    color: #666;
-}
-.jour.ferie::after {
-    content: " 🚩";
-    font-size: 0.9em;
-}
-
-.jour.cp {
-    background: var(--bleu);
-    color: white;
-    font-weight: bold;
-}
-
-.jour.rtt {
-    background:var(--mauve);
-    color: white;
-    font-weight: bold;
-}
-
-.jour.recup {
-    background: var(--rouge);
-    color: white;
-    font-weight: bold;
-}
-
-.jour.maladie {
-    background: var(--orange);
-    color: white;
-    font-weight: bold;
-}
-
-/* ========== PANNEAU LATÉRAL (DROITE) ========== */
-.sidebar-panel {
-    background: white;
-    border-left: 1px solid #e0e0e0;
-    overflow-y: auto;
+.nav-left {
     display: flex;
-    flex-direction: column;
-}
-
-.panel-section {
-    background: white;
-    border-radius: 12px;
-    padding: 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.panel-section h2 {
-    font-size: 1em;
-    margin-bottom: 12px;
-    color: var(--bleu);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.panel-section h2 i {
-    font-size: 1.1em;
-}
-
-/* ========== SOLDES ========== */
-.soldes-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
 }
 
-.solde-mini {
-    background: #f8f9fa;
-    padding: 8px;
-    border-radius: 8px;
+.nav-left .nav-btn {
+    width: 230px;
+    justify-content: center;
     text-align: center;
-    border-top: 3px solid;
+    white-space: nowrap;
 }
 
-.solde-mini.cp-n1 {
-    border-top-color: var(--bleu);
+.nav-right {
+    display: flex;
+    align-items: center;
 }
 
-.solde-mini.cp-n {
-    border-top-color: var(--bleu);
+.year-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.solde-mini.rtt {
-    border-top-color: var(--mauve);
-}
-
-.solde-mini.recup {
-    border-top-color: var(--rouge);
-}
-
-.solde-label {
-    font-size: 0.8em;
-    color: var(--bleu);
-    margin-bottom: 5px;
-    font-weight: bold;
-}
-
-.solde-value {
+.year-nav span {
     font-size: 1.1em;
-    /* font-weight: bold; */
-    color: #333;
+    font-weight: 700;
+    color: var(--bleu);
+    min-width: 50px;
+    text-align: center;
 }
-.small-recup{
-    /* font-size: 0.7em; */
+
+.btn-year-nav {
+    background: rgba(0, 108, 137, 0.1);
+    border: none;
+    color: var(--bleu);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s;
     font-size: 1em;
-    color: #5c5b5b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-/* ========== LÉGENDE ========== */
-.legende-item {
+
+.btn-year-nav:hover {
+    background: rgba(0, 108, 137, 0.2);
+}
+
+.nav-btn {
+    padding: 12px 20px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 0.95em;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
-    font-size: 0.9em;
+    color: var(--bleu);
 }
 
-.legende-color {
-    width: 20px;
-    height: 20px;
-    border-radius: 3px;
+.nav-btn:hover {
+    background: #f5f5f5;
+    border-color: var(--bleu);
 }
 
-.legende-color.cp {
+.nav-btn.active {
     background: var(--bleu);
+    color: white;
+    border-color: var(--bleu);
 }
 
-.legende-color.rtt {
-    background: var(--mauve);
+.nav-btn i {
+    font-size: 1.1em;
 }
 
-.legende-color.recup {
-    background: var(--rouge);
+/* ========== SECTIONS ========== */
+.content-section {
+    display: none;
 }
 
-.legende-color.maladie {
-    background: var(--orange);
-}
-
-.legende-color.ferie {
-    background: var(--jaune);
-}
-.legende-color.ferie::after {
-    content: " 🚩";
-    font-size: 0.9em;
-}
-
-/* ========== FORMULAIRE COMPACT ========== */
-.form-group-compact {
-    margin-bottom: 12px;
-}
-
-.form-group-compact label {
+.content-section.active {
     display: block;
-    margin-bottom: 4px;
-    font-size: 0.85em;
-    color: #555;
-    font-weight: 500;
 }
 
-.form-group-compact input,
-.form-group-compact select,
-.form-group-compact textarea {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.9em;
-}
-
-.form-row-compact {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-.resume-compact {
-    background: #f8f9fa;
-    padding: 10px;
-    border-radius: 4px;
-    margin: 10px 0;
-    font-size: 0.85em;
-}
-
-.resume-compact div {
-    margin: 5px 0;
-}
-
-.alert-compact {
-    color: #dc3545;
-    font-size: 0.85em;
-    margin-top: 5px;
-}
-
-.form-actions-compact {
+.section-header {
     display: flex;
-    gap: 6px;
-    margin-top: 12px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
 }
 
-.form-actions-compact button {
+.section-header h2 {
+    margin: 0;
+    color: var(--bleu);
+}
+
+/* ========== SECTION CALENDRIER GLOBAL ========== */
+#calendrier-section {
     flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 30px;
+    background: #f5f5f5;
 }
 
-/* ========== HISTORIQUE ========== */
-.historique-list {
-    font-size: 0.9em;
-    max-height: 300px;
+#calendrier-section.active {
+    display: flex;
+}
+
+.calendrier-global {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    min-height: 600px;
+    display: flex;
+    gap: 20px;
+    max-height: calc(100vh - 200px);
+    overflow: hidden;
+}
+
+.legende-salaries {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    min-width: 200px;
+    max-width: 250px;
+    order: 2;
     overflow-y: auto;
 }
 
-.historique-item {
-    padding: 10px;
-    margin-bottom: 8px;
-    background: #f8f9fa;
-    border-left: 4px solid;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.historique-item:hover {
-    background: #e9ecef;
-}
-
-.historique-item.cp {
-    border-left-color: var(--bleu);
-}
-
-.historique-item.rtt {
-    border-left-color: var(--mauve);
-}
-
-.historique-item.recup {
-    border-left-color: var(--rouge);
-}
-
-.historique-item.maladie {
-    border-left-color: var(--orange);
-}
-
-.historique-date {
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 3px;
-}
-
-.historique-type {
-    font-size: 0.85em;
-    color: #666;
-}
-
-.historique-duree {
-    font-size: 0.85em;
-    color: #999;
-    margin-top: 3px;
-}
-
-.historique-actions {
-    margin-top: 5px;
+.legende-salarie {
     display: flex;
-    /* gap: 5px; */
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
 }
 
-.historique-actions button {
-    font-size: 0.75em;
-    padding: 3px 8px;
+.legende-salarie .legende-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    flex-shrink: 0;
 }
 
-.text-muted {
-    color: #999;
-    font-style: italic;
-    text-align: center;
-    padding: 20px;
-}
-
-/* ========== TOOLTIP ========== */
-.jour {
+.calendrier-lineaire {
+    overflow-x: auto;
+    background: white;
+    border-radius: 8px;
+    padding: 5px;
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
     position: relative;
+    flex: 1;
+    order: 1;
 }
 
-.jour[data-tooltip]:hover::after {
+.calendrier-table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    font-size: 0.75em;
+    background: white;
+}
+
+.calendrier-table thead {
+    background: white;
+}
+
+.calendrier-table th {
+    background: var(--bleu);
+    color: white;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 0.9em;
+    font-weight: bold;
+    border: 1px solid #ddd;
+    min-width: 80px;
+    position: sticky;
+    top: -1px;
+    z-index: 10;
+}
+
+.calendrier-table td {
+    border: 1px solid #ddd;
+    padding: 0;
+    text-align: center;
+    height: 20px;
+    min-width: 80px;
+    position: relative;
+    overflow: hidden;
+}
+
+.jour-cell {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 100%;
+    padding: 0 4px;
+    justify-content: space-between;
+}
+
+.jour-cell .jour-numero {
+    width: 30px;
+    font-weight: 500;
+    font-size: 0.85em;
+    flex-shrink: 0;
+    text-align: left;
+}
+
+.jour-cell .indicateurs-wrapper {
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    height: 100%;
+    align-items: stretch;
+}
+
+.indicateur-colonne {
+    width: 6px;
+    height: 100%;
+    background: transparent;
+    border-radius: 0;
+}
+
+.indicateur-colonne.actif {
+    opacity: 1;
+}
+
+.calendrier-table .jour-ferie {
+    background-color: rgb(212, 208, 208) !important;
+}
+
+.calendrier-table .jour-weekend {
+    background: #f8f8f8;
+}
+
+.calendrier-table .surcharge {
+    font-weight: bold;
+    color: #dc3545;
+    font-size: 1.1em;
+}
+
+.drapeau-ferie {
+    font-size: 0.75em;
+    margin-left: auto;
+}
+
+.calendrier-table td[data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    background: rgb(233, 232, 232);
-    color: var(--bleu);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
     padding: 6px 10px;
     border-radius: 4px;
-    font-size: 0.75em;
+    font-size: 1.1em;
     white-space: nowrap;
     z-index: 1000;
     pointer-events: none;
     margin-bottom: 5px;
 }
 
-.jour[data-tooltip]:hover::before {
+.calendrier-table td[data-tooltip]:hover::before {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -486,447 +372,156 @@ body {
 }
 
 /* ========== RESPONSIVE ========== */
-@media (max-width: 1400px) {
-    .jour {
-        font-size: 0.7em;
-        height: 28px;
-    }
-    
-    .jours-mois {
-        grid-auto-rows: 28px;
-    }
-}
 
 @media (max-width: 1200px) {
-    .calendrier-grid {
-        grid-template-columns: repeat(3, 1fr);
+    body {
+        overflow-y: auto;
     }
-    
-    .dashboard-content {
-        grid-template-columns: 1fr 320px;
-    }
-}
 
-@media (max-width: 1000px) {
-    .jour {
-        font-size: 0.65em;
-        height: 25px;
-    }
-    
-    .jours-mois {
-        grid-auto-rows: 25px;
-    }
-    
-    .mois-header {
-        font-size: 0.85em;
+    .dashboard-container {
+        height: auto;
     }
 }
 
 @media (max-width: 900px) {
-    .dashboard-content {
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
+    .user-nav {
+        flex-wrap: wrap;
+        padding: 8px 15px;
+        gap: 8px;
     }
-    
-    .sidebar-panel {
-        border-left: none;
-        border-top: 1px solid #e0e0e0;
-        max-height: 50vh;
+
+    .nav-left {
+        gap: 6px;
     }
-    
-    .calendrier-grid {
-        grid-template-columns: repeat(2, 1fr);
+
+    .nav-btn {
+        padding: 8px 14px;
+        font-size: 0.85em;
+    }
+
+    .calendrier-global {
+        flex-direction: column;
+        max-height: none;
+    }
+
+    .legende-salaries {
+        max-width: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .calendrier-lineaire {
+        max-height: calc(100vh - 350px);
     }
 }
 
 @media (max-width: 600px) {
+    .dashboard-header {
+        padding: 10px 15px;
+    }
+
     .header-center h1 {
         font-size: 1.4em;
     }
-    
+
     .header-logo {
-        height: 30px;
+        width: 60px;
     }
-    
-    .calendrier-grid {
-        grid-template-columns: repeat(1, 1fr);
+
+    .user-nav {
+        padding: 6px 10px;
     }
-    
-    .soldes-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-.jour.preview {
-    background: rgba(0, 0, 0, 0.08);
-    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
-}
 
-/* Si déjà une autre classe (ferie, cp, etc), ne pas écraser */
-.jour.ferie.preview {
-    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
-}
-
-
-#btnCalculer {
-    display: none;
-}
-
-/* ========== NOUVEAU LAYOUT 2 COLONNES ========== */
-
-.sidebar-left-new {
-    display: flex;
-    flex-direction: column;
-    gap: 8px; /* ← Réduit de 20px à 12px */
-    overflow-y: auto;
-    padding-right: 10px;
-    max-height: calc(100vh - 100px); /* ← Force une hauteur max */
-}
-
-/* Réduire encore les marges */
-.dashboard-content-new {
-    display: grid;
-    grid-template-columns: 360px 1fr; /* ← Réduit de 380px à 360px */
-    gap: 10px; /* ← Réduit de 20px à 15px */
-    height: calc(100vh - 80px);
-    padding: 15px; /* ← Réduit de 20px à 15px */
-    overflow: hidden;
-}
-/* Colonne droite : Calendrier */
-.calendar-section-new {
-    background: white;
-    border-radius: 12px;
-    padding: 15px;
-    overflow-y: auto;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-/* ========== SOLDES COMPACTS ========== */
-
-.soldes-section-new {
-    background: white;
-    border-radius: 12px;
-    padding: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-/* .soldes-section-new h2 {
-    font-size: 0.9em;
-    margin-bottom: 10px;
-} */
-
-.soldes-grid-compact {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 6px;
-}
-
-.solde-card-compact {
-    border-radius: 6px;
-    padding: 6px 8px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-    border: 2px solid #e0e0e0;
-}
-
-.solde-card-compact.cp-n1, .solde-card-compact.cp-n {
-    background: #87a3f17a;
-    border-color: var(--bleu);
-}
-
-.solde-card-compact.rtt {
-    background: #d578e773;
-    border-color: var(--mauve);
-}
-
-.solde-card-compact.recup {
-    background: #e92f2f7e;
-    border-color: var(--rouge);
-}
-
-.solde-label-compact {
-    font-size: 0.65em;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
-    opacity: 0.8;
-        font-size: 1em;
-
-}
-
-.solde-card-compact.cp-n1 .solde-label-compact,
-.solde-card-compact.cp-n .solde-label-compact {
-    color: var(--bleu);
-}
-
-.solde-card-compact.rtt .solde-label-compact {
-    color: var(--mauve);
-}
-
-.solde-card-compact.recup .solde-label-compact {
-    color: var(--rouge);
-    
-}
-
-.solde-value-compact {
-    font-size: 1.1em;
-    font-weight: 700;
-}
-
-.solde-card-compact.cp-n1 .solde-value-compact,
-.solde-card-compact.cp-n .solde-value-compact {
-    color: var(--bleu);
-}
-
-.solde-card-compact.rtt .solde-value-compact {
-    color: var(--mauve);
-}
-
-.solde-card-compact.recup .solde-value-compact {
-    color: var(--rouge);
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    justify-content: center;
-    align-items: center;
-    gap: 5px;
-    
-}
-
-/* Bouton Heures sup */
-.btn-heures-sup {
-    width: 100%;
-    /* background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); */
-    background-color: var(--rouge);
-    color: white;
-    border: none;
-    padding: 8px;
-    border-radius: 6px;
-    font-size: 0.8em;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
-    display: block; /* Force l'affichage pour test */
-}
-
-.btn-heures-sup:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
-}
-
-.btn-heures-sup i {
-    margin-right: 6px;
-}
-
-/* ========== SCROLLBAR CUSTOM ========== */
-
-.sidebar-left-new::-webkit-scrollbar,
-.calendar-section-new::-webkit-scrollbar {
-    width: 8px;
-}
-
-.sidebar-left-new::-webkit-scrollbar-track,
-.calendar-section-new::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 10px;
-}
-
-.sidebar-left-new::-webkit-scrollbar-thumb,
-.calendar-section-new::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 10px;
-}
-
-.sidebar-left-new::-webkit-scrollbar-thumb:hover,
-.calendar-section-new::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-/* ========== FORMULAIRE POSER ABSENCE - DESIGN AMÉLIORE ========== */
-
-.form-section {
-    /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
-    border-radius: 12px;
-    padding: 15px;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    /* color: white; */
-       color: #666;
-}
-
-
-.form-group-compact {
-    margin-bottom: 10px;
-}
-
-.form-group-compact label {
-    font-size: 0.75em;
-    margin-bottom: 4px;
-    display: block;
-    /* color: rgba(255, 255, 255, 0.95); */
-       color: #666;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.form-group-compact input,
-.form-group-compact select,
-.form-group-compact textarea {
-    width: 100%;
-    font-size: 0.85em;
-    padding: 8px 10px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.95);
-    color: #333;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    transition: all 0.3s ease;
-}
-
-.form-group-compact input:focus,
-.form-group-compact select:focus,
-.form-group-compact textarea:focus {
-    outline: none;
-    /* border-color: white; */
-    border-color: #666;;
-    background: white;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
-}
-
-.form-group-compact select {
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    padding-right: 35px;
-}
-
-.form-group-compact textarea {
-    min-height: 50px;
-    resize: vertical;
-    font-family: inherit;
-}
-
-.form-row-compact {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-/* Résumé de l'absence */
-.resume-compact {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    border-radius: 8px;
-    padding: 10px;
-    margin: 10px 0;
-    font-size: 0.85em;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.resume-compact div {
-    margin-bottom: 5px;
-}
-
-.resume-compact strong {
-    /* color: rgba(255, 255, 255, 0.9); */
-       color: #666;
-}
-
-/* Alertes */
-.alert-compact {
-    background: rgba(255, 193, 7, 0.2);
-    border: 1px solid rgba(255, 193, 7, 0.5);
-    border-radius: 4px;
-    padding: 6px 8px;
-    margin-top: 5px;
-    font-size: 0.8em;
-    /* color: #fff3cd; */
-       color: #666;
-}
-
-.error-message,
-.success-message {
-    padding: 8px;
-    border-radius: 6px;
-    margin: 8px 0;
-    font-size: 0.85em;
-    font-weight: 500;
-    display: none;
-    transition: all 0.3s ease;
-}
-
-.error-message.show,
-.success-message.show {
-    display: block;
-}
-
-.error-message {
-    background: rgba(220, 53, 69, 0.2);
-    border: 1px solid rgba(220, 53, 69, 0.5);
-    /* color: #ffdddd; */
-       color: #666;
-}
-
-.success-message {
-    background: rgba(40, 167, 69, 0.2);
-    border: 1px solid rgba(40, 167, 69, 0.5);
-    /* color: #d4edda; */
-       color: #666;
-}
-
-/* Bouton Valider */
-.form-actions-compact {
-    margin-top: 12px;
-}
-
-.btn-primary.btn-block {
-    width: 100%;
-    background: white;
-    color: #667eea;
-    border: none;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 0.95em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-}
-
-.btn-primary.btn-block:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
-    background: #f8f9fa;
-}
-
-.btn-primary.btn-block:active {
-    transform: translateY(0);
-}
-
-/* Police par défaut pour tout le dashboard */
-body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-}
-/* ========== RESPONSIVE ========== */
-
-@media (max-width: 1400px) {
-    .dashboard-content-new {
-        grid-template-columns: 350px 1fr;
+    .nav-btn {
+        padding: 6px 10px;
+        font-size: 0.8em;
     }
 }
 
-@media (max-width: 1200px) {
-    .dashboard-content-new {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-    }
-    
-    .sidebar-left-new {
-        max-height: 400px;
-    }
+/* ========== DARK MODE — USER OVERRIDES ========== */
+
+[data-theme="dark"] .user-nav {
+    background: var(--bg-surface);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .nav-btn {
+    background: var(--bg-surface);
+    border-color: var(--border-color);
+    color: var(--jaune);
+}
+
+[data-theme="dark"] .nav-btn:hover {
+    background: var(--bg-surface-alt);
+    border-color: var(--jaune);
+}
+
+[data-theme="dark"] .nav-btn.active {
+    background: var(--jaune);
+    color: #1a1a1a;
+    border-color: var(--jaune);
+}
+
+[data-theme="dark"] .year-nav span {
+    color: var(--jaune);
+}
+
+[data-theme="dark"] .btn-year-nav {
+    background: rgba(249, 198, 73, 0.15);
+    color: var(--jaune);
+}
+
+[data-theme="dark"] .btn-year-nav:hover {
+    background: rgba(249, 198, 73, 0.3);
+}
+
+[data-theme="dark"] #calendrier-section {
+    background: var(--bg-body);
+}
+
+[data-theme="dark"] .calendrier-global {
+    background: var(--bg-surface);
+}
+
+[data-theme="dark"] .legende-salaries {
+    background: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .legende-salarie {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .calendrier-lineaire {
+    background: var(--bg-surface);
+}
+
+[data-theme="dark"] .calendrier-table {
+    background: var(--bg-surface);
+}
+
+[data-theme="dark"] .calendrier-table th {
+    background: var(--bleu);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .calendrier-table td {
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .calendrier-table .jour-weekend {
+    background: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .calendrier-table .jour-ferie {
+    background-color: #444 !important;
+}
+
+[data-theme="dark"] .calendrier-table td[data-tooltip]:hover::after {
+    background: var(--bg-surface-alt);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .calendrier-table td[data-tooltip]:hover::before {
+    border-top-color: var(--bg-surface-alt);
 }

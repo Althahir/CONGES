@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(node:*)",
+      "Bash(sqlite3:*)",
+      "Bash(git push:*)",
+      "Bash(sed:*)",
+      "Read(//c/Users/dwell/ATHELIA_CONGES/$APPDATA/Microsoft/Windows/**)",
+      "Read(//c/Users/dwell/ATHELIA_CONGES/$HOME/**)",
+      "Read(//c/Users/dwell/ATHELIA_CONGES/$LOCALAPPDATA/conges_lce/**)",
+      "Bash(npm:*)",
+      "Bash(magick:*)",
+      "Bash(npm list:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(git commit:*)",
+      "Bash(xargs grep:*)",
+      "Bash(git add:*)",
+      "Bash(git:*)"
+    ]
+  }
+}
