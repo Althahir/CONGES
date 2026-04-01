@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { createClient } = require('@libsql/client');
 const fs = require('fs');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
 if (require('electron-squirrel-startup')) {
   app.quit();
   return;
@@ -13,7 +13,7 @@ app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 // Contexte partagé avec les handlers
 const ctx = { db: null, mainWindow: null };
 
-// ========== CONFIGURATION CHEMIN DB ==========
+// ========== CONFIGURATION TURSO ==========
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
@@ -34,135 +34,30 @@ function saveConfig(config) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
-async function getDbFolder() {
-    // Vérifier si un chemin est déjà configuré et valide
+async function getTursoConfig() {
     const config = readConfig();
-    if (config && config.dbFolder && fs.existsSync(config.dbFolder)) {
-        console.log('Dossier DB (config) :', config.dbFolder);
-        return config.dbFolder;
+    if (config && config.tursoUrl && config.tursoToken) {
+        console.log('Config Turso (config.json) :', config.tursoUrl);
+        return { url: config.tursoUrl, authToken: config.tursoToken };
     }
 
-    // Premier lancement ou dossier introuvable — demander à l'utilisateur
-    const msg = config && config.dbFolder
-        ? `Le dossier configuré est introuvable :\n${config.dbFolder}\n\nVeuillez sélectionner le dossier contenant la base de données.`
-        : 'Premier lancement : sélectionnez le dossier réseau (SharePoint/OneDrive) où stocker la base de données.';
-
-    const result = await dialog.showOpenDialog({
-        title: 'Dossier de la base de données',
-        message: msg,
-        properties: ['openDirectory'],
-        buttonLabel: 'Sélectionner ce dossier'
+    // Premier lancement — demander URL et token
+    const { response, checkboxChecked } = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Configuration Turso',
+        message: 'La base de données Turso n\'est pas encore configurée.\n\nVeuillez renseigner l\'URL et le token dans le fichier :\n' + CONFIG_PATH + '\n\nFormat attendu :\n{\n  "tursoUrl": "libsql://votre-db.turso.io",\n  "tursoToken": "votre-token"\n}',
+        buttons: ['Quitter'],
     });
 
-    if (result.canceled || !result.filePaths.length) {
-        app.quit();
-        return null;
-    }
-
-    const folder = result.filePaths[0];
-    saveConfig({ dbFolder: folder });
-    console.log('Dossier DB configuré :', folder);
-    return folder;
+    app.quit();
+    return null;
 }
 
-// Channels qui font des écritures DB (INSERT/UPDATE/DELETE)
-const WRITE_CHANNELS = new Set([
-    'login', 'setPassword', 'resetPassword',
-    'createSalarie', 'updateSalarie', 'deactivateSalarie',
-    'updateSoldes', 'updateSoldesAfterAbsence',
-    'createAbsence', 'deleteAbsence', 'updateAbsence',
-    'ajouter-recup',
-    'addJourFerie', 'deleteJourFerie',
-    'addRTTAnnuel',
-    'updateConfigTraitement', 'logHistoriqueTraitement',
-    'executerTraitementCP', 'executerTraitementCPMensuel', 'executerTraitementRTT',
-    'marquerNotificationLue', 'creerNotification',
-    'updateConfigApp'
-]);
-
-// File d'attente pour sérialiser les accès DB (éviter les ouvertures/fermetures concurrentes)
-let dbQueue = Promise.resolve();
-let dbOpenCount = 0; // Compteur de références — ferme la DB quand il retombe à 0
-let dbCloseTimer = null; // Timer pour fermer la DB après un délai d'inactivité
-const DB_CLOSE_DELAY = 2000; // Fermer la DB 2s après la dernière opération
-
-function withDatabase(fn) {
-    const task = dbQueue.then(() => {
-        return new Promise((resolve, reject) => {
-            if (!ctx.dbPath) return reject(new Error('DB non configurée'));
-
-            // Annuler le timer de fermeture si la DB est encore ouverte
-            if (dbCloseTimer) {
-                clearTimeout(dbCloseTimer);
-                dbCloseTimer = null;
-            }
-
-            dbOpenCount++;
-
-            function onDbReady() {
-                Promise.resolve()
-                    .then(() => fn())
-                    .then(result => {
-                        dbOpenCount--;
-                        scheduleClose();
-                        resolve(result);
-                    })
-                    .catch(err => {
-                        dbOpenCount--;
-                        scheduleClose();
-                        reject(err);
-                    });
-            }
-
-            // Si la DB est déjà ouverte, réutiliser la connexion
-            if (ctx.db) {
-                onDbReady();
-            } else {
-                ctx.db = new sqlite3.Database(ctx.dbPath, (err) => {
-                    if (err) {
-                        dbOpenCount--;
-                        return reject(err);
-                    }
-                    ctx.db.run('PRAGMA journal_mode = DELETE');
-                    ctx.db.run('PRAGMA busy_timeout = 5000', () => {
-                        onDbReady();
-                    });
-                });
-            }
-        });
-    });
-
-    // Mettre à jour la queue pour que le prochain appel attende la fin de celui-ci
-    dbQueue = task.catch(() => {});
-    return task;
-}
-
-// Ferme la DB après un délai d'inactivité pour libérer le fichier (synchro OneDrive)
-function scheduleClose() {
-    if (dbOpenCount > 0) return; // D'autres opérations sont en cours
-    if (dbCloseTimer) clearTimeout(dbCloseTimer);
-    dbCloseTimer = setTimeout(() => {
-        if (ctx.db && dbOpenCount === 0) {
-            ctx.db.close((err) => {
-                if (err) console.error('Erreur fermeture DB :', err);
-                ctx.db = null;
-                dbCloseTimer = null;
-            });
-        }
-    }, DB_CLOSE_DELAY);
-}
-
-// Wrapper IPC centralisé — try/catch + logging + verrou écriture réseau
-// Ouvre la DB pour chaque opération puis la ferme → libère le fichier pour la synchro OneDrive
+// Wrapper IPC centralisé — try/catch + logging
 function safeHandle(channel, handler) {
     ipcMain.handle(channel, async (event, ...args) => {
         try {
-            if (WRITE_CHANNELS.has(channel)) {
-                return await ctx.withWriteLock(() =>
-                    withDatabase(() => handler(event, ...args))
-                );
-            }
-            return await withDatabase(() => handler(event, ...args));
+            return await handler(event, ...args);
         } catch (err) {
             console.error(`[IPC ERROR] ${channel}:`, err);
             throw err;
@@ -186,294 +81,223 @@ require('./handlers/pdf')(ctx, safeHandle);
 require('./handlers/config-app')(ctx, safeHandle);
 require('./handlers/navigation')(ctx, safeHandle);
 
-// ========== BASE DE DONNÉES ==========
+// ========== BASE DE DONNÉES TURSO ==========
 
-function backupDatabase(dbFolder) {
-    const dbPath = path.join(dbFolder, 'conges.db');
-    if (!fs.existsSync(dbPath)) return;
-
-    // Backups en local (AppData), pas sur le réseau
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-
-    const today = new Date().toISOString().slice(0, 10);
-    const backupPath = path.join(backupDir, `conges_${today}.db`);
-    if (!fs.existsSync(backupPath)) {
-        try {
-            fs.copyFileSync(dbPath, backupPath);
-            console.log(`Backup créé : ${backupPath}`);
-        } catch (err) {
-            console.error('Erreur backup DB :', err);
-        }
-    }
-
-    const now = Date.now();
-    const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
-    try {
-        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('conges_') && f.endsWith('.db'));
-        for (const file of files) {
-            const match = file.match(/conges_(\d{4}-\d{2}-\d{2})\.db/);
-            if (!match) continue;
-            const fileAge = now - new Date(match[1]).getTime();
-            if (fileAge > SIXTY_DAYS) {
-                fs.unlinkSync(path.join(backupDir, file));
-                console.log(`Backup supprimé (>60j) : ${file}`);
-            }
-        }
-    } catch (err) {
-        console.error('Erreur nettoyage backups :', err);
-    }
-}
-
-// ========== VERROU ÉCRITURE DB RÉSEAU ==========
-
-const LOCK_TIMEOUT = 5000; // Timeout max 5s pour obtenir le verrou
-const LOCK_RETRY = 100;    // Réessayer toutes les 100ms
-
-let lockFilePath = null;
-
-function acquireLock() {
-    return new Promise((resolve, reject) => {
-        const start = Date.now();
-
-        function tryLock() {
-            try {
-                // O_CREAT | O_EXCL = création exclusive (échoue si fichier existe)
-                const fd = fs.openSync(lockFilePath, 'wx');
-                fs.writeFileSync(lockFilePath, `${process.pid}-${Date.now()}`);
-                fs.closeSync(fd);
-                resolve();
-            } catch (err) {
-                if (err.code === 'EEXIST') {
-                    // Vérifier si le lock est périmé (>30s = processus probablement crashé)
-                    try {
-                        const stat = fs.statSync(lockFilePath);
-                        if (Date.now() - stat.mtimeMs > 30000) {
-                            fs.unlinkSync(lockFilePath);
-                            return tryLock();
-                        }
-                    } catch (e) { /* fichier supprimé entre-temps */ }
-
-                    if (Date.now() - start > LOCK_TIMEOUT) {
-                        reject(new Error('Impossible d\'accéder à la base de données : un autre poste est en cours d\'écriture. Réessayez dans quelques secondes.'));
-                    } else {
-                        setTimeout(tryLock, LOCK_RETRY);
-                    }
-                } else {
-                    reject(err);
-                }
-            }
-        }
-
-        tryLock();
+async function connectDatabase(tursoConfig) {
+    ctx.db = createClient({
+        url: tursoConfig.url,
+        authToken: tursoConfig.authToken,
     });
-}
-
-function releaseLock() {
-    try {
-        if (lockFilePath && fs.existsSync(lockFilePath)) {
-            fs.unlinkSync(lockFilePath);
-        }
-    } catch (e) {
-        console.error('Erreur libération lock :', e);
-    }
-}
-
-// Wrapper pour les écritures DB — acquiert le verrou, exécute, relâche
-function withWriteLock(fn) {
-    return acquireLock()
-        .then(() => fn())
-        .finally(() => releaseLock());
-}
-
-// Exposer withWriteLock dans le contexte pour les handlers
-ctx.withWriteLock = withWriteLock;
-
-// Initialise la DB : copie le template si besoin, lance les migrations, puis FERME la connexion
-function connectDatabase(dbFolder) {
-    return new Promise((resolve, reject) => {
-        const dbPath = path.join(dbFolder, 'conges.db');
-        lockFilePath = path.join(dbFolder, 'conges.db.lock');
-        ctx.dbPath = dbPath; // Stocké pour withDatabase()
-
-        if (!fs.existsSync(dbPath)) {
-            const templatePath = path.join(__dirname, 'conges.db');
-            try {
-                fs.copyFileSync(templatePath, dbPath);
-                console.log("Première installation : Base de données copiée dans " + dbFolder);
-            } catch (err) {
-                console.error("Erreur lors de la copie de la base :", err);
-            }
-        }
-
-        ctx.db = new sqlite3.Database(dbPath, (err) => {
-            if (err) {
-                console.error("Erreur de connexion SQLite :", err);
-                return reject(err);
-            }
-            console.log("Base de données active : " + dbPath);
-            ctx.db.run('PRAGMA journal_mode = DELETE', (err) => {
-                if (err) console.error('Erreur configuration journal_mode :', err);
-                else console.log('Mode journal DELETE activé (compatible réseau)');
-            });
-            ctx.db.run('PRAGMA busy_timeout = 5000', () => {
-                runMigrations(() => {
-                    // Migrations terminées → fermer la connexion (libérer le fichier pour OneDrive)
-                    ctx.db.close((closeErr) => {
-                        ctx.db = null;
-                        if (closeErr) console.error('Erreur fermeture DB post-migrations :', closeErr);
-                        else console.log('DB fermée après migrations (fichier libéré pour synchro OneDrive)');
-                        resolve();
-                    });
-                });
-            });
-        });
-    });
+    console.log('Connecté à Turso :', tursoConfig.url);
+    await runMigrations();
 }
 
 // ========== SYSTEME DE MIGRATIONS ==========
 
-// Chaque entrée = une migration. L'index+1 = le numéro de version cible.
-// La version 1 correspond au template DB complet (toutes les tables déjà présentes).
-// Les migrations suivantes sont pour les DB existantes qui doivent évoluer.
+// Chaque entrée = une migration async. L'index+1 = le numéro de version cible.
 const MIGRATIONS = [
-    // v1 : schéma initial complet (template DB) — rien à faire pour les nouvelles installations
-    function v1(db, done) {
-        // Pour les anciennes DB sans db_version : s'assurer que toutes les tables/colonnes existent
-        db.serialize(function() {
-            db.run(`CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)`);
+    // v1 : schéma initial complet — reproduit exactement la DB de production
+    async function v1(db) {
+        // Tables de base
+        await db.execute(`CREATE TABLE IF NOT EXISTS salaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            prenom TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            mot_de_passe TEXT,
+            role TEXT DEFAULT 'utilisateur',
+            date_embauche DATE,
+            type_contrat TEXT,
+            cp_mensuel REAL DEFAULT 2.08333,
+            a_droit_rtt INTEGER DEFAULT 0,
+            a_droit_recup INTEGER DEFAULT 0,
+            actif INTEGER DEFAULT 1,
+            premiere_connexion INTEGER DEFAULT 1,
+            date_creation DATETIME DEFAULT CURRENT_TIMESTAMP,
+            en_arret_maladie INTEGER DEFAULT 0,
+            date_arret_maladie TEXT
+        )`);
 
-            db.run(`CREATE TABLE IF NOT EXISTS rtt_annuels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                annee_debut INTEGER NOT NULL UNIQUE,
-                date_debut DATE NOT NULL DEFAULT '',
-                date_fin DATE NOT NULL DEFAULT '',
-                nb_jours_periode INTEGER,
-                nb_jours_we INTEGER,
-                nb_jours_feries_hors_we INTEGER,
-                nb_jours_travailles INTEGER,
-                nb_cp_a_deduire INTEGER DEFAULT 25,
-                nb_rtt INTEGER
-            )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS soldes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER REFERENCES salaries(id),
+            annee INTEGER NOT NULL,
+            cp_n REAL DEFAULT 0,
+            cp_n1 REAL DEFAULT 0,
+            rtt REAL DEFAULT 0,
+            recup_heures REAL DEFAULT 0,
+            derniere_maj DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
 
-            db.run(`CREATE TABLE IF NOT EXISTS heures_supplementaires (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                salarie_id INTEGER NOT NULL,
-                date TEXT NOT NULL,
-                heures REAL NOT NULL,
-                commentaire TEXT,
-                date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (salarie_id) REFERENCES salaries(id)
-            )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS absences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER REFERENCES salaries(id),
+            type TEXT NOT NULL,
+            date_debut DATE NOT NULL,
+            date_fin DATE NOT NULL,
+            duree_jours REAL,
+            duree_heures REAL,
+            statut TEXT DEFAULT 'valide',
+            commentaire TEXT,
+            date_creation DATETIME DEFAULT CURRENT_TIMESTAMP,
+            debut_periode TEXT DEFAULT 'journee-complete',
+            fin_periode TEXT DEFAULT 'journee-complete'
+        )`);
 
-            db.run(`CREATE TABLE IF NOT EXISTS historique_modifs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                salarie_id INTEGER,
-                action TEXT NOT NULL,
-                table_concernee TEXT NOT NULL,
-                details TEXT,
-                date_modif DATETIME DEFAULT CURRENT_TIMESTAMP,
-                modifie_par INTEGER,
-                FOREIGN KEY (salarie_id) REFERENCES salaries(id),
-                FOREIGN KEY (modifie_par) REFERENCES salaries(id)
-            )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS jours_feries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date DATE NOT NULL,
+            libelle TEXT NOT NULL,
+            annee INTEGER
+        )`);
 
-            // Colonnes potentiellement manquantes
-            const alterCols = [
-                "ALTER TABLE absences ADD COLUMN debut_periode TEXT DEFAULT 'journee-complete'",
-                "ALTER TABLE absences ADD COLUMN fin_periode TEXT DEFAULT 'journee-complete'",
-                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_periode INTEGER",
-                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_we INTEGER",
-                "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_feries_hors_we INTEGER",
-                "ALTER TABLE rtt_annuels ADD COLUMN nb_rtt INTEGER",
-            ];
-            alterCols.forEach(sql => {
-                db.run(sql, () => {}); // Ignorer les erreurs duplicate column
-            });
+        await db.execute(`CREATE TABLE IF NOT EXISTS config_traitements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            jour INTEGER,
+            mois INTEGER,
+            actif INTEGER DEFAULT 1,
+            derniere_maj TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
 
-            // Index
-            db.run('CREATE INDEX IF NOT EXISTS idx_absences_salarie ON absences(salarie_id)');
-            db.run('CREATE INDEX IF NOT EXISTS idx_soldes_salarie_annee ON soldes(salarie_id, annee)');
-        });
-        done();
+        // Données initiales config_traitements (si table vide)
+        await db.execute(`INSERT OR IGNORE INTO config_traitements (id, type, jour, mois, actif) VALUES (1, 'CP_ANNUEL', 1, 6, 1)`);
+        await db.execute(`INSERT OR IGNORE INTO config_traitements (id, type, jour, mois, actif) VALUES (2, 'RTT_ANNUEL', 1, 6, 1)`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS historique_traitements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT,
+            date_execution TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            annee INTEGER,
+            nb_salaries_traites INTEGER DEFAULT 0,
+            details TEXT,
+            statut TEXT DEFAULT 'success',
+            message_erreur TEXT
+        )`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT,
+            titre TEXT,
+            message TEXT,
+            details TEXT,
+            statut TEXT DEFAULT 'success',
+            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            lue INTEGER DEFAULT 0,
+            user_id INTEGER
+        )`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS rtt_annuels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            annee_debut INTEGER NOT NULL UNIQUE,
+            date_debut DATE NOT NULL DEFAULT '',
+            date_fin DATE NOT NULL DEFAULT '',
+            nb_jours_periode INTEGER,
+            nb_jours_we INTEGER,
+            nb_jours_feries_hors_we INTEGER,
+            nb_jours_travailles INTEGER,
+            nb_cp_a_deduire INTEGER DEFAULT 25,
+            nb_rtt INTEGER,
+            annee INTEGER
+        )`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS heures_supplementaires (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            heures REAL NOT NULL,
+            commentaire TEXT,
+            date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+        )`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS historique_modifs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER,
+            action TEXT NOT NULL,
+            table_concernee TEXT NOT NULL,
+            details TEXT,
+            date_modif DATETIME DEFAULT CURRENT_TIMESTAMP,
+            modifie_par INTEGER,
+            FOREIGN KEY (salarie_id) REFERENCES salaries(id),
+            FOREIGN KEY (modifie_par) REFERENCES salaries(id)
+        )`);
+
+        // Colonnes potentiellement manquantes — ignorer les erreurs si elles existent déjà
+        const alterCols = [
+            "ALTER TABLE absences ADD COLUMN debut_periode TEXT DEFAULT 'journee-complete'",
+            "ALTER TABLE absences ADD COLUMN fin_periode TEXT DEFAULT 'journee-complete'",
+            "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_periode INTEGER",
+            "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_we INTEGER",
+            "ALTER TABLE rtt_annuels ADD COLUMN nb_jours_feries_hors_we INTEGER",
+            "ALTER TABLE rtt_annuels ADD COLUMN nb_rtt INTEGER",
+        ];
+        for (const sql of alterCols) {
+            try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
+        }
+
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_absences_salarie ON absences(salarie_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_soldes_salarie_annee ON soldes(salarie_id, annee)');
     },
 
-    // v2 : taux CP globaux + arrêt maladie par salarié + historique taux + traitement CP mensuel
-    function v2(db, done) {
-        db.serialize(function() {
-            // Table config applicative (taux CP globaux)
-            db.run(`CREATE TABLE IF NOT EXISTS config_app (
-                cle TEXT PRIMARY KEY,
-                valeur TEXT NOT NULL
-            )`);
+    // v2 : taux CP globaux + arrêt maladie par salarié + historique taux
+    async function v2(db) {
+        await db.execute(`CREATE TABLE IF NOT EXISTS config_app (
+            cle TEXT PRIMARY KEY,
+            valeur TEXT NOT NULL
+        )`);
 
-            // Valeurs par défaut
-            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_normal', '2.08333')`);
-            db.run(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_arret', '1.66333')`);
+        await db.execute(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_normal', '2.08333')`);
+        await db.execute(`INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('taux_cp_arret', '1.66333')`);
 
-            // Historique des changements de taux par salarié
-            db.run(`CREATE TABLE IF NOT EXISTS historique_taux (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                salarie_id INTEGER NOT NULL,
-                date_effet TEXT NOT NULL,
-                ancien_taux TEXT NOT NULL,
-                nouveau_taux TEXT NOT NULL,
-                date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (salarie_id) REFERENCES salaries(id)
-            )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS historique_taux (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER NOT NULL,
+            date_effet TEXT NOT NULL,
+            ancien_taux TEXT NOT NULL,
+            nouveau_taux TEXT NOT NULL,
+            date_creation TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (salarie_id) REFERENCES salaries(id)
+        )`);
 
-            // Nouvelles colonnes sur salaries
-            const alterCols = [
-                "ALTER TABLE salaries ADD COLUMN en_arret_maladie INTEGER DEFAULT 0",
-                "ALTER TABLE salaries ADD COLUMN date_arret_maladie TEXT",
-            ];
-            alterCols.forEach(sql => {
-                db.run(sql, () => {}); // Ignorer si colonne existe déjà
-            });
+        const alterCols = [
+            "ALTER TABLE salaries ADD COLUMN en_arret_maladie INTEGER DEFAULT 0",
+            "ALTER TABLE salaries ADD COLUMN date_arret_maladie TEXT",
+        ];
+        for (const sql of alterCols) {
+            try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
+        }
 
-            // Index
-            db.run('CREATE INDEX IF NOT EXISTS idx_historique_taux_salarie ON historique_taux(salarie_id)');
-        });
-        done();
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_historique_taux_salarie ON historique_taux(salarie_id)');
     },
 ];
 
-function runMigrations(onDone) {
+async function runMigrations() {
     const db = ctx.db;
 
-    // S'assurer que la table db_version existe
-    db.run('CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)', () => {
-        db.get('SELECT version FROM db_version', (err, row) => {
-            let currentVersion = (row && row.version) ? row.version : 0;
+    await db.execute('CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)');
+    const result = await db.execute('SELECT version FROM db_version');
+    let currentVersion = (result.rows.length > 0 && result.rows[0].version) ? result.rows[0].version : 0;
 
-            if (currentVersion >= MIGRATIONS.length) {
-                console.log(`DB version ${currentVersion} — à jour`);
-                if (onDone) onDone();
-                return;
-            }
+    if (currentVersion >= MIGRATIONS.length) {
+        console.log(`DB version ${currentVersion} — à jour`);
+        return;
+    }
 
-            console.log(`DB version ${currentVersion} — ${MIGRATIONS.length - currentVersion} migration(s) à appliquer`);
+    console.log(`DB version ${currentVersion} — ${MIGRATIONS.length - currentVersion} migration(s) à appliquer`);
 
-            function applyNext(v) {
-                if (v >= MIGRATIONS.length) {
-                    // Mettre à jour la version
-                    const sql = currentVersion === 0
-                        ? 'INSERT INTO db_version VALUES (?)'
-                        : 'UPDATE db_version SET version = ?';
-                    db.run(sql, [MIGRATIONS.length], () => {
-                        console.log(`DB migrée vers version ${MIGRATIONS.length}`);
-                        if (onDone) onDone();
-                    });
-                    return;
-                }
+    for (let v = currentVersion; v < MIGRATIONS.length; v++) {
+        console.log(`Application migration v${v + 1}...`);
+        await MIGRATIONS[v](db);
+    }
 
-                console.log(`Application migration v${v + 1}...`);
-                MIGRATIONS[v](db, () => applyNext(v + 1));
-            }
-
-            applyNext(currentVersion);
-        });
-    });
+    const sql = currentVersion === 0
+        ? 'INSERT INTO db_version VALUES (?)'
+        : 'UPDATE db_version SET version = ?';
+    await db.execute({ sql, args: [MIGRATIONS.length] });
+    console.log(`DB migrée vers version ${MIGRATIONS.length}`);
 }
 
 // ========== FENÊTRE ==========
@@ -499,17 +323,18 @@ function createWindow() {
 // ========== DÉMARRAGE ==========
 
 app.whenReady().then(async () => {
-    const dbFolder = await getDbFolder();
-    if (!dbFolder) return; // L'utilisateur a annulé → app.quit() déjà appelé
+    const tursoConfig = await getTursoConfig();
+    if (!tursoConfig) return;
 
-    backupDatabase(dbFolder);
-    await connectDatabase(dbFolder);
+    await connectDatabase(tursoConfig);
     createWindow();
 
-    setTimeout(() => {
-        withDatabase(() => verifierTraitementsAutomatiques()).catch(err => {
+    setTimeout(async () => {
+        try {
+            await verifierTraitementsAutomatiques();
+        } catch (err) {
             console.error('Erreur vérification traitements auto :', err);
-        });
+        }
     }, 2000);
 
     app.on('activate', function () {
@@ -518,7 +343,5 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', function () {
-    releaseLock(); // Nettoyer le verrou réseau
-    if (ctx.db) ctx.db.close(() => { ctx.db = null; });
     if (process.platform !== 'darwin') app.quit();
 });

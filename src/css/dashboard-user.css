@@ -88,11 +88,14 @@ body {
 
 .nav-left {
     display: flex;
-    gap: 10px;
+    gap: 8px;
+    flex: 1;
+    flex-wrap: wrap;
 }
 
 .nav-left .nav-btn {
-    width: 230px;
+    flex: 1 1 auto;
+    max-width: 170px;
     justify-content: center;
     text-align: center;
     white-space: nowrap;

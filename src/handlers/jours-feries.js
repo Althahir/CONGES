@@ -1,35 +1,28 @@
 module.exports = function registerJoursFeriesHandlers(ctx, safeHandle) {
 
     safeHandle('getJoursFeries', async (event, annee) => {
-        return new Promise((resolve, reject) => {
-            ctx.db.all('SELECT * FROM jours_feries WHERE annee = ? ORDER BY date', [annee], (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
+        const result = await ctx.db.execute({
+            sql: 'SELECT * FROM jours_feries WHERE annee = ? ORDER BY date',
+            args: [annee]
         });
+        return result.rows;
     });
 
     safeHandle('addJourFerie', async (event, data) => {
-        return new Promise((resolve, reject) => {
-            const { date, libelle, annee } = data;
-            ctx.db.run(
-                'INSERT INTO jours_feries (date, libelle, annee) VALUES (?, ?, ?)',
-                [date, libelle, annee],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve({ success: true, id: this.lastID });
-                }
-            );
+        const { date, libelle, annee } = data;
+        const result = await ctx.db.execute({
+            sql: 'INSERT INTO jours_feries (date, libelle, annee) VALUES (?, ?, ?)',
+            args: [date, libelle, annee]
         });
+        return { success: true, id: Number(result.lastInsertRowid) };
     });
 
     safeHandle('deleteJourFerie', async (event, id) => {
-        return new Promise((resolve, reject) => {
-            ctx.db.run('DELETE FROM jours_feries WHERE id = ?', [id], function(err) {
-                if (err) reject(err);
-                else resolve({ success: true });
-            });
+        await ctx.db.execute({
+            sql: 'DELETE FROM jours_feries WHERE id = ?',
+            args: [id]
         });
+        return { success: true };
     });
 
 };

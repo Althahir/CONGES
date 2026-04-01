@@ -91,36 +91,34 @@ function calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries) 
 
 /**
  * Récupère les taux globaux depuis la table config_app.
- * @param {Object} db - instance SQLite
+ * @param {Object} db - Turso/libSQL client
  * @returns {Promise<{normal: number, arret: number}>}
  */
-function getTauxGlobaux(db) {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT cle, valeur FROM config_app WHERE cle IN ("taux_cp_normal", "taux_cp_arret")', (err, rows) => {
-            if (err) { reject(err); return; }
-            const config = {};
-            (rows || []).forEach(r => { config[r.cle] = parseFloat(r.valeur); });
-            resolve({
-                normal: config.taux_cp_normal || 2.08333,
-                arret: config.taux_cp_arret || 1.66333
-            });
-        });
+async function getTauxGlobaux(db) {
+    const result = await db.execute({
+        sql: "SELECT cle, valeur FROM config_app WHERE cle IN ('taux_cp_normal', 'taux_cp_arret')",
+        args: []
     });
+    const config = {};
+    (result.rows || []).forEach(r => { config[r.cle] = parseFloat(r.valeur); });
+    return {
+        normal: config.taux_cp_normal || 2.08333,
+        arret: config.taux_cp_arret || 1.66333
+    };
 }
 
 /**
  * Récupère les jours fériés d'une année depuis la DB.
- * @param {Object} db - instance SQLite
+ * @param {Object} db - Turso/libSQL client
  * @param {number} annee
  * @returns {Promise<string[]>} tableau de dates ISO
  */
-function getJoursFeriesAnnee(db, annee) {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT date FROM jours_feries WHERE annee = ?', [annee], (err, rows) => {
-            if (err) { reject(err); return; }
-            resolve((rows || []).map(r => r.date));
-        });
+async function getJoursFeriesAnnee(db, annee) {
+    const result = await db.execute({
+        sql: 'SELECT date FROM jours_feries WHERE annee = ?',
+        args: [annee]
     });
+    return (result.rows || []).map(r => r.date);
 }
 
 module.exports = { calculerCPMensuel, getTauxGlobaux, getJoursFeriesAnnee };

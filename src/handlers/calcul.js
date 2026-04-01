@@ -39,38 +39,31 @@ function calculerJoursOuvres(dateDebut, dateFin, joursFeries) {
 module.exports = function registerCalculHandlers(ctx, safeHandle) {
 
     safeHandle('calculerDuree', async (event, dateDebut, dateFin, debutPeriode, finPeriode) => {
-        return new Promise((resolve, reject) => {
-            const anneeDebut = new Date(dateDebut).getFullYear();
-            const anneeFin = new Date(dateFin).getFullYear();
+        const anneeDebut = new Date(dateDebut).getFullYear();
+        const anneeFin = new Date(dateFin).getFullYear();
 
-            ctx.db.all(
-                'SELECT date FROM jours_feries WHERE annee IN (?, ?)',
-                [anneeDebut, anneeFin],
-                (err, joursFeries) => {
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
-
-                    const joursOuvres = calculerJoursOuvres(dateDebut, dateFin, joursFeries);
-
-                    let dureeJours = joursOuvres;
-                    if (debutPeriode === 'apres-midi') {
-                        dureeJours -= 0.5;
-                    }
-                    if (finPeriode === 'midi') {
-                        dureeJours -= 0.5;
-                    }
-                    if (dureeJours < 0) dureeJours = 0;
-
-                    resolve({
-                        joursOuvres: joursOuvres,
-                        dureeJours: dureeJours,
-                        joursFeries: joursFeries.length
-                    });
-                }
-            );
+        const result = await ctx.db.execute({
+            sql: 'SELECT date FROM jours_feries WHERE annee IN (?, ?)',
+            args: [anneeDebut, anneeFin]
         });
+        const joursFeries = result.rows;
+
+        const joursOuvres = calculerJoursOuvres(dateDebut, dateFin, joursFeries);
+
+        let dureeJours = joursOuvres;
+        if (debutPeriode === 'apres-midi') {
+            dureeJours -= 0.5;
+        }
+        if (finPeriode === 'midi') {
+            dureeJours -= 0.5;
+        }
+        if (dureeJours < 0) dureeJours = 0;
+
+        return {
+            joursOuvres: joursOuvres,
+            dureeJours: dureeJours,
+            joursFeries: joursFeries.length
+        };
     });
 
 };

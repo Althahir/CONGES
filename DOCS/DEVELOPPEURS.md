@@ -54,14 +54,10 @@ npm run package    # Génère le binaire dans /out
 npm run make       # Génère l'installeur (Squirrel sur Windows)
 ```
 
-### Base de données de développement
+### Base de données
 
-La DB active est copiée automatiquement depuis `src/conges.db` (template) vers :
-```
-Windows : C:\Users\<user>\AppData\Roaming\conges-lce\conges.db
-```
-Pour réinitialiser la DB : supprimer ce fichier — il sera recopié au prochain démarrage.
-Pour modifier le schéma : modifier `src/conges.db` (template), puis supprimer la DB active.
+La DB est hébergée sur **Turso** (cloud). Pour le développement, configurer l'URL et le token dans `config.json` (AppData) ou utiliser une DB Turso de développement dédiée.
+Pour réinitialiser la DB : recréer les tables via les migrations ou créer une nouvelle DB Turso.
 
 ---
 
@@ -76,9 +72,9 @@ Pour modifier le schéma : modifier `src/conges.db` (template), puis supprimer l
 │   Main process       │   Renderer process           │
 │   (src/main.js)      │   (pages/*.html + src/js/*.js│
 │                      │                              │
-│   - SQLite3          │   - HTML/CSS/JS vanilla       │
-│   - bcrypt           │   - Pas de framework          │
-│   - pdfkit           │   - ES6+ async/await          │
+│   - @libsql/client   │   - HTML/CSS/JS vanilla       │
+│   - (Turso DB cloud) │   - Pas de framework          │
+│   - bcrypt, pdfkit   │   - ES6+ async/await          │
 │   - IPC handlers     │   - window.api (via preload)  │
 ├──────────────────────┴──────────────────────────────┤
 │                   preload.js                        │
@@ -93,7 +89,7 @@ UI (dashboard-user.js)
   └─→ window.api.maFonction(params)          [renderer]
         └─→ ipcRenderer.invoke('maFonction') [preload.js]
               └─→ ipcMain.handle('maFonction') [main.js]
-                    └─→ db.all() / db.run()    [SQLite3]
+                    └─→ client.execute()       [Turso/libSQL]
                     └─→ resolve(data)
               ←── Promise<data>
         ←── data
@@ -245,9 +241,10 @@ CREATE TABLE historique_modifs (
 
 ### Accès à la DB en développement
 
-1. Installer [DB Browser for SQLite](https://sqlitebrowser.org/)
-2. Ouvrir `C:\Users\<user>\AppData\Roaming\conges-lce\conges.db`
-3. Toute modification est écrasée si la DB est supprimée et recréée depuis le template
+1. Installer le CLI Turso : `curl -sSfL https://get.tur.so/install.sh | bash`
+2. Se connecter : `turso auth login`
+3. Ouvrir un shell SQL : `turso db shell conges` (remplacer par le nom de la DB)
+4. Ou utiliser l'interface web Turso : https://turso.tech/app
 
 ---
 
@@ -255,16 +252,16 @@ CREATE TABLE historique_modifs (
 
 ### Exemple complet : ajouter un handler `monHandler`
 
-**Étape 1 — `main.js`** : déclarer le handler (ajouter dans la section concernée)
+**Étape 1 — handler dans `src/handlers/`** : créer ou compléter le module
 
 ```javascript
-ipcMain.handle('monHandler', async (event, param1, param2) => {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM ma_table WHERE id = ?', [param1], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
+// Dans le module handler (reçoit ctx et safeHandle)
+safeHandle('monHandler', async (event, param1, param2) => {
+    const result = await ctx.db.execute({
+        sql: 'SELECT * FROM ma_table WHERE id = ?',
+        args: [param1]
     });
+    return result.rows;
 });
 ```
 
@@ -283,10 +280,10 @@ const data = await window.api.monHandler(param1, param2);
 
 ### Règles importantes
 
-- Toujours wrapper les callbacks SQLite3 dans une `Promise`
-- Ne jamais utiliser `db` directement depuis le renderer (contextIsolation)
-- Les erreurs sont propagées via `reject(err)` — gérer les exceptions côté UI
-- `db.run()` pour INSERT/UPDATE/DELETE, `db.get()` pour une ligne, `db.all()` pour plusieurs
+- Tous les handlers sont `async` — utiliser `await client.execute()` pour les requêtes DB
+- Ne jamais utiliser `client` directement depuis le renderer (contextIsolation)
+- Les erreurs sont propagées via `throw` — gérer les exceptions côté UI
+- `client.execute({ sql, args })` pour toutes les requêtes — `.rows` pour les résultats, `.rows[0]` pour une ligne
 
 ---
 
@@ -489,103 +486,116 @@ npm run make
 
 ### Points d'attention pour la distribution
 
-- La DB template (`src/conges.db`) est incluse dans le ASAR
-- À la première installation, elle est copiée dans `AppData` de l'utilisateur
-- **Backup automatique** : à chaque lancement, `conges.db` est copié dans `AppData/.../backups/conges_YYYY-MM-DD.db` (1 par jour, rétention 60 jours, suppression auto des plus anciens)
-- **Si le schéma évolue** (nouvelles tables/colonnes) : les utilisateurs existants n'auront pas les migrations → prévoir un système de migration DB
+- Plus de DB locale — toutes les données sont sur Turso (cloud)
+- Les migrations sont appliquées au démarrage via le système `MIGRATIONS[]` / `db_version`
+- Les backups sont gérés par Turso (ou export périodique optionnel)
+- Le package ne contient plus de template `conges.db`
 
 ---
 
 ## 10. Déploiement multi-utilisateurs
 
-> **Contexte** : par défaut, chaque machine a sa propre DB locale dans `AppData`. Pour que les 5 salariés partagent les mêmes données, il faut pointer toutes les instances vers **un seul fichier DB commun**.
+> **Contexte** : l'application est utilisée par ~5 salariés sur des postes différents (bureau + télétravail). Toutes les instances doivent partager les mêmes données en temps réel.
 
-### Option retenue : dossier réseau partagé (Option A)
+### Option retenue : Turso (SQLite cloud)
 
-Toutes les instances Electron lisent/écrivent le même fichier `conges.db` stocké sur un emplacement accessible en réseau.
+> **Historique** : l'approche initiale (fichier SQLite partagé via OneDrive) a été abandonnée car OneDrive crée des fichiers de conflit (`conges-NomPC.db`) au lieu de synchroniser le fichier — SQLite et la synchronisation de fichiers cloud sont fondamentalement incompatibles.
+
+Toutes les instances Electron se connectent à la **même base Turso** hébergée dans le cloud. Pas de fichier local, pas de synchronisation, pas de conflit.
 
 ```
-Poste 1  ──┐
-Poste 2  ──┤──► \\serveur\partage\conges.db  (ou OneDrive mappé)
-Poste 3  ──┘
+Poste 1 (bureau)      ──┐
+Poste 2 (bureau)      ──┤──► Turso DB (cloud, libSQL)
+Poste 3 (télétravail) ──┘    https://xxx.turso.io
 ```
 
-### Modifications à apporter dans `main.js`
+### Avantages
 
-#### 1. Activer le mode WAL (obligatoire pour les accès simultanés)
+| Avantage | Détail |
+|---|---|
+| **Pas de conflit** | Plus de fichier partagé = plus de fichiers de conflit OneDrive |
+| **Multi-postes natif** | Turso gère les accès concurrents nativement |
+| **Télétravail** | Fonctionne depuis n'importe quel poste avec Internet, sans VPN |
+| **Pas de serveur** | L'app Electron se connecte directement à Turso (pas besoin de Render ou d'API intermédiaire) |
+| **Compatible SQLite** | Turso est basé sur libSQL (fork de SQLite) — même syntaxe SQL |
 
-Juste après l'ouverture de la DB, ajouter :
+### Architecture DB
 
-```javascript
-db.run('PRAGMA journal_mode=WAL');
-db.run('PRAGMA busy_timeout=5000'); // Attendre 5s si la DB est verrouillée
+```
+Electron (main process)
+  └─→ @libsql/client (npm)
+        └─→ createClient({ url, authToken })
+              └─→ client.execute({ sql, args })
+                    └─→ Turso DB (HTTPS)
 ```
 
-#### 2. Rendre le chemin DB configurable
+Remplacement de l'ancien pattern :
+- ~~`sqlite3.Database(filePath)`~~ → `createClient({ url, authToken })`
+- ~~`db.all(sql, params, callback)`~~ → `await client.execute({ sql, args })` → `.rows`
+- ~~`db.get(sql, params, callback)`~~ → `await client.execute({ sql, args })` → `.rows[0]`
+- ~~`db.run(sql, params, callback)`~~ → `await client.execute({ sql, args })`
 
-Actuellement le chemin est calculé automatiquement vers `AppData`. Il faut permettre de le surcharger.
+### Configuration
 
-Exemple d'implémentation : lire un fichier `config.json` placé à côté de l'exécutable :
-
-```javascript
-const configPath = path.join(app.getPath('exe'), '..', 'config.json');
-let dbPath;
-
-if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    dbPath = config.dbPath; // Ex: "\\\\serveur\\partage\\conges.db"
-}
-
-if (!dbPath) {
-    // Fallback : comportement actuel (AppData local)
-    const userDataPath = app.getPath('userData');
-    dbPath = path.join(userDataPath, 'conges.db');
-}
-```
-
-Chaque poste aura un `config.json` à côté de l'exécutable :
+L'URL et le token Turso sont stockés dans `config.json` (AppData) :
 
 ```json
 {
-    "dbPath": "C:\\Users\\<user>\\OneDrive\\LaCiotat\\conges.db"
+    "tursoUrl": "libsql://conges-xxx.turso.io",
+    "tursoToken": "eyJhbGciOi..."
 }
 ```
 
-*(Le chemin OneDrive est le chemin local de la synchronisation — voir section ci-dessous)*
+Au premier lancement, l'application demande ces informations (ou elles sont pré-configurées pour le déploiement).
 
-#### 3. S'assurer que le fichier DB est copié une seule fois
+### Free tier Turso
 
-La logique actuelle copie `src/conges.db` → `AppData` si le fichier n'existe pas. Avec un chemin réseau, cette logique doit être adaptée : ne copier le template que si le fichier réseau n'existe pas encore (premier déploiement).
+| Limite | Valeur | Suffisant ? |
+|---|---|---|
+| Stockage | 9 Go | Largement (DB < 10 Mo) |
+| Lectures | 25 milliards/mois | Largement |
+| Écritures | 100 millions/mois | Largement |
+| Mise en veille | Aucune | Turso est toujours actif |
 
----
+### Éléments supprimés (ancien système fichier) — supprimés le 31/03/2026
 
-### ⚠️ Utilisation avec OneDrive
+- `sqlite3` (npm) — remplacé par `@libsql/client`
+- `withDatabase()` / `scheduleClose()` / `DB_CLOSE_DELAY` — plus de gestion ouverture/fermeture
+- `acquireLock()` / `releaseLock()` / `withWriteLock()` — plus de verrou fichier `.lock`
+- `WRITE_CHANNELS` / `dbQueue` / `dbOpenCount` — plus de sérialisation d'accès
+- `getDbFolder()` / copie template `conges.db` — plus de fichier DB local
+- `backupDatabase()` — remplacé par les backups intégrés Turso
+- `PRAGMA journal_mode` / `PRAGMA busy_timeout` — géré par Turso
+- `src/conges.db` — template supprimé (schéma géré par migrations)
+- Tous les callbacks `db.get()` / `db.all()` / `db.run()` — remplacés par `await ctx.db.execute({ sql, args })`
 
-OneDrive **peut** fonctionner comme dossier partagé pour SQLite, à condition de respecter ces contraintes :
+### Attention SQL (Turso vs SQLite3)
 
-| Contrainte | Détail |
-|---|---|
-| **Toujours disponible localement** | Désactiver "Fichiers à la demande" (Files On-Demand) — le fichier doit être en cache local, pas en ligne uniquement |
-| **Pas d'accès simultané en écriture** | OneDrive sync + SQLite lock = risque de corruption si deux personnes écrivent exactement au même moment |
-| **WAL mode obligatoire** | Réduit fortement les conflits de verrouillage (voir section ci-dessus) |
-| **Dossier non synchronisé en temps réel** | Mettre le dossier `conges.db` en pause de sync si possible (ou utiliser un NAS à la place) |
+Turso respecte le standard SQL : les guillemets doubles `"..."` sont des identifiants de colonne, pas des chaînes. Toujours utiliser des guillemets simples `'...'` pour les valeurs littérales dans les requêtes SQL.
 
-> ⚠️ **Point critique — à faire sur chaque poste avant le déploiement** : désactiver l'option **"Fichiers à la demande"** (Files On-Demand) dans les paramètres OneDrive. Sans ça, OneDrive peut stocker `conges.db` uniquement en ligne et SQLite ne pourra pas y accéder, rendant l'app inutilisable. Pour 5 utilisateurs avec peu d'accès simultanés, l'ensemble devrait tenir.
+```javascript
+// ✗ Incorrect — Turso interprète "valide" comme un nom de colonne
+sql: 'SELECT * FROM absences WHERE statut = "valide"'
 
-> **Recommandation** : OneDrive est acceptable pour 5 utilisateurs avec peu d'accès simultanés, mais un **partage réseau local (NAS ou PC partagé)** est plus fiable car il n'y a pas de couche de synchronisation entre SQLite et le fichier.
+// ✓ Correct
+sql: `SELECT * FROM absences WHERE statut = 'valide'`
+```
 
-> **En cas de corruption** : SQLite en mode WAL crée automatiquement des fichiers `conges.db-wal` et `conges.db-shm` à côté de la DB. Ne pas les supprimer manuellement.
+### Procédure de déploiement
 
----
-
-### Procédure de déploiement (résumé)
-
-1. Packager l'app : `npm run make`
-2. Installer l'app sur chaque poste (installeur Squirrel généré dans `/out/make/`)
-3. Créer le dossier partagé (OneDrive ou réseau)
-4. Y copier `src/conges.db` (template vierge) une seule fois
-5. Créer un `config.json` sur chaque poste à côté de l'exécutable avec le chemin réseau
-6. Lancer l'app — elle utilisera la DB partagée
+1. Créer un compte Turso et une base de données (`turso db create conges`)
+2. Récupérer l'URL et le token (`turso db show conges --url` + `turso db tokens create conges`)
+3. Packager l'app : `npm run make`
+4. Sur chaque poste :
+   - Installer le `.exe` depuis `out/make/squirrel.windows/x64/`
+   - Créer le dossier `%appdata%\conges-lce\` avec le fichier `config.json` :
+     ```json
+     {
+       "tursoUrl": "libsql://conges-xxx.turso.io",
+       "tursoToken": "eyJ..."
+     }
+     ```
+   - Lancer l'app — les migrations créent les tables automatiquement au premier lancement
 
 ---
 
@@ -598,7 +608,7 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 1. ~~**Handler `ajouter-recup`**~~ ✅ **Fait**
 2. ~~**UI Notifications**~~ ✅ **Fait** — badge cloche + dropdown + toasts
 3. ~~**Refonte CSS + Dark mode**~~ ✅ **Fait** — thème sombre complet, navigation unifiée
-4. **Déploiement multi-utilisateurs** — voir section 10 ci-dessus pour le plan d'action
+4. ~~**Déploiement multi-utilisateurs**~~ ✅ **Fait** — migration Turso terminée le 31/03/2026
 5. ~~**RTT annuels par salarié**~~ ✅ **Fait** — calcul complet, UI, notifications, migration DB
 6. ~~**Backup automatique DB**~~ ✅ **Fait** — copie quotidienne au démarrage, rétention 60 jours
 7. ~~**Nettoyage assets + icônes**~~ ✅ **Fait** — 9 images inutilisées supprimées, icônes cohérentes (logo.ico pour l'app, favicon3.ico pour installateur/fenêtre, favicon2.png pour topbars)
@@ -607,4 +617,4 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 06/03/2026 (demi-journées, alertes vert/orange, dark mode modal suppression, taille min fenêtre)*
+*Document maintenu par Excellium — dernière mise à jour 31/03/2026 (migration Turso terminée, déploiement multi-postes opérationnel)*

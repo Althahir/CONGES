@@ -214,24 +214,31 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
 
     safeHandle('exporterRecapPDF', async (event, data) => {
         const { salarie_id, annee } = data;
-        return new Promise(async (resolve, reject) => {
-            try {
-                const salarie = await new Promise((res, rej) => {
-                    ctx.db.get('SELECT * FROM salaries WHERE id = ?', [salarie_id], (err, row) => err ? rej(err) : res(row));
-                });
-                const soldes = await new Promise((res, rej) => {
-                    ctx.db.get('SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?', [salarie_id, annee], (err, row) => err ? rej(err) : res(row));
-                });
-                const absences = await new Promise((res, rej) => {
-                    ctx.db.all(
-                        `SELECT * FROM absences WHERE salarie_id = ? AND statut = "valide"
-                         AND (substr(date_debut,1,4) = ? OR substr(date_fin,1,4) = ?)
-                         ORDER BY date_debut`,
-                        [salarie_id, String(annee), String(annee)],
-                        (err, rows) => err ? rej(err) : res(rows || [])
-                    );
-                });
 
+        // Fetch data from DB using Turso async syntax
+        const salarieResult = await ctx.db.execute({
+            sql: 'SELECT * FROM salaries WHERE id = ?',
+            args: [salarie_id]
+        });
+        const salarie = salarieResult.rows[0];
+
+        const soldesResult = await ctx.db.execute({
+            sql: 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+            args: [salarie_id, annee]
+        });
+        const soldes = soldesResult.rows[0];
+
+        const absencesResult = await ctx.db.execute({
+            sql: `SELECT * FROM absences WHERE salarie_id = ? AND statut = 'valide'
+                 AND (substr(date_debut,1,4) = ? OR substr(date_fin,1,4) = ?)
+                 ORDER BY date_debut`,
+            args: [salarie_id, String(annee), String(annee)]
+        });
+        const absences = absencesResult.rows || [];
+
+        // PDF generation remains Promise-based (stream events)
+        return new Promise((resolve, reject) => {
+            try {
                 const fileName = `recap_${salarie.nom}_${salarie.prenom}_${annee}.pdf`;
                 const filePath = path.join(os.tmpdir(), fileName);
                 const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -376,7 +383,7 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
     safeHandle('exporterStatsPDF', async (event, data) => {
         const { annee, mois, types, absences } = data;
 
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             try {
                 const moisNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
                 const periodeLabel = mois > 0 ? `${moisNoms[mois]} ${annee}` : `Année ${annee}`;

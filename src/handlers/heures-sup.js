@@ -2,45 +2,23 @@ module.exports = function registerHeuresSupHandlers(ctx, safeHandle) {
 
     safeHandle('ajouter-recup', async (event, data) => {
         const { salarie_id, annee, heures, date, commentaire } = data;
-        return new Promise((resolve, reject) => {
-            ctx.db.run(
-                `INSERT INTO heures_supplementaires (salarie_id, date, heures, commentaire) VALUES (?, ?, ?, ?)`,
-                [salarie_id, date, heures, commentaire || null],
-                (err) => {
-                    if (err) {
-                        console.error('Erreur insertion heures sup:', err);
-                        reject(err);
-                        return;
-                    }
-                    ctx.db.run(
-                        `UPDATE soldes SET recup_heures = recup_heures + ?, derniere_maj = CURRENT_TIMESTAMP
-                         WHERE salarie_id = ? AND annee = ?`,
-                        [heures, salarie_id, annee],
-                        (err2) => {
-                            if (err2) {
-                                console.error('Erreur maj solde recup:', err2);
-                                reject(err2);
-                            } else {
-                                resolve({ success: true });
-                            }
-                        }
-                    );
-                }
-            );
+        await ctx.db.execute({
+            sql: `INSERT INTO heures_supplementaires (salarie_id, date, heures, commentaire) VALUES (?, ?, ?, ?)`,
+            args: [salarie_id, date, heures, commentaire || null]
         });
+        await ctx.db.execute({
+            sql: `UPDATE soldes SET recup_heures = recup_heures + ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
+            args: [heures, salarie_id, annee]
+        });
+        return { success: true };
     });
 
     safeHandle('getHeuresSup', async (event, salarie_id) => {
-        return new Promise((resolve, reject) => {
-            ctx.db.all(
-                `SELECT * FROM heures_supplementaires WHERE salarie_id = ? ORDER BY date DESC`,
-                [salarie_id],
-                (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows || []);
-                }
-            );
+        const result = await ctx.db.execute({
+            sql: `SELECT * FROM heures_supplementaires WHERE salarie_id = ? ORDER BY date DESC`,
+            args: [salarie_id]
         });
+        return result.rows;
     });
 
 };

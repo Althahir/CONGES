@@ -2967,7 +2967,10 @@ if (window.api.onTraitementAutomatique) {
     window.api.onTraitementAutomatique((data) => {
         console.log('Traitement automatique reçu:', data);
 
-        const typeLabel = data.type === 'CP_ANNUEL' ? 'CP Annuel' : 'RTT Annuel';
+        const typeLabel = data.type === 'CP_ANNUEL' ? 'CP Annuel'
+            : data.type === 'RTT_ANNUEL' ? 'RTT Annuel'
+            : data.type.startsWith('CP_MENSUEL') ? 'CP Mensuel'
+            : data.type;
 
         if (data.statut === 'success') {
             afficherNotificationPersistante(
