@@ -1913,6 +1913,11 @@ h2 {
     z-index: 1000;
 }
 
+/* Modale d'ajout de ligne du DB Browser : doit passer au-dessus de .modal-db-browser (z 10000) */
+#modalDbBrowserAddRow {
+    z-index: 10001;
+}
+
 .modal-content {
     background: white;
     border-radius: 8px;
