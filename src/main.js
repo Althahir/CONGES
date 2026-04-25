@@ -80,6 +80,7 @@ require('./handlers/calcul')(ctx, safeHandle);
 require('./handlers/pdf')(ctx, safeHandle);
 require('./handlers/config-app')(ctx, safeHandle);
 require('./handlers/navigation')(ctx, safeHandle);
+require('./handlers/db-admin')(ctx, safeHandle);
 
 // ========== BASE DE DONNÉES TURSO ==========
 

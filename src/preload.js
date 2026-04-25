@@ -302,5 +302,20 @@ contextBridge.exposeInMainWorld('api', {
     // Navigation
 
     /** @param {string} page - nom du fichier HTML (ex: 'dashboard-admin.html') @returns {Promise<SuccessResult>} */
-    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page)
+    navigateTo: (page) => ipcRenderer.invoke('navigateTo', page),
+
+    // DB admin (easter egg Ctrl+DEBUG)
+
+    /** @returns {Promise<Array<{name: string, rowCount: number}>>} */
+    dbListTables: () => ipcRenderer.invoke('db-list-tables'),
+    /** @param {string} name @param {number} [limit] @param {number} [offset] @returns {Promise<{columns: Array, primaryKey: string|null, totalCount: number, rows: Array}>} */
+    dbGetTable: (name, limit, offset) => ipcRenderer.invoke('db-get-table', name, limit, offset),
+    /** @param {string} table @param {string} pkName @param {*} pkValue @param {string} column @param {*} newValue @returns {Promise<SuccessResult>} */
+    dbUpdateCell: (table, pkName, pkValue, column, newValue) => ipcRenderer.invoke('db-update-cell', table, pkName, pkValue, column, newValue),
+    /** @param {string} table @param {string} pkName @param {*} pkValue @returns {Promise<{success: boolean, rowsAffected: number}>} */
+    dbDeleteRow: (table, pkName, pkValue) => ipcRenderer.invoke('db-delete-row', table, pkName, pkValue),
+    /** @param {string} table @param {Object} values @returns {Promise<{success: boolean, id: number}>} */
+    dbInsertRow: (table, values) => ipcRenderer.invoke('db-insert-row', table, values),
+    /** @param {string} sql @returns {Promise<{success: boolean, rows: Array, columns: Array, rowsAffected: number}>} */
+    dbExecRaw: (sql) => ipcRenderer.invoke('db-exec-raw', sql)
 });

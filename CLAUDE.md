@@ -187,7 +187,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 | Raccourci | Action |
 |---|---|
-| `Ctrl+D+E+B+U+G` | Éditeur de soldes (modification directe CP/RTT/Récup par salarié) |
+| `Ctrl+D+E+B+U+G` | **DB Browser** — visualisation et édition de toutes les tables (modification de cellule par double-clic, ajout/suppression de ligne, SQL libre) |
 | `Ctrl+L+O+A+D` | Modale import Excel |
 | `Ctrl+S+A+V+E` | Export Excel complet |
 

@@ -2552,7 +2552,7 @@ async function chargerStatistiques() {
     }
 }
 
-// ========== ÉDITEUR DE SOLDES (Ctrl+DEBUG) ==========
+// ========== DB BROWSER (Ctrl+DEBUG) ==========
 
 let sequence = [];
 const secretCode = ['d', 'e', 'b', 'u', 'g'];
@@ -2567,7 +2567,7 @@ document.addEventListener('keydown', (e) => {
 
         if (sequence.join('') === secretCode.join('')) {
             e.preventDefault();
-            ouvrirEditeurSoldes();
+            ouvrirDbBrowser();
             sequence = [];
             clearTimeout(sequenceTimeout);
         }
@@ -2577,97 +2577,267 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-async function ouvrirEditeurSoldes() {
-    const modal = document.getElementById('modalEditSoldes');
-    const msg = document.getElementById('editSoldesMsg');
-    msg.textContent = '';
-    msg.className = 'edit-soldes-msg';
+let _dbBrowserCurrentTable = null;
+let _dbBrowserCurrentPk = null;
+let _dbBrowserColumns = [];
 
-    await chargerTableSoldes(new Date().getFullYear());
+async function ouvrirDbBrowser() {
+    const modal = document.getElementById('modalDbBrowser');
     modal.style.display = 'flex';
+    await chargerTablesDbBrowser();
 }
 
-async function chargerTableSoldes(annee) {
-    const container = document.getElementById('editSoldesTable');
+async function chargerTablesDbBrowser() {
+    const container = document.getElementById('dbBrowserTables');
+    container.innerHTML = '<p class="db-browser-loading">Chargement…</p>';
     try {
-        const salaries = await window.api.getAllSalaries();
-        let html = `<table class="soldes-edit-table">
-            <thead><tr>
-                <th>Salarié</th>
-                <th>CP N-1</th>
-                <th>CP N</th>
-                <th>RTT</th>
-                <th>Récup (h)</th>
-            </tr></thead><tbody>`;
+        const tables = await window.api.dbListTables();
+        container.innerHTML = tables.map(t => `
+            <div class="db-table-item" data-table="${t.name}">
+                <span class="db-table-name">${t.name}</span>
+                <span class="db-table-count">${t.rowCount}</span>
+            </div>
+        `).join('');
+        container.querySelectorAll('.db-table-item').forEach(item => {
+            item.addEventListener('click', () => chargerContenuTable(item.dataset.table));
+        });
+    } catch (err) {
+        container.innerHTML = `<p class="db-browser-error">${err.message || err}</p>`;
+    }
+}
 
-        for (const s of salaries) {
-            const soldes = await window.api.getSoldes(s.id, annee);
-            const cpN1 = soldes ? soldes.cp_n1 : 0;
-            const cpN = soldes ? soldes.cp_n : 0;
-            const rtt = soldes ? soldes.rtt : 0;
-            const recup = soldes ? soldes.recup_heures : 0;
+async function chargerContenuTable(tableName) {
+    _dbBrowserCurrentTable = tableName;
+    document.getElementById('dbBrowserTableTitle').textContent = tableName;
+    document.querySelectorAll('.db-table-item').forEach(i => {
+        i.classList.toggle('active', i.dataset.table === tableName);
+    });
+    document.getElementById('btnDbBrowserRefresh').disabled = false;
+    document.getElementById('btnDbBrowserAddRow').disabled = false;
 
-            html += `<tr data-salarie-id="${s.id}">
-                <td class="salarie-name">${s.nom} ${s.prenom}</td>
-                <td><input type="number" step="0.01" class="edit-cp-n1" value="${cpN1}"></td>
-                <td><input type="number" step="0.01" class="edit-cp-n" value="${cpN}"></td>
-                <td><input type="number" step="0.01" class="edit-rtt" value="${rtt}" ${s.a_droit_rtt ? '' : 'disabled title="Pas de droit RTT"'}></td>
-                <td><input type="number" step="0.1" class="edit-recup" value="${recup}" ${s.a_droit_recup ? '' : 'disabled title="Pas de droit récup"'}></td>
-            </tr>`;
+    const container = document.getElementById('dbBrowserTableContainer');
+    const rowInfo = document.getElementById('dbBrowserRowInfo');
+    container.innerHTML = '<p class="db-browser-loading">Chargement…</p>';
+
+    try {
+        const data = await window.api.dbGetTable(tableName, 500, 0);
+        _dbBrowserCurrentPk = data.primaryKey;
+        _dbBrowserColumns = data.columns;
+
+        rowInfo.textContent = `${data.rows.length} / ${data.totalCount} lignes${data.primaryKey ? ' · clé : ' + data.primaryKey : ' · pas de clé primaire (lecture seule)'}`;
+
+        if (data.rows.length === 0) {
+            container.innerHTML = '<p class="db-browser-empty">Table vide.</p>';
+            return;
         }
 
+        const cols = data.columns.map(c => c.name);
+        let html = '<table class="db-browser-table"><thead><tr>';
+        for (const col of data.columns) {
+            const pkMark = col.pk === 1 ? ' <span class="db-pk-mark" title="Clé primaire">🔑</span>' : '';
+            html += `<th title="${col.type}${col.notnull ? ' NOT NULL' : ''}">${col.name}${pkMark}</th>`;
+        }
+        if (data.primaryKey) html += '<th class="db-actions-col"></th>';
+        html += '</tr></thead><tbody>';
+
+        for (const row of data.rows) {
+            const pkValue = data.primaryKey ? row[data.primaryKey] : null;
+            html += `<tr data-pk="${pkValue !== null && pkValue !== undefined ? String(pkValue).replace(/"/g, '&quot;') : ''}">`;
+            for (const col of cols) {
+                const val = row[col];
+                const displayVal = val === null ? '<em class="db-null">NULL</em>' : String(val);
+                const editable = data.primaryKey && col !== data.primaryKey;
+                html += `<td class="${editable ? 'db-cell-editable' : ''}" data-col="${col}" title="Double-clic pour éditer">${escapeHtmlAdmin(displayVal)}</td>`;
+            }
+            if (data.primaryKey) {
+                html += `<td class="db-actions-col"><button class="db-btn-delete-row" title="Supprimer la ligne"><i class="fa-solid fa-trash"></i></button></td>`;
+            }
+            html += '</tr>';
+        }
         html += '</tbody></table>';
         container.innerHTML = html;
+
+        // Édition inline
+        container.querySelectorAll('.db-cell-editable').forEach(td => {
+            td.addEventListener('dblclick', () => demarrerEditionCellule(td));
+        });
+        // Suppression ligne
+        container.querySelectorAll('.db-btn-delete-row').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tr = btn.closest('tr');
+                const pkValue = tr.dataset.pk;
+                if (confirm(`Supprimer la ligne ${_dbBrowserCurrentPk} = ${pkValue} de "${_dbBrowserCurrentTable}" ?\n\nIrréversible.`)) {
+                    supprimerLigneDbBrowser(pkValue);
+                }
+            });
+        });
     } catch (err) {
-        console.error('Erreur chargement soldes:', err);
-        container.innerHTML = '<p style="color:red">Erreur au chargement des soldes</p>';
+        container.innerHTML = `<p class="db-browser-error">Erreur : ${err.message || err}</p>`;
     }
 }
 
-// Fermer
-document.getElementById('closeModalEditSoldes').addEventListener('click', () => {
-    document.getElementById('modalEditSoldes').style.display = 'none';
-});
-document.getElementById('btnAnnulerSoldes').addEventListener('click', () => {
-    document.getElementById('modalEditSoldes').style.display = 'none';
+function escapeHtmlAdmin(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+        .replace(/&lt;em class=&quot;db-null&quot;&gt;NULL&lt;\/em&gt;/g, '<em class="db-null">NULL</em>');
+}
+
+function demarrerEditionCellule(td) {
+    if (td.querySelector('input')) return; // déjà en édition
+    const original = td.textContent;
+    const col = td.dataset.col;
+    const tr = td.closest('tr');
+    const pkValue = tr.dataset.pk;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'db-cell-input';
+    input.value = original === 'NULL' ? '' : original;
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    const annuler = () => {
+        td.textContent = original === '' ? 'NULL' : original;
+        if (original === '') td.innerHTML = '<em class="db-null">NULL</em>';
+    };
+
+    const sauver = async () => {
+        const newVal = input.value;
+        if (newVal === original) { annuler(); return; }
+        try {
+            await window.api.dbUpdateCell(_dbBrowserCurrentTable, _dbBrowserCurrentPk, pkValue, col, newVal);
+            td.textContent = newVal;
+            if (newVal === '') td.innerHTML = '<em class="db-null">NULL</em>';
+            td.classList.add('db-cell-saved');
+            setTimeout(() => td.classList.remove('db-cell-saved'), 600);
+        } catch (err) {
+            alert('Erreur UPDATE : ' + (err.message || err));
+            annuler();
+        }
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); annuler(); }
+    });
+    input.addEventListener('blur', sauver);
+}
+
+async function supprimerLigneDbBrowser(pkValue) {
+    try {
+        await window.api.dbDeleteRow(_dbBrowserCurrentTable, _dbBrowserCurrentPk, pkValue);
+        await chargerContenuTable(_dbBrowserCurrentTable);
+        await chargerTablesDbBrowser();
+    } catch (err) {
+        alert('Erreur DELETE : ' + (err.message || err));
+    }
+}
+
+// Ajouter ligne
+document.getElementById('btnDbBrowserAddRow').addEventListener('click', () => {
+    if (!_dbBrowserCurrentTable) return;
+    const modal = document.getElementById('modalDbBrowserAddRow');
+    document.getElementById('dbAddRowTable').textContent = _dbBrowserCurrentTable;
+    const form = document.getElementById('dbAddRowForm');
+    const msg = document.getElementById('dbAddRowMsg');
+    msg.style.display = 'none';
+
+    form.innerHTML = _dbBrowserColumns.map(col => {
+        const placeholder = col.dflt_value ? `défaut : ${col.dflt_value}` : (col.notnull ? 'obligatoire' : 'optionnel');
+        const isPk = col.pk === 1;
+        return `
+            <div class="form-group-compact">
+                <label>${col.name} <small style="color:#999">${col.type}${col.notnull ? ' · NOT NULL' : ''}${isPk ? ' · PK' : ''}</small></label>
+                <input type="text" data-col="${col.name}" placeholder="${placeholder}" ${isPk && col.type.toUpperCase().includes('INT') ? 'disabled title="Auto-incrémenté"' : ''}>
+            </div>
+        `;
+    }).join('');
+
+    modal.style.display = 'flex';
 });
 
-// Sauvegarder
-document.getElementById('btnSauverSoldes').addEventListener('click', async () => {
-    const annee = new Date().getFullYear();
-    const rows = document.querySelectorAll('#editSoldesTable tbody tr');
-    const msg = document.getElementById('editSoldesMsg');
-    const btn = document.getElementById('btnSauverSoldes');
-
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enregistrement...';
+document.getElementById('closeModalDbAddRow').addEventListener('click', () => {
+    document.getElementById('modalDbBrowserAddRow').style.display = 'none';
+});
+document.getElementById('btnDbAddRowAnnuler').addEventListener('click', () => {
+    document.getElementById('modalDbBrowserAddRow').style.display = 'none';
+});
+document.getElementById('btnDbAddRowOk').addEventListener('click', async () => {
+    const form = document.getElementById('dbAddRowForm');
+    const msg = document.getElementById('dbAddRowMsg');
+    const inputs = form.querySelectorAll('input[data-col]');
+    const values = {};
+    inputs.forEach(input => {
+        if (input.disabled) return;
+        const col = input.dataset.col;
+        const val = input.value;
+        if (val !== '') values[col] = val;
+    });
 
     try {
-        for (const row of rows) {
-            const salarieId = parseInt(row.dataset.salarieId);
-            const cpN1 = parseFloat(row.querySelector('.edit-cp-n1').value) || 0;
-            const cpN = parseFloat(row.querySelector('.edit-cp-n').value) || 0;
-            const rtt = parseFloat(row.querySelector('.edit-rtt').value) || 0;
-            const recup = parseFloat(row.querySelector('.edit-recup').value) || 0;
-
-            await window.api.updateSoldes(salarieId, annee, { cp_n1: cpN1, cp_n: cpN, rtt, recup_heures: recup });
-        }
-
-        msg.textContent = 'Soldes enregistrés avec succès !';
-        msg.className = 'edit-soldes-msg success';
-        setTimeout(() => { msg.textContent = ''; msg.className = 'edit-soldes-msg'; }, 3000);
-
-        // Rafraîchir les soldes admin si on est sur l'année courante
-        await loadSoldesAdmin();
-
+        await window.api.dbInsertRow(_dbBrowserCurrentTable, values);
+        document.getElementById('modalDbBrowserAddRow').style.display = 'none';
+        await chargerContenuTable(_dbBrowserCurrentTable);
+        await chargerTablesDbBrowser();
     } catch (err) {
-        console.error('Erreur sauvegarde soldes:', err);
-        msg.textContent = 'Erreur lors de l\'enregistrement : ' + err.message;
-        msg.className = 'edit-soldes-msg error';
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Enregistrer';
+        msg.textContent = 'Erreur INSERT : ' + (err.message || err);
+        msg.className = 'error-message';
+        msg.style.display = 'block';
     }
+});
+
+// Boutons toolbar
+document.getElementById('btnDbBrowserRefresh').addEventListener('click', () => {
+    if (_dbBrowserCurrentTable) chargerContenuTable(_dbBrowserCurrentTable);
+});
+
+// SQL libre panel
+document.getElementById('btnDbBrowserSqlToggle').addEventListener('click', () => {
+    const panel = document.getElementById('dbBrowserSqlPanel');
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+});
+document.getElementById('btnDbBrowserSqlClose').addEventListener('click', () => {
+    document.getElementById('dbBrowserSqlPanel').style.display = 'none';
+});
+document.getElementById('btnDbBrowserSqlExec').addEventListener('click', async () => {
+    const sql = document.getElementById('dbBrowserSqlInput').value.trim();
+    const result = document.getElementById('dbBrowserSqlResult');
+    if (!sql) { result.innerHTML = '<p class="db-browser-error">Aucune requête.</p>'; return; }
+
+    result.innerHTML = '<p class="db-browser-loading">Exécution…</p>';
+    try {
+        const r = await window.api.dbExecRaw(sql);
+        if (r.rows && r.rows.length > 0) {
+            const cols = Object.keys(r.rows[0]);
+            let html = `<p class="db-browser-success">${r.rows.length} ligne(s) retournée(s)</p><table class="db-browser-table"><thead><tr>`;
+            cols.forEach(c => html += `<th>${c}</th>`);
+            html += '</tr></thead><tbody>';
+            r.rows.forEach(row => {
+                html += '<tr>';
+                cols.forEach(c => {
+                    const v = row[c];
+                    html += `<td>${v === null ? '<em class="db-null">NULL</em>' : escapeHtmlAdmin(String(v))}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            result.innerHTML = html;
+        } else {
+            result.innerHTML = `<p class="db-browser-success">OK · ${r.rowsAffected} ligne(s) affectée(s)</p>`;
+        }
+        // Rafraîchir table/sidebar si table courante modifiée
+        if (_dbBrowserCurrentTable) await chargerContenuTable(_dbBrowserCurrentTable);
+        await chargerTablesDbBrowser();
+    } catch (err) {
+        result.innerHTML = `<p class="db-browser-error">Erreur : ${err.message || err}</p>`;
+    }
+});
+
+// Fermer modale DB browser
+document.getElementById('closeModalDbBrowser').addEventListener('click', () => {
+    document.getElementById('modalDbBrowser').style.display = 'none';
 });
 // ========== CODE SECRET POUR IMPORT EXCEL ==========
 // Séquence : Ctrl+I, Ctrl+M, Ctrl+P, Ctrl+O, Ctrl+R, Ctrl+T

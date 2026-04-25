@@ -29,7 +29,12 @@
       "Bash(cp src/preload.js /tmp/conges-backup/preload.js)",
       "Bash(cp src/main.js /tmp/conges-backup/main.js)",
       "Bash(cp CLAUDE.md /tmp/conges-backup/CLAUDE.md)",
-      "Bash(cp src/pages/dashboard-admin.html /tmp/conges-backup/dashboard-admin.html)"
+      "Bash(cp src/pages/dashboard-admin.html /tmp/conges-backup/dashboard-admin.html)",
+      "Bash(cp /tmp/conges-backup/preload.js src/preload.js)",
+      "Bash(cp /tmp/conges-backup/main.js src/main.js)",
+      "Bash(cp /tmp/conges-backup/CLAUDE.md CLAUDE.md)",
+      "Bash(cp /tmp/conges-backup/dashboard-admin.html src/pages/dashboard-admin.html)",
+      "Bash(cp /tmp/conges-backup/dashboard-admin.css src/css/dashboard-admin.css)"
     ]
   }
 }

@@ -811,22 +811,78 @@
 
         </div>
     </div>
-    <!-- Modale éditeur de soldes (Ctrl+DEBUG) -->
-<div id="modalEditSoldes" class="modal-edit-soldes" style="display: none;">
-    <div class="modal-edit-soldes-content">
-        <div class="modal-edit-soldes-header">
-            <h3><i class="fa-solid fa-sliders"></i> Éditeur de soldes</h3>
-            <button id="closeModalEditSoldes" class="close-modal-edit-soldes">
+    <!-- Modale DB Browser (Ctrl+DEBUG) — accès complet aux tables et SQL libre -->
+<div id="modalDbBrowser" class="modal-db-browser" style="display: none;">
+    <div class="modal-db-browser-content">
+        <div class="modal-db-browser-header">
+            <h3><i class="fa-solid fa-database"></i> DB Browser — <span id="dbBrowserTableTitle">Sélectionnez une table</span></h3>
+            <button id="closeModalDbBrowser" class="close-modal-db">
                 <i class="fa-solid fa-times"></i>
             </button>
         </div>
-        <div class="modal-edit-soldes-body">
-            <div id="editSoldesTable"></div>
-            <div class="edit-soldes-actions">
-                <button id="btnAnnulerSoldes" class="btn-secondary"><i class="fa-solid fa-xmark"></i> Annuler</button>
-                <button id="btnSauverSoldes" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
-            </div>
-            <div id="editSoldesMsg" class="edit-soldes-msg"></div>
+        <div class="modal-db-browser-body">
+            <!-- Sidebar gauche : liste des tables -->
+            <aside class="db-browser-sidebar">
+                <h4><i class="fa-solid fa-list"></i> Tables</h4>
+                <div id="dbBrowserTables" class="db-browser-tables-list"></div>
+                <div class="db-browser-sidebar-footer">
+                    <button id="btnDbBrowserSqlToggle" class="btn-secondary btn-small">
+                        <i class="fa-solid fa-terminal"></i> SQL libre
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main : tableur + panel SQL -->
+            <main class="db-browser-main">
+                <div class="db-browser-toolbar">
+                    <span id="dbBrowserRowInfo" class="db-browser-row-info">—</span>
+                    <div class="db-browser-toolbar-actions">
+                        <button id="btnDbBrowserRefresh" class="btn-secondary btn-small" disabled>
+                            <i class="fa-solid fa-arrows-rotate"></i> Actualiser
+                        </button>
+                        <button id="btnDbBrowserAddRow" class="btn-primary btn-small" disabled>
+                            <i class="fa-solid fa-plus"></i> Ajouter ligne
+                        </button>
+                    </div>
+                </div>
+                <div id="dbBrowserTableContainer" class="db-browser-table-container">
+                    <p class="db-browser-empty">Sélectionnez une table à gauche pour commencer.</p>
+                </div>
+
+                <!-- Panel SQL libre -->
+                <div id="dbBrowserSqlPanel" class="db-browser-sql-panel" style="display: none;">
+                    <div class="db-browser-sql-header">
+                        <strong><i class="fa-solid fa-terminal"></i> SQL libre</strong>
+                        <small>SELECT / UPDATE / INSERT / DELETE — exécution immédiate, pas de rollback</small>
+                    </div>
+                    <textarea id="dbBrowserSqlInput" placeholder="SELECT * FROM salaries WHERE actif = 1;"></textarea>
+                    <div class="db-browser-sql-actions">
+                        <button id="btnDbBrowserSqlExec" class="btn-primary btn-small">
+                            <i class="fa-solid fa-play"></i> Exécuter
+                        </button>
+                        <button id="btnDbBrowserSqlClose" class="btn-secondary btn-small">Fermer</button>
+                    </div>
+                    <div id="dbBrowserSqlResult" class="db-browser-sql-result"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+</div>
+
+<!-- Modale "Ajouter ligne" (générée dynamiquement selon la table) -->
+<div id="modalDbBrowserAddRow" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-plus"></i> Nouvelle ligne — <span id="dbAddRowTable"></span></h3>
+            <button id="closeModalDbAddRow" class="close-modal"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="dbAddRowForm"></div>
+            <div id="dbAddRowMsg" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnDbAddRowAnnuler" class="btn-secondary">Annuler</button>
+            <button id="btnDbAddRowOk" class="btn-primary">Insérer</button>
         </div>
     </div>
 </div>
