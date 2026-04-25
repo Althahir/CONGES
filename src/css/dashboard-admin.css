@@ -76,32 +76,44 @@ body {
     font-weight: 500;
 }
 
-/* Bandeau version dans la section Paramètres */
-.app-version-banner {
+/* Petite tuile version dans la section Paramètres (alignée à droite via wrapper flex) */
+.param-version-wrapper {
     display: flex;
+    justify-content: flex-end;
+    margin: 10px 0 14px 0;
+}
+
+.param-card-version {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    margin: 10px 0 18px 0;
-    background: rgba(0, 108, 137, 0.08);
-    border-left: 4px solid var(--bleu);
-    border-radius: 4px;
-    font-size: 0.9em;
+    gap: 6px;
+    padding: 6px 12px;
+    background: white;
+    border: 1px solid var(--border-color-light);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    font-size: 0.85em;
     color: var(--text-secondary);
 }
 
-.app-version-banner .app-version {
+.param-card-version i {
+    color: var(--bleu);
+    font-size: 0.9em;
+}
+
+.param-card-version .app-version {
     font-family: Consolas, monospace;
     font-weight: 600;
     color: var(--bleu);
 }
 
-[data-theme="dark"] .app-version-banner {
-    background: rgba(92, 189, 213, 0.1);
-    border-left-color: #5cbdd5;
+[data-theme="dark"] .param-card-version {
+    background: var(--bg-surface);
+    border-color: var(--border-color);
 }
 
-[data-theme="dark"] .app-version-banner .app-version {
+[data-theme="dark"] .param-card-version i,
+[data-theme="dark"] .param-card-version .app-version {
     color: #5cbdd5;
 }
 
