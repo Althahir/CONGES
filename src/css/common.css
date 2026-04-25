@@ -1275,6 +1275,19 @@ body {
     #mes-conges-section .soldes-grid-compact { grid-template-columns: 1fr 1fr; }
 }
 
+/* Viewport courte verticalement : autoriser le scroll dans la zone calendrier
+   et faire grandir la grille au-delà du conteneur (sinon les jours sont coupés en bas) */
+@media (max-height: 750px) {
+    #mes-conges-section .calendar-section-new {
+        overflow-y: auto;
+    }
+    #mes-conges-section .calendrier-grid {
+        flex: 0 0 auto;
+        grid-template-rows: none;
+        grid-auto-rows: 200px;
+    }
+}
+
 /* ========== BOUTON TOGGLE THEME ========== */
 
 .btn-theme-toggle {
