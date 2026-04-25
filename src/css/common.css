@@ -1010,6 +1010,32 @@ body {
 }
 [data-theme="dark"] .mes-demande-item-badge { background: #f0a050; }
 
+/* Toast spécifique mise à jour : un peu plus large pour accommoder le bouton Redémarrer */
+.notification-persistante.update-toast {
+    width: 540px;
+    height: auto;
+    min-height: 100px;
+    z-index: 10002; /* au-dessus du DB Browser */
+}
+.btn-restart-update {
+    background: var(--bleu);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 600;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 4px;
+}
+.btn-restart-update:hover { background: #005770; }
+[data-theme="dark"] .btn-restart-update { background: #5cbdd5; color: #1a1a1a; }
+[data-theme="dark"] .btn-restart-update:hover { background: #7dcfe2; }
+
 /* Notification persistante (toast) — partagé admin + user */
 .notification-persistante {
     position: fixed;

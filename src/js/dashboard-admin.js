@@ -18,6 +18,32 @@ window.api.getAppVersion().then(v => {
     if (el) el.textContent = `v${v}`;
 }).catch(() => { /* silencieux si la lib échoue */ });
 
+// Toast quand une mise à jour a été téléchargée (en remplacement du dialog Electron par défaut)
+if (window.api.onUpdateDownloaded) {
+    window.api.onUpdateDownloaded(({ version }) => afficherToastMaj(version));
+}
+
+function afficherToastMaj(version) {
+    if (document.querySelector('.update-toast')) return; // un seul à la fois
+    const toast = document.createElement('div');
+    toast.className = 'notification-persistante success update-toast';
+    // Pas de bouton de fermeture : l'utilisateur termine ce qu'il fait puis clique Redémarrer
+    toast.innerHTML = `
+        <div class="notification-icon"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+        <div class="notification-content">
+            <h4>Mise à jour disponible</h4>
+            <p>${version ? 'Version ' + version + ' téléchargée' : 'Une nouvelle version est prête'}</p>
+        </div>
+        <button class="btn-restart-update" title="Redémarrer pour appliquer la mise à jour">
+            <i class="fa-solid fa-rotate-right"></i> Redémarrer
+        </button>
+    `;
+    document.body.appendChild(toast);
+    toast.querySelector('.btn-restart-update').addEventListener('click', () => {
+        window.api.applyUpdate();
+    });
+}
+
 // ========== TOGGLE THEME SOMBRE/CLAIR ==========
 (function initTheme() {
     const saved = localStorage.getItem('theme') || 'light';

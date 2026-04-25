@@ -320,5 +320,11 @@ contextBridge.exposeInMainWorld('api', {
     dbExecRaw: (sql) => ipcRenderer.invoke('db-exec-raw', sql),
 
     /** @returns {Promise<string>} version de l'app (ex: '1.0.1') */
-    getAppVersion: () => ipcRenderer.invoke('getAppVersion')
+    getAppVersion: () => ipcRenderer.invoke('getAppVersion'),
+
+    /** @param {(data: {version: string}) => void} callback - appelé quand une mise à jour a été téléchargée */
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, data) => callback(data)),
+
+    /** @returns {Promise<void>} ferme l'app et applique la mise à jour téléchargée */
+    applyUpdate: () => ipcRenderer.invoke('applyUpdate')
 });

@@ -11,15 +11,29 @@ if (require('electron-squirrel-startup')) {
 app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 
 // Mises à jour automatiques via update.electronjs.org (no-op en dev, skip si pas de Squirrel)
-// Check toutes les heures, télécharge en background, applique au prochain redémarrage de l'app
+// Check toutes les heures, télécharge en background, le renderer affiche un toast custom
+// quand une maj est téléchargée (pas de dialog Electron par défaut)
 if (app.isPackaged) {
     try {
         const { updateElectronApp } = require('update-electron-app');
-        updateElectronApp({ updateInterval: '1 hour' });
+        updateElectronApp({ updateInterval: '1 hour', notifyUser: false });
+
+        const { autoUpdater } = require('electron');
+        autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
+            if (ctx.mainWindow && ctx.mainWindow.webContents) {
+                ctx.mainWindow.webContents.send('update-downloaded', { version: releaseName || '' });
+            }
+        });
     } catch (e) {
         console.error('[update-electron-app] init failed:', e);
     }
 }
+
+// Handler IPC : appliquer la mise à jour (redémarre l'app)
+ipcMain.handle('applyUpdate', () => {
+    const { autoUpdater } = require('electron');
+    autoUpdater.quitAndInstall();
+});
 
 // Contexte partagé avec les handlers
 const ctx = { db: null, mainWindow: null };
