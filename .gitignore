@@ -5,3 +5,5 @@ database/*.sqbpro
 .DS_Store
 out/
 DOCS/TODO.md
+# Fichiers temporaires Microsoft Office (lock pendant édition)
+~$*
