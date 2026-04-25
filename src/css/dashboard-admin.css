@@ -2125,10 +2125,33 @@ h2 {
 }
 
 @media (max-width: 900px) {
+    /* Nav admin : encore plus compacte (continue le rétrécissement) */
+    .admin-nav {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+    .admin-nav .nav-left {
+        gap: 5px;
+    }
     .admin-nav .nav-left .nav-btn {
-        min-width: 120px;
-        padding: 10px 12px;
-        font-size: 0.85em;
+        min-width: 90px;
+        padding: 6px 8px;
+        font-size: 0.75em;
+        gap: 5px;
+    }
+    .admin-nav .nav-btn i {
+        font-size: 1em;
+    }
+    .admin-nav .year-nav {
+        gap: 6px;
+    }
+    .admin-nav .year-nav span {
+        font-size: 0.95em;
+        min-width: 40px;
+    }
+    .btn-year-nav {
+        width: 28px;
+        height: 28px;
     }
 }
 
@@ -2140,6 +2163,26 @@ h2 {
     .section-header {
         flex-direction: column;
         gap: 10px;
+    }
+
+    /* Nav admin : icon-only sauf bouton actif (gain de place max) */
+    .admin-nav .nav-left .nav-btn {
+        min-width: 0;
+        padding: 6px 9px;
+        font-size: 0; /* cache le texte brut "Validation", "Salariés", etc. */
+    }
+    .admin-nav .nav-left .nav-btn i {
+        font-size: 0.95rem;
+    }
+    .admin-nav .nav-left .nav-btn.active {
+        font-size: 0.75em;
+    }
+    .admin-nav .nav-left .nav-btn.active i {
+        font-size: 1em;
+    }
+    /* Le badge "demandes à valider" reste visible même icon-only */
+    .admin-nav .nav-left .nav-btn .nav-badge {
+        font-size: 0.65rem;
     }
 }
 /* ========== CALENDRIER GLOBAL LINÉAIRE (format Excel) ========== */
