@@ -956,16 +956,6 @@ body {
     cursor: not-allowed;
 }
 
-.demande-refus-info {
-    background: rgba(237, 113, 17, 0.08);
-    border-left: 3px solid var(--orange);
-    padding: 10px 12px;
-    border-radius: 6px;
-    margin-bottom: 12px;
-    font-size: 0.88em;
-    line-height: 1.45;
-}
-
 /* Liste "Mes demandes en cours" (user) */
 .mes-demandes-section {
     margin-top: 10px;
@@ -1146,10 +1136,6 @@ body {
 [data-theme="dark"] .demandes-attente-header h3,
 [data-theme="dark"] .btn-toggle-demandes { color: #f0a050; }
 [data-theme="dark"] .demande-card { background: var(--bg-surface-alt); }
-[data-theme="dark"] .demande-refus-info {
-    background: rgba(240, 160, 80, 0.12);
-    border-left-color: #f0a050;
-}
 
 #mes-conges-section .jour.preview {
     background: rgba(0, 0, 0, 0.08);

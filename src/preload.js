@@ -221,8 +221,8 @@ contextBridge.exposeInMainWorld('api', {
     getEnAttenteParSalarie: (salarieId, annee) => ipcRenderer.invoke('getEnAttenteParSalarie', salarieId, annee),
     /** @param {number} absenceId @param {number} adminId @returns {Promise<SuccessResult>} */
     validerAbsence: (absenceId, adminId) => ipcRenderer.invoke('validerAbsence', absenceId, adminId),
-    /** @param {number} absenceId @param {number} adminId @param {string} motif @returns {Promise<SuccessResult>} */
-    refuserAbsence: (absenceId, adminId, motif) => ipcRenderer.invoke('refuserAbsence', absenceId, adminId, motif),
+    /** @param {number} absenceId @param {number} adminId @returns {Promise<SuccessResult>} */
+    refuserAbsence: (absenceId, adminId) => ipcRenderer.invoke('refuserAbsence', absenceId, adminId),
     /** @param {number} absenceId @returns {Promise<SuccessResult>} */
     deleteAbsence: (absenceId) => ipcRenderer.invoke('deleteAbsence', absenceId),
     /** @param {number} absenceId @param {Object} updates @returns {Promise<SuccessResult>} */

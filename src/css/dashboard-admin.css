@@ -1483,6 +1483,52 @@ h2 {
     color: var(--bleu);
 }
 
+#modalRefusDemande .modal-header {
+    background: var(--bleu);
+    color: white;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+}
+
+#modalRefusDemande .modal-header h3 {
+    margin: 0;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#modalRefusDemande .close-modal {
+    color: white;
+}
+
+#modalRefusDemande .close-modal:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.info-refus-demande {
+    background: rgba(237, 113, 17, 0.1);
+    border-left: 4px solid var(--orange);
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin: 0 0 16px 0;
+    font-size: 0.95em;
+    line-height: 1.5;
+}
+
+.texte-refus-demande {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95em;
+}
+
+[data-theme="dark"] .info-refus-demande {
+    background: rgba(240, 160, 80, 0.12);
+    border-left-color: #f0a050;
+    color: var(--text-primary);
+}
+
 .options-suppression {
     display: flex;
     flex-direction: column;

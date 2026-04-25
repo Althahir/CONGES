@@ -1220,7 +1220,11 @@ function _afficherProchainToastUser() {
 
     document.body.appendChild(toast);
 
+    let dismissed = false;
     const dismiss = async () => {
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(autoDismissTimer);
         if (notif.id) {
             try { await window.api.marquerNotificationLue(notif.id); } catch (e) { /* */ }
         }
@@ -1229,6 +1233,7 @@ function _afficherProchainToastUser() {
         _afficherProchainToastUser();
     };
 
+    const autoDismissTimer = setTimeout(dismiss, 5000);
     toast.querySelector('.notification-close').addEventListener('click', dismiss);
 }
 

@@ -341,27 +341,26 @@
     </div>
 </section>
 
-<!-- Modale de refus de demande (workflow validation) -->
+<!-- Modale de confirmation de refus de demande -->
 <div id="modalRefusDemande" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 480px;">
+    <div class="modal-content" style="max-width: 440px;">
         <div class="modal-header">
-            <h3><i class="fa-solid fa-xmark"></i> Refuser la demande</h3>
-            <button id="closeModalRefusDemande" class="close-modal"><i class="fa-solid fa-times"></i></button>
+            <h3><i class="fa-solid fa-circle-xmark"></i> Refuser la demande</h3>
+            <button id="closeModalRefusDemande" class="close-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
         </div>
         <div class="modal-body">
-            <div id="infoRefusDemande" class="demande-refus-info"></div>
-            <div class="form-group-compact">
-                <label for="motifRefusDemande">Motif du refus *</label>
-                <textarea id="motifRefusDemande" rows="4" placeholder="Expliquez pourquoi la demande est refusée (visible par le salarié)..."></textarea>
-            </div>
-            <div id="refusDemandeMsg" style="display: none;"></div>
+            <p id="infoRefusDemande" class="info-refus-demande"></p>
+            <p class="texte-refus-demande">Confirmer le refus de cette demande&nbsp;?</p>
         </div>
         <div class="modal-footer">
             <button id="btnAnnulerRefusDemande" class="btn-secondary">Annuler</button>
-            <button id="btnConfirmerRefusDemande" class="btn-primary" style="background: var(--rouge);">Refuser</button>
+            <button id="btnConfirmerRefusDemande" class="btn-danger">Refuser</button>
         </div>
     </div>
 </div>
+
             <!-- Section Salariés -->
             <section id="salaries-section" class="content-section">
                 <div class="section-header">

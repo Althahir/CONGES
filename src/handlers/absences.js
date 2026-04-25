@@ -199,9 +199,7 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         return { success: true };
     });
 
-    safeHandle('refuserAbsence', async (event, absenceId, adminId, motif) => {
-        if (!motif || !motif.trim()) throw new Error('Motif de refus requis');
-
+    safeHandle('refuserAbsence', async (event, absenceId, adminId) => {
         const absResult = await ctx.db.execute({
             sql: 'SELECT * FROM absences WHERE id = ?',
             args: [absenceId]
@@ -211,15 +209,15 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         if (absence.statut !== 'en_attente') throw new Error(`Absence déjà traitée (statut : ${absence.statut})`);
 
         await ctx.db.execute({
-            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ?, motif_refus = ? WHERE id = ?`,
-            args: [adminId, motif.trim(), absenceId]
+            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ?`,
+            args: [adminId, absenceId]
         });
 
         try {
             const typeLabel = LABELS_TYPE[absence.type] || absence.type;
             const periode = `du ${formatDate(absence.date_debut)} au ${formatDate(absence.date_fin)}`;
             const titre = `Demande refusée ✕`;
-            const message = `Votre demande ${typeLabel} ${periode} a été refusée. Motif : ${motif.trim()}`;
+            const message = `Votre demande ${typeLabel} ${periode} a été refusée.`;
             await ctx.db.execute({
                 sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_refusee', ?, ?, 'error', ?)`,
                 args: [titre, message, absence.salarie_id]

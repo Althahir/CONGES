@@ -1173,11 +1173,12 @@ async function loadSoldesAdmin() {
 
 // ========== WORKFLOW VALIDATION — DEMANDES EN ATTENTE (admin) ==========
 
-let demandeEnCoursRefus = null;
+let _demandesEnAttenteCache = [];
 
 async function loadDemandesEnAttente() {
     try {
         const demandes = await window.api.getAbsencesEnAttente();
+        _demandesEnAttenteCache = demandes;
         const bandeau = document.getElementById('bandeauDemandesAttente');
         const liste = document.getElementById('listeDemandesAttente');
         const nbEl = document.getElementById('nbDemandesAttente');
@@ -1249,7 +1250,7 @@ async function loadDemandesEnAttente() {
         liste.querySelectorAll('.btn-refuser-demande').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                ouvrirModaleRefus(parseInt(btn.dataset.id, 10), demandes);
+                refuserDemande(parseInt(btn.dataset.id, 10));
             });
         });
     } catch (err) {
@@ -1285,8 +1286,39 @@ async function validerDemande(absenceId) {
     if (btn) btn.disabled = true;
     if (btnRefuser) btnRefuser.disabled = true;
 
+    const demande = _demandesEnAttenteCache.find(d => d.id === absenceId);
+
     try {
         await window.api.validerAbsence(absenceId, user.id);
+        afficherNotificationPersistante('success', 'Demande validée', 'La validation a bien été enregistrée.', 3000);
+
+        // Génération du PDF officiel (comportement d'avant le workflow validation)
+        if (demande) {
+            try {
+                const annee = new Date(demande.date_debut).getFullYear();
+                const soldesAJour = await window.api.getSoldes(demande.salarie_id, annee);
+                await window.api.genererPDF({
+                    salarie: { nom: demande.nom, prenom: demande.prenom, role: 'user' },
+                    absence: {
+                        type: demande.type,
+                        date_debut: demande.date_debut,
+                        date_fin: demande.date_fin,
+                        duree_jours: demande.duree_jours,
+                        duree_heures: demande.duree_heures,
+                        commentaire: demande.commentaire || null
+                    },
+                    soldes: {
+                        cp_n1: soldesAJour ? soldesAJour.cp_n1 : 0,
+                        cp_n: soldesAJour ? soldesAJour.cp_n : 0,
+                        rtt: soldesAJour ? soldesAJour.rtt : 0,
+                        recup_heures: soldesAJour ? soldesAJour.recup_heures : 0
+                    }
+                });
+            } catch (pdfErr) {
+                console.error('Erreur génération PDF après validation:', pdfErr);
+            }
+        }
+
         await loadDemandesEnAttente();
         // Rafraîchir le calendrier historique si un salarié est sélectionné
         if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
@@ -1298,65 +1330,46 @@ async function validerDemande(absenceId) {
     }
 }
 
-function ouvrirModaleRefus(absenceId, demandes) {
-    const demande = demandes.find(d => d.id === absenceId);
-    if (!demande) return;
-    demandeEnCoursRefus = demande;
+let _refusDemandeEnCours = null;
 
-    const modal = document.getElementById('modalRefusDemande');
-    const infoBloc = document.getElementById('infoRefusDemande');
-    const motifEl = document.getElementById('motifRefusDemande');
-    const msgEl = document.getElementById('refusDemandeMsg');
+function refuserDemande(absenceId) {
+    const btn = document.querySelector(`.btn-refuser-demande[data-id="${absenceId}"]`);
+    const card = btn ? btn.closest('.demande-card') : null;
+    const salarie = card ? card.querySelector('.demande-card-salarie')?.textContent.trim() : '';
+    const details = card ? card.querySelector('.demande-card-details')?.textContent.trim() : '';
 
-    const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
-    const labelsType = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup' };
-    const dureeStr = (demande.type === 'RECUP' && !demande.duree_jours) ? `${demande.duree_heures}h` : `${(demande.duree_jours || 0).toFixed(1)}j`;
-
-    infoBloc.innerHTML = `
-        <strong>${escapeHtml(demande.prenom)} ${escapeHtml(demande.nom)}</strong><br>
-        ${labelsType[demande.type] || demande.type} · du ${fmtDate(demande.date_debut)} au ${fmtDate(demande.date_fin)} (${dureeStr})
-        ${demande.commentaire ? `<br><em>« ${escapeHtml(demande.commentaire)} »</em>` : ''}
-    `;
-    motifEl.value = '';
-    if (msgEl) { msgEl.style.display = 'none'; msgEl.textContent = ''; }
-    modal.style.display = 'flex';
-    setTimeout(() => motifEl.focus(), 50);
+    _refusDemandeEnCours = absenceId;
+    const info = document.getElementById('infoRefusDemande');
+    if (info) info.innerHTML = `<strong>${escapeHtml(salarie)}</strong><br>${escapeHtml(details)}`;
+    document.getElementById('modalRefusDemande').style.display = 'flex';
 }
 
-function fermerModaleRefus() {
+function fermerModalRefusDemande() {
     document.getElementById('modalRefusDemande').style.display = 'none';
-    demandeEnCoursRefus = null;
+    _refusDemandeEnCours = null;
 }
 
 async function confirmerRefusDemande() {
-    if (!demandeEnCoursRefus) return;
-    const motif = document.getElementById('motifRefusDemande').value.trim();
-    const msgEl = document.getElementById('refusDemandeMsg');
-    if (!motif) {
-        if (msgEl) {
-            msgEl.textContent = 'Le motif de refus est obligatoire.';
-            msgEl.className = 'error-message';
-            msgEl.style.display = 'block';
-        }
-        return;
-    }
+    const absenceId = _refusDemandeEnCours;
+    if (!absenceId) return;
 
     const btnConfirmer = document.getElementById('btnConfirmerRefusDemande');
+    const btnAnnuler = document.getElementById('btnAnnulerRefusDemande');
     btnConfirmer.disabled = true;
+    btnAnnuler.disabled = true;
+
     try {
-        await window.api.refuserAbsence(demandeEnCoursRefus.id, user.id, motif);
-        fermerModaleRefus();
+        await window.api.refuserAbsence(absenceId, user.id);
+        fermerModalRefusDemande();
+        afficherNotificationPersistante('success', 'Demande refusée', 'Le refus a bien été enregistré.', 3000);
         await loadDemandesEnAttente();
         if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
     } catch (err) {
         console.error('Erreur refus demande:', err);
-        if (msgEl) {
-            msgEl.textContent = 'Erreur : ' + (err.message || err);
-            msgEl.className = 'error-message';
-            msgEl.style.display = 'block';
-        }
+        alert('Erreur : ' + (err.message || err));
     } finally {
         btnConfirmer.disabled = false;
+        btnAnnuler.disabled = false;
     }
 }
 
@@ -1365,8 +1378,8 @@ async function confirmerRefusDemande() {
     const closeBtn = document.getElementById('closeModalRefusDemande');
     const cancelBtn = document.getElementById('btnAnnulerRefusDemande');
     const confirmBtn = document.getElementById('btnConfirmerRefusDemande');
-    if (closeBtn) closeBtn.addEventListener('click', fermerModaleRefus);
-    if (cancelBtn) cancelBtn.addEventListener('click', fermerModaleRefus);
+    if (closeBtn) closeBtn.addEventListener('click', fermerModalRefusDemande);
+    if (cancelBtn) cancelBtn.addEventListener('click', fermerModalRefusDemande);
     if (confirmBtn) confirmBtn.addEventListener('click', confirmerRefusDemande);
 })();
 
@@ -2088,19 +2101,19 @@ document.getElementById('btnEnregistrerConfig').addEventListener('click', async 
 const _toastQueue = [];
 let _toastActif = false;
 
-function afficherNotificationPersistante(type, titre, message) {
-    _toastQueue.push({ type, titre, message });
+function afficherNotificationPersistante(type, titre, message, autoDismissMs) {
+    _toastQueue.push({ type, titre, message, autoDismissMs });
     _afficherProchainToast();
 }
 
 function _afficherProchainToast() {
     if (_toastActif || _toastQueue.length === 0) return;
     _toastActif = true;
-    const { type, titre, message } = _toastQueue.shift();
-    _rendreToast(type, titre, message);
+    const { type, titre, message, autoDismissMs } = _toastQueue.shift();
+    _rendreToast(type, titre, message, autoDismissMs);
 }
 
-function _rendreToast(type, titre, message) {
+function _rendreToast(type, titre, message, autoDismissMs) {
     const toast = document.createElement('div');
     toast.className = `notification-persistante ${type}`;
 
@@ -2116,11 +2129,18 @@ function _rendreToast(type, titre, message) {
 
     document.body.appendChild(toast);
 
-    toast.querySelector('.notification-close').addEventListener('click', () => {
+    let dismissed = false;
+    const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
         toast.remove();
         _toastActif = false;
         _afficherProchainToast();
-    });
+    };
+
+    const timer = autoDismissMs ? setTimeout(dismiss, autoDismissMs) : null;
+    toast.querySelector('.notification-close').addEventListener('click', dismiss);
 }
 
 // TEST NOTIFICATION
