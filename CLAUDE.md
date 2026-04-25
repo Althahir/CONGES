@@ -162,6 +162,7 @@ db_version            (version) -- actuellement v6
 **PDF** (`pdf.js`) : `genererPDF`, `exporterRecapPDF`, `exporterStatsPDF`
 **Navigation** (`navigation.js`) : `navigateTo`
 **DB Admin** (`db-admin.js`) : `db-list-tables`, `db-get-table`, `db-update-cell`, `db-delete-row`, `db-insert-row`, `db-exec-raw` (easter egg `Ctrl+DEBUG`, accès admin sans sécurité applicative)
+**App / Mises à jour** (dans `main.js` directement) : `getAppVersion`, `applyUpdate` (déclenche `autoUpdater.quitAndInstall`)
 **Utilitaires** (`utils-cp.js`) : `calculerCPMensuel`, `getTauxGlobaux`, `getJoursFeriesAnnee` (non IPC, utilisé par traitements.js et salaries.js)
 
 ---
@@ -212,7 +213,9 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 **Migration Turso** (31/03/2026) : DB cloud libSQL, plus de fichier local ni de synchronisation OneDrive. Config Turso (URL + token) dans `config.json` (AppData/conges-lce/).
 
-**Production** : v1.0.0 taggée et pushée le 25/04/2026. Installeur disponible : `out/make/squirrel.windows/x64/Gestion des Congés-1.0.0 Setup.exe`. Guide d'installation : `DOCS/Guide_Installation_Conges_LCE.docx` (généré par `scripts/build-install-guide.py`).
+**Production** : v1.0.0 taggée et pushée le 25/04/2026. Installeur disponible : `out/make/squirrel.windows/x64/Gestion des Congés-X.X.X Setup.exe`. Guide d'installation : `DOCS/Guide_Installation_Conges_LCE.docx` (généré par `scripts/build-install-guide.py`).
+
+**Auto-update** (depuis 25/04/2026) : la lib `update-electron-app` (config dans `main.js`) check `update.electronjs.org/Althahir/CONGES` toutes les heures, télécharge la maj en background, puis le renderer affiche un toast custom « Mise à jour disponible — Redémarrer » (sans croix de fermeture, l'utilisateur clique quand il est prêt). Bandeau « Version installée » dans la section Paramètres admin pour validation visuelle. Procédure de release : bump `package.json` → `npm run make` → uploader les 3 fichiers de `out/make/squirrel.windows/x64/` (Setup.exe, .nupkg, RELEASES) sur une nouvelle GitHub Release. Pré-requis : repo GitHub public.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 

@@ -551,6 +551,46 @@ npm run make
 - Les backups sont gérés par Turso (ou export périodique optionnel)
 - Le package ne contient plus de template `conges.db`
 
+### Mises à jour automatiques (depuis v1.0.0, 25/04/2026)
+
+L'app utilise la lib **`update-electron-app`** qui s'appuie sur le service public `update.electronjs.org` pour proxifier les GitHub Releases. Pas de serveur de mise à jour à héberger. Pré-requis : **repo GitHub public** (sinon le service ne peut pas voir les releases).
+
+**Configuration** dans `main.js` (sous garde `app.isPackaged`) :
+```js
+const { updateElectronApp } = require('update-electron-app');
+updateElectronApp({ updateInterval: '1 hour', notifyUser: false });
+```
+
+**Flow** :
+1. Au démarrage de l'app + toutes les heures → check `https://update.electronjs.org/Althahir/CONGES/win32-x64/<version>`
+2. Si nouvelle version → téléchargement en background du `.nupkg`
+3. Une fois le téléchargement terminé → `autoUpdater.on('update-downloaded')` envoie un IPC `update-downloaded` au renderer
+4. Le renderer affiche un **toast custom** « Mise à jour disponible — Version X.X.X téléchargée — [Redémarrer] » (sans bouton de fermeture, l'utilisateur clique quand il est prêt)
+5. Au clic Redémarrer → `window.api.applyUpdate()` → `autoUpdater.quitAndInstall()` → l'app redémarre avec la nouvelle version
+
+**Bandeau version** : section Paramètres admin → bandeau bleu « Version installée : vX.X.X » (rempli via `window.api.getAppVersion()`). Permet de valider visuellement qu'une mise à jour a bien été appliquée et facilite le support.
+
+**Procédure pour publier une nouvelle version** :
+```
+1. Faire les modifs et commiter
+2. Bumper la version dans package.json + package-lock.json (ex: 1.0.2 → 1.0.3)
+3. git commit + git tag vX.X.X + git push --tags
+4. npm run make
+5. Aller sur https://github.com/Althahir/CONGES/releases/new
+6. Tag : vX.X.X (sélectionner le tag déjà créé)
+7. Title : vX.X.X
+8. Drag-drop les 3 fichiers de out/make/squirrel.windows/x64/ :
+   - Gestion des Congés-X.X.X Setup.exe
+   - conges_lce-X.X.X-full.nupkg
+   - RELEASES (les 3 obligatoires, sinon la maj échoue)
+9. Laisser "Set as the latest release" coché, NE PAS cocher pre-release
+10. Publish release
+```
+
+Dans l'heure, tous les postes connectés à Internet auront le toast.
+
+**Tests / pre-releases** : `update.electronjs.org` ignore les releases marquées pre-release. Utiliser ce flag si on veut publier une release de test sans déclencher l'auto-update chez les users.
+
 ---
 
 ## 10. Déploiement multi-utilisateurs
@@ -681,7 +721,10 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 14. ~~**Calendrier scroll vertical sur viewport courte**~~ ✅ **Fait (25/04/2026)** — breakpoint @max-height 750px
 15. ~~**Guide d'installation v1.0.0**~~ ✅ **Fait (25/04/2026)** — `DOCS/Guide_Installation_Conges_LCE.docx` généré par `scripts/build-install-guide.py`
 16. ~~**Tag v1.0.0 + build de production**~~ ✅ **Fait (25/04/2026)** — tag git poussé, installeur Squirrel disponible
+17. ~~**Mises à jour automatiques via update.electronjs.org**~~ ✅ **Fait (25/04/2026)** — lib `update-electron-app`, repo GitHub passé public, validation de bout en bout via release v1.0.1
+18. ~~**Bandeau version dans Paramètres**~~ ✅ **Fait (25/04/2026)** — handler IPC `getAppVersion`, affichage en haut de la section Paramètres admin
+19. ~~**Toast custom de mise à jour**~~ ✅ **Fait (25/04/2026, v1.0.2)** — remplace le dialog Electron par défaut par un toast cohérent avec le design, sans bouton de fermeture (l'utilisateur clique Redémarrer quand il est prêt)
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 25/04/2026 (v1.0.0 — workflow validation, DB browser, fixes responsive et soldes, guide d'installation)*
+*Document maintenu par Excellium — dernière mise à jour 25/04/2026 (v1.0.2 — auto-update, toast custom de mise à jour, bandeau version)*
