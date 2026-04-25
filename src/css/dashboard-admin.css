@@ -76,6 +76,35 @@ body {
     font-weight: 500;
 }
 
+/* Bandeau version dans la section Paramètres */
+.app-version-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    margin: 10px 0 18px 0;
+    background: rgba(0, 108, 137, 0.08);
+    border-left: 4px solid var(--bleu);
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+}
+
+.app-version-banner .app-version {
+    font-family: Consolas, monospace;
+    font-weight: 600;
+    color: var(--bleu);
+}
+
+[data-theme="dark"] .app-version-banner {
+    background: rgba(92, 189, 213, 0.1);
+    border-left-color: #5cbdd5;
+}
+
+[data-theme="dark"] .app-version-banner .app-version {
+    color: #5cbdd5;
+}
+
 .btn-small {
     padding: 8px 16px;
     font-size: 0.9em;

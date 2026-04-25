@@ -11,6 +11,13 @@ if (!user) {
 // Afficher le nom de l'utilisateur
 document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
 
+// Afficher la version de l'app dans le bandeau de la section Paramètres
+// (utile pour le support et pour valider visuellement qu'une mise à jour auto a bien été appliquée)
+window.api.getAppVersion().then(v => {
+    const el = document.getElementById('appVersion');
+    if (el) el.textContent = `v${v}`;
+}).catch(() => { /* silencieux si la lib échoue */ });
+
 // ========== TOGGLE THEME SOMBRE/CLAIR ==========
 (function initTheme() {
     const saved = localStorage.getItem('theme') || 'light';

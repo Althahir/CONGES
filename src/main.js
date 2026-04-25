@@ -78,6 +78,9 @@ function safeHandle(channel, handler) {
 
 // ========== ENREGISTREMENT DES HANDLERS ==========
 
+// Handler simple pour exposer la version de l'app (lue depuis package.json)
+safeHandle('getAppVersion', async () => app.getVersion());
+
 const { verifierTraitementsAutomatiques } = require('./handlers/traitements')(ctx, safeHandle);
 require('./handlers/auth')(ctx, safeHandle);
 require('./handlers/salaries')(ctx, safeHandle);

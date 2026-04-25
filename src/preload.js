@@ -317,5 +317,8 @@ contextBridge.exposeInMainWorld('api', {
     /** @param {string} table @param {Object} values @returns {Promise<{success: boolean, id: number}>} */
     dbInsertRow: (table, values) => ipcRenderer.invoke('db-insert-row', table, values),
     /** @param {string} sql @returns {Promise<{success: boolean, rows: Array, columns: Array, rowsAffected: number}>} */
-    dbExecRaw: (sql) => ipcRenderer.invoke('db-exec-raw', sql)
+    dbExecRaw: (sql) => ipcRenderer.invoke('db-exec-raw', sql),
+
+    /** @returns {Promise<string>} version de l'app (ex: '1.0.1') */
+    getAppVersion: () => ipcRenderer.invoke('getAppVersion')
 });
