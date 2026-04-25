@@ -163,17 +163,26 @@ CREATE TABLE soldes (
     recup_heures REAL DEFAULT 0      -- Heures de récupération restantes
 );
 
--- Absences
+-- Absences (avec workflow validation depuis v3 + tracking décomposition CP depuis v6)
 CREATE TABLE absences (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    salarie_id   INTEGER REFERENCES salaries(id),
-    type         TEXT NOT NULL,      -- 'CP' | 'RTT' | 'RECUP' | 'MALADIE'
-    date_debut   TEXT NOT NULL,      -- Format ISO YYYY-MM-DD
-    date_fin     TEXT NOT NULL,
-    duree_jours  REAL DEFAULT 0,     -- En jours ouvrés
-    duree_heures REAL DEFAULT 0,     -- En heures (utilisé pour RECUP)
-    commentaire  TEXT,
-    statut       TEXT DEFAULT 'approuve'
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    salarie_id      INTEGER REFERENCES salaries(id),
+    type            TEXT NOT NULL,      -- 'CP' | 'CP_N' | 'CP_N1' | 'RTT' | 'RECUP' | 'MALADIE'
+    date_debut      DATE NOT NULL,      -- Format ISO YYYY-MM-DD
+    date_fin        DATE NOT NULL,
+    duree_jours     REAL DEFAULT 0,     -- En jours ouvrés
+    duree_heures    REAL DEFAULT 0,     -- En heures (utilisé pour RECUP)
+    commentaire     TEXT,
+    statut          TEXT DEFAULT 'valide'
+                    CHECK (statut IN ('valide', 'en_attente', 'refuse', 'supprime')),
+    date_creation   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    debut_periode   TEXT DEFAULT 'journee-complete',
+    fin_periode     TEXT DEFAULT 'journee-complete',
+    motif_refus     TEXT,                -- Réservé (colonne conservée mais plus écrite depuis v1.0.0)
+    date_validation TEXT,                -- Timestamp de validation/refus par admin
+    validee_par     INTEGER,             -- ID de l'admin ayant traité
+    debite_cp_n1    REAL DEFAULT 0,      -- Combien de jours débités sur cp_n1 (pour rollback fidèle)
+    debite_cp_n     REAL DEFAULT 0       -- Combien de jours débités sur cp_n (pour rollback fidèle)
 );
 
 -- Jours fériés
@@ -227,17 +236,46 @@ CREATE TABLE rtt_annuels (
     nb_rtt                    INTEGER           -- Résultat final du calcul
 );
 
--- Historique des modifications (audit trail — pas de handler IPC, usage interne)
-CREATE TABLE historique_modifs (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    salarie_id       INTEGER REFERENCES salaries(id),
-    action           TEXT NOT NULL,
-    table_concernee  TEXT NOT NULL,
-    details          TEXT,
-    date_modif       DATETIME DEFAULT CURRENT_TIMESTAMP,
-    modifie_par      INTEGER REFERENCES salaries(id)
+-- Configuration globale (taux CP)
+CREATE TABLE config_app (
+    cle    TEXT PRIMARY KEY,
+    valeur TEXT
+    -- Clés : 'taux_cp_normal' (défaut 2.08333), 'taux_cp_arret' (défaut 1.66333)
+);
+
+-- Trace des passages normal ↔ arrêt maladie (utilisé par calcul CP mensuel)
+CREATE TABLE historique_taux (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    salarie_id    INTEGER REFERENCES salaries(id),
+    date_effet    DATE NOT NULL,
+    ancien_taux   REAL,
+    nouveau_taux  REAL,
+    date_creation DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Heures supplémentaires (séparée de absences pour ne pas polluer le calendrier)
+CREATE TABLE heures_supplementaires (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    salarie_id    INTEGER REFERENCES salaries(id),
+    date          DATE NOT NULL,
+    heures        REAL NOT NULL,
+    commentaire   TEXT,
+    date_creation DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Migrations DB versionnées
+CREATE TABLE db_version (
+    version INTEGER NOT NULL  -- actuellement v6
 );
 ```
+
+**Historique des migrations** (tableau `MIGRATIONS[]` dans `main.js`) :
+- **v1** : schéma initial complet
+- **v2** : config_app + historique_taux + colonnes en_arret_maladie / date_arret_maladie sur salaries
+- **v3** : workflow validation — colonnes motif_refus / date_validation / validee_par sur absences, backfill statut → 'valide'
+- **v4** : recréation table absences pour relâcher la contrainte CHECK statut (anciennement bloquait en_attente / refuse)
+- **v5** : drop table historique_modifs (jamais utilisée)
+- **v6** : colonnes debite_cp_n1 / debite_cp_n sur absences (rollback fidèle des soldes à la suppression)
 
 ### Accès à la DB en développement
 
@@ -429,21 +467,43 @@ Les styles de la section "Mes Congés" admin sont **toujours préfixés** pour �
 ### Dashboard salarié (`dashboard-user.html`)
 
 - Affichage des soldes (CP N-1, CP N, RTT, Récup) en cartes compactes 2×2
-- Formulaire de demande d'absence (CP, RTT, RECUP, MALADIE)
+  - Sous chaque tuile, mention « (-X.Xj en attente) » si une demande non validée engage déjà le solde
+- Formulaire de demande d'absence (CP, RTT, RECUP)
+- Panel sidebar « Mes demandes en cours » listant les demandes `en_attente`
 - Calendrier annuel interactif avec visualisation des absences par couleur
+  - Style `en-attente` (opacity + dashed) sur les jours non encore validés
 - Prévisualisation avant soumission (surlignage des jours sur le calendrier)
-- Alertes : période passée, chevauchement avec une absence existante, solde insuffisant
+- Alertes : période passée, chevauchement (incluant les demandes en attente), solde insuffisant
+- Toast temps réel auto-dismiss 5s à la validation/refus de demande par un admin
 
-### Dashboard admin (`dashboard-admin.html`) — 6 sections
+### Dashboard admin (`dashboard-admin.html`) — 7 sections
 
 | Section | Fonctionnalité |
 |---|---|
-| Tableau de bord | Vue d'ensemble, statistiques globales |
-| Salariés | CRUD complet, activation/désactivation, reset mot de passe |
-| Absences | Liste toutes absences, modification, suppression avec recalcul solde |
-| Calendrier | Vue globale de toutes les absences par période |
-| Traitements | Configuration et exécution des traitements automatiques CP/RTT |
-| Mes Congés | Accès admin à sa propre interface salarié (même layout que dashboard user) |
+| Mes Congés | Accès admin à sa propre interface salarié (auto-validé, génère le PDF) |
+| Calendrier | Vue globale de toutes les absences par période (avec distinction visuelle en_attente) |
+| Validation | Bandeau « Demandes à valider » + historique par salarié + ajout arrêt maladie |
+| Salariés | CRUD complet, activation/désactivation, reset mot de passe, récap PDF |
+| Jours Fériés | Ajout manuel + bouton « Générer les 10 fériés légaux » (algorithme de Pâques) |
+| Statistiques | 3 graphiques Chart.js : absences/mois, répartition/type, soldes/salarié |
+| Paramètres | Taux CP globaux, dates des traitements auto, calcul RTT, historique des traitements |
+
+### Workflow de validation des congés
+
+- Le salarié pose une demande → statut `en_attente`, **aucun débit de solde**
+- Un bandeau « Demandes à valider » apparaît dans la section Validation, avec un badge compteur sur la nav admin
+- Polling 30s pour la mise à jour multi-postes
+- Validation admin : statut → `valide`, débit du solde, génération du **PDF officiel**, notification user
+- Refus admin : statut → `refuse` (sans motif depuis v1.0.0), pas de débit, notification user
+- Toast vert 3s côté admin après validation/refus
+- Toutes les poses admin (Mes Congés, ajout maladie, import Excel, split d'absence) bypass le workflow via `autoValide: true`
+
+### Réaffectation correcte des soldes (v6+)
+
+- À la pose, `updateSoldesAfterAbsence` (et `debiterSoldes` du workflow) écrivent la décomposition exacte du débit dans les colonnes `debite_cp_n1` / `debite_cp_n` de la table absences
+- À la suppression, `deleteAbsence` lit ces colonnes et recrédite chaque compte à l'identique
+- Fallback ancien comportement (recrédite tout sur un seul compte) pour les absences pré-v6 sans données
+- L'année du recrédit est extraite de `absence.date_debut` (et non plus de `new Date()`)
 
 ### Traitements automatiques
 
@@ -460,7 +520,7 @@ Raccourcis clavier globaux dans le dashboard admin :
 
 | Séquence | Action |
 |---|---|
-| `Ctrl` + `D` `E` `B` `U` `G` | Ouvre une modale de test des traitements automatiques |
+| `Ctrl` + `D` `E` `B` `U` `G` | **DB Browser** — accès complet aux tables Turso (édition cellule par double-clic, ajout/suppression de ligne, SQL libre). À manipuler avec précaution, pas de sécurité applicative. |
 | `Ctrl` + `L` `O` `A` `D` | Ouvre une modale d'import Excel |
 | `Ctrl` + `S` `A` `V` `E` | Déclenche un export Excel complet de toutes les données |
 
@@ -614,7 +674,14 @@ Voir `DOCS/TODO.md` pour la liste complète et priorisée.
 7. ~~**Nettoyage assets + icônes**~~ ✅ **Fait** — 9 images inutilisées supprimées, icônes cohérentes (logo.ico pour l'app, favicon3.ico pour installateur/fenêtre, favicon2.png pour topbars)
 8. ~~**Taille minimale fenêtre**~~ ✅ **Fait** — `minWidth: 1100, minHeight: 700`
 9. ~~**Demi-journées début/fin**~~ ✅ **Fait** — checkboxes "Début après-midi" + "Fin à midi", alertes vert/orange
+10. ~~**Workflow validation des congés**~~ ✅ **Fait (17/04/2026)** — en_attente / valide / refuse, bandeau admin, notif user, PDF à la validation
+11. ~~**DB Browser easter egg**~~ ✅ **Fait (17/04/2026)** — refonte de Ctrl+DEBUG : navigation des tables Turso, édition cellule, ajout/suppression ligne, SQL libre
+12. ~~**Fix réaffectation soldes CP à la suppression**~~ ✅ **Fait (25/04/2026)** — migration v6 + tracking décomposition CP_N1/CP_N
+13. ~~**Navbar admin responsive**~~ ✅ **Fait (25/04/2026)** — palier @768px icon-only, palier @900px compactage
+14. ~~**Calendrier scroll vertical sur viewport courte**~~ ✅ **Fait (25/04/2026)** — breakpoint @max-height 750px
+15. ~~**Guide d'installation v1.0.0**~~ ✅ **Fait (25/04/2026)** — `DOCS/Guide_Installation_Conges_LCE.docx` généré par `scripts/build-install-guide.py`
+16. ~~**Tag v1.0.0 + build de production**~~ ✅ **Fait (25/04/2026)** — tag git poussé, installeur Squirrel disponible
 
 ---
 
-*Document maintenu par Excellium — dernière mise à jour 31/03/2026 (migration Turso terminée, déploiement multi-postes opérationnel)*
+*Document maintenu par Excellium — dernière mise à jour 25/04/2026 (v1.0.0 — workflow validation, DB browser, fixes responsive et soldes, guide d'installation)*

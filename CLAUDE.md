@@ -21,11 +21,11 @@
 src/
 ├── main.js              # Processus principal Electron — setup Turso, migrations, fenêtre
 ├── preload.js           # Bridge contextIsolation — expose window.api au renderer (~230 lignes)
-├── handlers/            # Modules IPC (12 fichiers + utils)
+├── handlers/            # Modules IPC (13 fichiers + utils)
 │   ├── auth.js
 │   ├── salaries.js
 │   ├── soldes.js
-│   ├── absences.js
+│   ├── absences.js          # Workflow validation (validerAbsence, refuserAbsence, etc.)
 │   ├── heures-sup.js
 │   ├── traitements.js       # Traitements CP (mensuel + annuel) et RTT
 │   ├── config-app.js        # CRUD paramètres globaux (taux CP)
@@ -35,7 +35,8 @@ src/
 │   ├── rtt.js
 │   ├── calcul.js
 │   ├── pdf.js
-│   └── navigation.js
+│   ├── navigation.js
+│   └── db-admin.js          # Easter egg Ctrl+DEBUG (DB Browser, SQL libre)
 ├── assets/              # Logo, favicon, icônes
 ├── pages/
 │   ├── login.html
@@ -101,9 +102,14 @@ soldes       (id, salarie_id, annee, cp_n, cp_n1, rtt, recup_heures, derniere_ma
 
 absences     (id, salarie_id, type, date_debut, date_fin, duree_jours,
               duree_heures, statut, commentaire, date_creation,
-              debut_periode, fin_periode)
+              debut_periode, fin_periode,
+              motif_refus, date_validation, validee_par,
+              debite_cp_n1, debite_cp_n)
               -- type: 'CP' | 'RTT' | 'RECUP' | 'MALADIE'
+              -- statut: 'valide' | 'en_attente' | 'refuse' (workflow validation)
               -- debut_periode/fin_periode: 'journee-complete' | 'midi' | 'apres-midi'
+              -- validee_par: id admin ayant traité la demande
+              -- debite_cp_n1/cp_n: répartition exacte du débit pour rollback fidèle à la suppression
 
 jours_feries (id, date, libelle, annee)
 
@@ -117,7 +123,7 @@ notifications         (id, type, titre, message, details, statut, date_creation,
 rtt_annuels           (id, annee_debut, date_debut, date_fin, nb_jours_periode, nb_jours_we,
                        nb_jours_feries_hors_we, nb_jours_travailles, nb_cp_a_deduire, nb_rtt, annee)
 heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation)
-db_version            (version) -- actuellement v5
+db_version            (version) -- actuellement v6
 ```
 
 ---
@@ -145,7 +151,7 @@ db_version            (version) -- actuellement v5
 **Auth** (`auth.js`) : `login`, `checkFirstLogin`, `setPassword`, `resetPassword`
 **Salariés** (`salaries.js`) : `getSalarie`, `getAllSalaries`, `createSalarie`, `updateSalarie`, `deactivateSalarie`
 **Soldes** (`soldes.js`) : `getSoldes`, `updateSoldes`, `updateSoldesAfterAbsence`
-**Absences** (`absences.js`) : `createAbsence`, `getAbsences`, `getAllAbsences`, `deleteAbsence`, `updateAbsence`
+**Absences** (`absences.js`) : `createAbsence`, `getAbsences`, `getAllAbsences`, `deleteAbsence`, `updateAbsence`, `validerAbsence`, `refuserAbsence`, `getAbsencesEnAttente`, `getEnAttenteParSalarie`
 **Heures sup** (`heures-sup.js`) : `ajouter-recup`, `getHeuresSup`
 **Jours fériés** (`jours-feries.js`) : `getJoursFeries`, `addJourFerie`, `deleteJourFerie`
 **RTT** (`rtt.js`) : `getRTTAnnuels`, `addRTTAnnuel`
@@ -155,6 +161,7 @@ db_version            (version) -- actuellement v5
 **Calcul** (`calcul.js`) : `calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode)`
 **PDF** (`pdf.js`) : `genererPDF`, `exporterRecapPDF`, `exporterStatsPDF`
 **Navigation** (`navigation.js`) : `navigateTo`
+**DB Admin** (`db-admin.js`) : `db-list-tables`, `db-get-table`, `db-update-cell`, `db-delete-row`, `db-insert-row`, `db-exec-raw` (easter egg `Ctrl+DEBUG`, accès admin sans sécurité applicative)
 **Utilitaires** (`utils-cp.js`) : `calculerCPMensuel`, `getTauxGlobaux`, `getJoursFeriesAnnee` (non IPC, utilisé par traitements.js et salaries.js)
 
 ---
@@ -193,13 +200,19 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (31/03/2026)
+## État actuel du projet (25/04/2026 — v1.0.0)
 
-**Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles, traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts, jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
+**Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
+
+**Workflow de validation des congés** (depuis 17/04/2026) : le salarié pose une demande qui passe en `en_attente`, l'admin la valide ou la refuse depuis un bandeau dédié dans la section « Validation » (ex-« Historique »). Solde débité uniquement à la validation, PDF officiel généré à ce moment. Notifications ciblées par user. La pose admin pour soi-même reste auto-validée (`autoValide: true`).
+
+**DB Browser** (depuis 17/04/2026) : easter egg `Ctrl+DEBUG` refondu — accès lecture/écriture à toutes les tables Turso (édition cellule par double-clic, ajout/suppression de ligne, SQL libre).
 
 **Onglet Paramètres** (admin) : regroupe les taux CP globaux, les dates de traitement (CP annuel + RTT), le calcul RTT, et l'historique des traitements.
 
-**Migration Turso terminée** (31/03/2026) : DB cloud libSQL, plus de fichier local ni de synchronisation OneDrive. Supprimés : `withDatabase()`, locks fichier, backup local, `getDbFolder()`, template `conges.db`. Config Turso (URL + token) dans `config.json` (AppData).
+**Migration Turso** (31/03/2026) : DB cloud libSQL, plus de fichier local ni de synchronisation OneDrive. Config Turso (URL + token) dans `config.json` (AppData/conges-lce/).
+
+**Production** : v1.0.0 taggée et pushée le 25/04/2026. Installeur disponible : `out/make/squirrel.windows/x64/Gestion des Congés-1.0.0 Setup.exe`. Guide d'installation : `DOCS/Guide_Installation_Conges_LCE.docx` (généré par `scripts/build-install-guide.py`).
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
