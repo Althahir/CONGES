@@ -28,7 +28,7 @@ module.exports = function registerSoldesHandlers(ctx, safeHandle) {
         return { success: true };
     });
 
-    safeHandle('updateSoldesAfterAbsence', async (event, salarieId, annee, type, dureeJours, dureeHeures) => {
+    safeHandle('updateSoldesAfterAbsence', async (event, salarieId, annee, type, dureeJours, dureeHeures, absenceId) => {
         const result = await ctx.db.execute({
             sql: 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
             args: [salarieId, annee]
@@ -41,6 +41,8 @@ module.exports = function registerSoldesHandlers(ctx, safeHandle) {
         let nouveauCPN = soldes.cp_n;
         let nouveauRTT = soldes.rtt;
         let nouveauRecup = soldes.recup_heures;
+        let debiteN1 = 0;
+        let debiteN = 0;
 
         if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
             let resteADeduire = dureeJours;
@@ -48,9 +50,11 @@ module.exports = function registerSoldesHandlers(ctx, safeHandle) {
                 const deductionN1 = Math.min(nouveauCPN1, resteADeduire);
                 nouveauCPN1 -= deductionN1;
                 resteADeduire -= deductionN1;
+                debiteN1 = deductionN1;
             }
             if (resteADeduire > 0) {
                 nouveauCPN -= resteADeduire;
+                debiteN = resteADeduire;
             }
         } else if (type === 'RTT') {
             nouveauRTT -= dureeJours;
@@ -66,6 +70,14 @@ module.exports = function registerSoldesHandlers(ctx, safeHandle) {
             sql: `UPDATE soldes SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
             args: [nouveauCPN1, nouveauCPN, nouveauRTT, nouveauRecup, salarieId, annee]
         });
+
+        // Trace la répartition CP exacte sur l'absence pour permettre une suppression fidèle
+        if (absenceId && (type === 'CP' || type === 'CP_N' || type === 'CP_N1')) {
+            await ctx.db.execute({
+                sql: 'UPDATE absences SET debite_cp_n1 = ?, debite_cp_n = ? WHERE id = ?',
+                args: [debiteN1, debiteN, absenceId]
+            });
+        }
 
         return { success: true, cp_n1: nouveauCPN1, cp_n: nouveauCPN, rtt: nouveauRTT, recup_heures: nouveauRecup };
     });

@@ -316,6 +316,17 @@ const MIGRATIONS = [
     async function v5(db) {
         try { await db.execute('DROP TABLE IF EXISTS historique_modifs'); } catch (e) { /* ignorer */ }
     },
+
+    // v6 : trace de la répartition CP_N1 / CP_N pour chaque absence (suppression correcte)
+    async function v6(db) {
+        const alterCols = [
+            "ALTER TABLE absences ADD COLUMN debite_cp_n1 REAL DEFAULT 0",
+            "ALTER TABLE absences ADD COLUMN debite_cp_n REAL DEFAULT 0",
+        ];
+        for (const sql of alterCols) {
+            try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
+        }
+    },
 ];
 
 async function runMigrations() {

@@ -200,8 +200,8 @@ contextBridge.exposeInMainWorld('api', {
     getSoldes: (salarieId, annee) => ipcRenderer.invoke('getSoldes', salarieId, annee),
     /** @param {number} salarieId @param {number} annee @param {{cp_n: number, cp_n1: number, rtt: number, recup_heures: number}} soldes @returns {Promise<SuccessResult>} */
     updateSoldes: (salarieId, annee, soldes) => ipcRenderer.invoke('updateSoldes', salarieId, annee, soldes),
-    /** @param {number} salarieId @param {number} annee @param {string} type @param {number} dureeJours @param {number} dureeHeures @returns {Promise<SoldesUpdateResult>} */
-    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures),
+    /** @param {number} salarieId @param {number} annee @param {string} type @param {number} dureeJours @param {number} dureeHeures @param {number} [absenceId] @returns {Promise<SoldesUpdateResult>} */
+    updateSoldesAfterAbsence: (salarieId, annee, type, dureeJours, dureeHeures, absenceId) => ipcRenderer.invoke('updateSoldesAfterAbsence', salarieId, annee, type, dureeJours, dureeHeures, absenceId),
     /** @param {{salarie_id: number, annee: number, heures: number, date: string, commentaire?: string}} data @returns {Promise<SuccessResult>} */
     ajouterRecup: (data) => ipcRenderer.invoke('ajouter-recup', data),
     /** @param {number} salarieId @returns {Promise<HeureSup[]>} */

@@ -4334,7 +4334,7 @@ async function supprimerUnJour(absence, dateISO) {
         const nouvelleDureeHeures = absence.duree_heures - 7;
 
         await window.api.deleteAbsence(absence.id);
-        await window.api.createAbsence({
+        const newAbs1 = await window.api.createAbsence({
             salarie_id:   absence.salarie_id,
             type:         absence.type,
             date_debut:   formatDateISO(nouvelleDateDebut),
@@ -4347,7 +4347,7 @@ async function supprimerUnJour(absence, dateISO) {
         });
         await window.api.updateSoldesAfterAbsence(
             absence.salarie_id, anneeEnCours, absence.type,
-            nouvelleDureeJours, nouvelleDureeHeures
+            nouvelleDureeJours, nouvelleDureeHeures, newAbs1.id
         );
 
         alert('✅ Premier jour supprimé !\nLes soldes ont été recalculés.');
@@ -4363,7 +4363,7 @@ async function supprimerUnJour(absence, dateISO) {
         const nouvelleDureeHeures = absence.duree_heures - 7;
 
         await window.api.deleteAbsence(absence.id);
-        await window.api.createAbsence({
+        const newAbs2 = await window.api.createAbsence({
             salarie_id:   absence.salarie_id,
             type:         absence.type,
             date_debut:   absence.date_debut,
@@ -4376,7 +4376,7 @@ async function supprimerUnJour(absence, dateISO) {
         });
         await window.api.updateSoldesAfterAbsence(
             absence.salarie_id, anneeEnCours, absence.type,
-            nouvelleDureeJours, nouvelleDureeHeures
+            nouvelleDureeJours, nouvelleDureeHeures, newAbs2.id
         );
 
         alert('✅ Dernier jour supprimé !\nLes soldes ont été recalculés.');
@@ -4398,7 +4398,7 @@ async function supprimerUnJour(absence, dateISO) {
     await window.api.deleteAbsence(absence.id);
 
     // Partie 1
-    await window.api.createAbsence({
+    const newAbsP1 = await window.api.createAbsence({
         salarie_id:   absence.salarie_id,
         type:         absence.type,
         date_debut:   absence.date_debut,
@@ -4410,11 +4410,11 @@ async function supprimerUnJour(absence, dateISO) {
         skipNotification: true
     });
     await window.api.updateSoldesAfterAbsence(
-        absence.salarie_id, anneeEnCours, absence.type, joursPartie1, joursPartie1 * 7
+        absence.salarie_id, anneeEnCours, absence.type, joursPartie1, joursPartie1 * 7, newAbsP1.id
     );
 
     // Partie 2
-    await window.api.createAbsence({
+    const newAbsP2 = await window.api.createAbsence({
         salarie_id:   absence.salarie_id,
         type:         absence.type,
         date_debut:   formatDateISO(jourApres),
@@ -4426,7 +4426,7 @@ async function supprimerUnJour(absence, dateISO) {
         skipNotification: true
     });
     await window.api.updateSoldesAfterAbsence(
-        absence.salarie_id, anneeEnCours, absence.type, joursPartie2, joursPartie2 * 7
+        absence.salarie_id, anneeEnCours, absence.type, joursPartie2, joursPartie2 * 7, newAbsP2.id
     );
 
     alert('✅ Jour supprimé !\nL\'absence a été coupée en 2 périodes.\nLes soldes ont été recalculés.');
@@ -4513,11 +4513,12 @@ if (formAbsenceUser) {
                 // Mettre à jour les soldes
                 if (typeAbsence !== 'MALADIE') {
                     await window.api.updateSoldesAfterAbsence(
-                        user.id, 
-                        anneeActuelle, 
-                        typeAbsenceFinal, 
-                        dureeJours, 
-                        dureeHeures
+                        user.id,
+                        anneeActuelle,
+                        typeAbsenceFinal,
+                        dureeJours,
+                        dureeHeures,
+                        result.id
                     );
                 }
                 

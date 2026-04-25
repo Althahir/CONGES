@@ -824,7 +824,8 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
                 anneeActuelle,
                 typeAbsence,
                 dureeJours,
-                dureeHeures
+                dureeHeures,
+                resultAbsence.id
             );
 
             const pdfData = {

@@ -1,7 +1,7 @@
 module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
 
     // Débit des soldes pour une absence validée (logique partagée avec updateSoldesAfterAbsence)
-    async function debiterSoldes(salarieId, annee, type, dureeJours, dureeHeures) {
+    async function debiterSoldes(salarieId, annee, type, dureeJours, dureeHeures, absenceId) {
         if (type === 'MALADIE') return;
 
         const soldesResult = await ctx.db.execute({
@@ -15,6 +15,8 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         let cp_n = soldes.cp_n;
         let rtt = soldes.rtt;
         let recup_heures = soldes.recup_heures;
+        let debiteN1 = 0;
+        let debiteN = 0;
 
         if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
             let reste = dureeJours || 0;
@@ -22,8 +24,12 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
                 const deduc = Math.min(cp_n1, reste);
                 cp_n1 -= deduc;
                 reste -= deduc;
+                debiteN1 = deduc;
             }
-            if (reste > 0) cp_n -= reste;
+            if (reste > 0) {
+                cp_n -= reste;
+                debiteN = reste;
+            }
         } else if (type === 'RTT') {
             rtt -= (dureeJours || 0);
         } else if (type === 'RECUP') {
@@ -35,6 +41,13 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             sql: `UPDATE soldes SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
             args: [cp_n1, cp_n, rtt, recup_heures, salarieId, annee]
         });
+
+        if (absenceId && (type === 'CP' || type === 'CP_N' || type === 'CP_N1')) {
+            await ctx.db.execute({
+                sql: 'UPDATE absences SET debite_cp_n1 = ?, debite_cp_n = ? WHERE id = ?',
+                args: [debiteN1, debiteN, absenceId]
+            });
+        }
     }
 
     function formatDate(d) {
@@ -171,8 +184,8 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         if (!absence) throw new Error('Absence introuvable');
         if (absence.statut !== 'en_attente') throw new Error(`Absence déjà traitée (statut : ${absence.statut})`);
 
-        const anneeEnCours = new Date().getFullYear();
-        await debiterSoldes(absence.salarie_id, anneeEnCours, absence.type, absence.duree_jours, absence.duree_heures);
+        const annee = new Date(absence.date_debut).getFullYear();
+        await debiterSoldes(absence.salarie_id, annee, absence.type, absence.duree_jours, absence.duree_heures, absenceId);
 
         await ctx.db.execute({
             sql: `UPDATE absences SET statut = 'valide', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ?`,
@@ -246,7 +259,7 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         const statut = absence.statut;
         const dureeJours = absence.duree_jours || 0;
         const dureeHeures = absence.duree_heures || 0;
-        const anneeEnCours = new Date().getFullYear();
+        const annee = new Date(absence.date_debut).getFullYear();
 
         await ctx.db.execute({
             sql: 'DELETE FROM absences WHERE id = ?',
@@ -257,21 +270,29 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         if (statut === 'valide' && type !== 'MALADIE') {
             const soldesResult = await ctx.db.execute({
                 sql: 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
-                args: [salarieId, anneeEnCours]
+                args: [salarieId, annee]
             });
             const soldes = soldesResult.rows[0];
 
-            if (!soldes) throw new Error('Soldes introuvables pour l\'année en cours');
+            if (!soldes) throw new Error(`Soldes introuvables pour l'année ${annee}`);
 
             let nouveauCPN1 = soldes.cp_n1;
             let nouveauCPN = soldes.cp_n;
             let nouveauRTT = soldes.rtt;
             let nouvelleRecup = soldes.recup_heures;
 
-            if (type === 'CP_N1') {
-                nouveauCPN1 = soldes.cp_n1 + dureeJours;
-            } else if (type === 'CP_N' || type === 'CP') {
-                nouveauCPN = soldes.cp_n + dureeJours;
+            if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
+                // Nouveau : si on a la décomposition, on recrédite chaque compte exactement
+                const debiteN1 = absence.debite_cp_n1 || 0;
+                const debiteN = absence.debite_cp_n || 0;
+                if (debiteN1 > 0 || debiteN > 0) {
+                    nouveauCPN1 = soldes.cp_n1 + debiteN1;
+                    nouveauCPN = soldes.cp_n + debiteN;
+                } else {
+                    // Fallback (anciennes absences pré-v6) : ancien comportement
+                    if (type === 'CP_N1') nouveauCPN1 = soldes.cp_n1 + dureeJours;
+                    else nouveauCPN = soldes.cp_n + dureeJours;
+                }
             } else if (type === 'RTT') {
                 nouveauRTT = soldes.rtt + dureeJours;
             } else if (type === 'RECUP') {
@@ -280,7 +301,7 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
 
             await ctx.db.execute({
                 sql: `UPDATE soldes SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
-                args: [nouveauCPN1, nouveauCPN, nouveauRTT, nouvelleRecup, salarieId, anneeEnCours]
+                args: [nouveauCPN1, nouveauCPN, nouveauRTT, nouvelleRecup, salarieId, annee]
             });
         }
 
