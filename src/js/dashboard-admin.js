@@ -43,7 +43,7 @@ let sectionActiveAdmin = 'mes-conges';
 const titresSectionAdmin = {
     'mes-conges': 'Mes Congés',
     'calendrier': 'Calendrier Global',
-    'historique': 'Historique',
+    'historique': 'Validation',
     'salaries': 'Salariés',
     'feries': 'Jours Fériés',
     'statistiques': 'Statistiques',
@@ -432,24 +432,32 @@ async function chargerCalendrierGlobal() {
 
                         if (nbAbsents >= 8) {
                             // Mode dégradé avec compteur — tooltip avec tous les noms
-                            const nomsUniques = [...new Set(absentsJour.map(a => `${a.prenom} ${a.nom}`))];
+                            const nomsUniques = [...new Set(absentsJour.map(a => {
+                                const suffixe = a.statut === 'en_attente' ? ' (en attente)' : '';
+                                return `${a.prenom} ${a.nom}${suffixe}`;
+                            }))];
                             const tooltipDegrade = nomsUniques.join(', ');
                             tableHTML += `<div class="indicateur-degrade" data-tooltip="${tooltipDegrade}">${nbAbsents}</div>`;
                         } else {
                             // Mode indicateurs individuels — tooltip par couleur
                             const indicateurs = new Array(8).fill(null);
                             const nomsSalaries = new Array(8).fill(null);
+                            const statutsIndicateurs = new Array(8).fill(null);
                             absentsJour.forEach(abs => {
                                 const position = positionsSalaries[abs.salarie_id];
                                 if (position !== undefined && position < 8) {
                                     indicateurs[position] = couleursSalaries[abs.salarie_id];
                                     nomsSalaries[position] = `${abs.prenom} ${abs.nom}`;
+                                    statutsIndicateurs[position] = abs.statut;
                                 }
                             });
 
                             indicateurs.forEach((couleur, idx) => {
                                 if (couleur) {
-                                    tableHTML += `<div class="indicateur-colonne actif" style="background: ${couleur};" data-tooltip="${nomsSalaries[idx]}"></div>`;
+                                    const enAttente = statutsIndicateurs[idx] === 'en_attente';
+                                    const classeAttente = enAttente ? ' en-attente' : '';
+                                    const suffixe = enAttente ? ' (en attente)' : '';
+                                    tableHTML += `<div class="indicateur-colonne actif${classeAttente}" style="background: ${couleur};" data-tooltip="${nomsSalaries[idx]}${suffixe}"></div>`;
                                 } else {
                                     tableHTML += '<div class="indicateur-colonne"></div>';
                                 }
@@ -1080,7 +1088,8 @@ async function loadSoldesAdmin() {
     try {
         const soldes = await window.api.getSoldes(user.id, anneeActuelle);
         const salarie = await window.api.getSalarie(user.id);
-        
+        const pending = await window.api.getEnAttenteParSalarie(user.id, anneeActuelle);
+
         if (soldes) {
             function appliquerEtatSolde(tuile, valeur) {
                 if (!tuile) return;
@@ -1090,37 +1099,62 @@ async function loadSoldesAdmin() {
                 else tuile.classList.add('solde-negatif');
             }
 
+            function afficherPending(el, valeur, unite = 'j') {
+                if (!el) return;
+                if (valeur > 0) {
+                    const txt = valeur % 1 === 0 ? valeur : valeur.toFixed(1);
+                    el.textContent = `(-${txt}${unite} en attente)`;
+                    el.classList.add('has-pending');
+                } else {
+                    el.textContent = '';
+                    el.classList.remove('has-pending');
+                }
+            }
+
             document.getElementById('solde-cp-n1-user').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n-user').textContent = soldes.cp_n.toFixed(2) + 'j';
             appliquerEtatSolde(document.querySelector('#mes-conges-section .solde-card-compact.cp-n1'), soldes.cp_n1);
             appliquerEtatSolde(document.querySelector('#mes-conges-section .solde-card-compact.cp-n'), soldes.cp_n);
 
+            // Pending CP : répartition N-1 puis N
+            const cpPending = (pending && pending.cp) || 0;
+            const cpN1Pending = Math.min(Math.max(soldes.cp_n1, 0), cpPending);
+            const cpNPending = Math.max(0, cpPending - cpN1Pending);
+            afficherPending(document.getElementById('solde-cp-n1-user-pending'), cpN1Pending);
+            afficherPending(document.getElementById('solde-cp-n-user-pending'), cpNPending);
+
             // RTT
             const tuileRTT = document.querySelector('#mes-conges-section .solde-card-compact.rtt');
+            const pendingRTTEl = document.getElementById('solde-rtt-user-pending');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt-user').textContent = soldes.rtt.toFixed(2) + 'j';
                 appliquerEtatSolde(tuileRTT, soldes.rtt);
+                afficherPending(pendingRTTEl, (pending && pending.rtt) || 0);
             } else {
                 document.getElementById('solde-rtt-user').textContent = 'N/A';
                 if (tuileRTT) {
                     tuileRTT.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRTT.classList.add('sans-droit');
                 }
+                afficherPending(pendingRTTEl, 0);
             }
 
             // Récup
             const tuileRecup = document.querySelector('#mes-conges-section .solde-card-compact.recup');
+            const pendingRecupEl = document.getElementById('solde-recup-user-pending');
             if (salarie.a_droit_recup === 1) {
                 const recupJours = (soldes.recup_heures / 7).toFixed(2);
                 document.getElementById('solde-recup-user').innerHTML =
                     `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j)</p>`;
                 appliquerEtatSolde(tuileRecup, soldes.recup_heures);
+                afficherPending(pendingRecupEl, (pending && pending.recup_heures) || 0, 'h');
             } else {
                 document.getElementById('solde-recup-user').textContent = 'N/A';
                 if (tuileRecup) {
                     tuileRecup.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRecup.classList.add('sans-droit');
                 }
+                afficherPending(pendingRecupEl, 0);
             }
         }
         
@@ -1136,6 +1170,216 @@ async function loadSoldesAdmin() {
         console.error('Erreur chargement soldes:', error);
     }
 }
+
+// ========== WORKFLOW VALIDATION — DEMANDES EN ATTENTE (admin) ==========
+
+let demandeEnCoursRefus = null;
+
+async function loadDemandesEnAttente() {
+    try {
+        const demandes = await window.api.getAbsencesEnAttente();
+        const bandeau = document.getElementById('bandeauDemandesAttente');
+        const liste = document.getElementById('listeDemandesAttente');
+        const nbEl = document.getElementById('nbDemandesAttente');
+        const badge = document.getElementById('navBadgeDemandes');
+
+        const count = demandes.length;
+        if (nbEl) nbEl.textContent = count;
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        if (!bandeau || !liste) return;
+
+        if (count === 0) {
+            bandeau.style.display = 'none';
+            return;
+        }
+        bandeau.style.display = 'block';
+
+        const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
+        const labelsType = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+
+        liste.innerHTML = demandes.map(d => {
+            const dureeStr = (d.type === 'RECUP' && !d.duree_jours) ? `${d.duree_heures}h` : `${(d.duree_jours || 0).toFixed(1)}j`;
+            const periode = d.date_debut === d.date_fin ? fmtDate(d.date_debut) : `${fmtDate(d.date_debut)} → ${fmtDate(d.date_fin)}`;
+            const commentaire = d.commentaire
+                ? `<div class="demande-card-commentaire" title="${escapeHtml(d.commentaire)}">« ${escapeHtml(d.commentaire)} »</div>`
+                : '';
+            return `
+                <div class="demande-card type-${d.type}" data-absence-id="${d.id}" data-salarie-id="${d.salarie_id}" data-annee="${new Date(d.date_debut).getFullYear()}" title="Voir dans le calendrier du salarié">
+                    <div class="demande-card-info">
+                        <div class="demande-card-salarie">${escapeHtml(d.prenom)} ${escapeHtml(d.nom)}</div>
+                        <div class="demande-card-details">${labelsType[d.type] || d.type} · ${periode} · ${dureeStr}</div>
+                        ${commentaire}
+                    </div>
+                    <div class="demande-card-actions">
+                        <button class="btn-valider-demande" data-id="${d.id}" title="Valider">
+                            <i class="fa-solid fa-check"></i> Valider
+                        </button>
+                        <button class="btn-refuser-demande" data-id="${d.id}" title="Refuser">
+                            <i class="fa-solid fa-xmark"></i> Refuser
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Clic sur la card → ouvre le calendrier du salarié à l'année de la demande
+        liste.querySelectorAll('.demande-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const salarieId = parseInt(card.dataset.salarieId, 10);
+                const annee = parseInt(card.dataset.annee, 10);
+                ouvrirCalendrierSalarieHistorique(salarieId, annee);
+            });
+        });
+
+        // Boutons Valider / Refuser : stopPropagation pour ne pas déclencher le clic sur la card
+        liste.querySelectorAll('.btn-valider-demande').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                validerDemande(parseInt(btn.dataset.id, 10));
+            });
+        });
+        liste.querySelectorAll('.btn-refuser-demande').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ouvrirModaleRefus(parseInt(btn.dataset.id, 10), demandes);
+            });
+        });
+    } catch (err) {
+        console.error('Erreur chargement demandes en attente:', err);
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function ouvrirCalendrierSalarieHistorique(salarieId, annee) {
+    if (!salarieId) return;
+    salarieHistoriqueSelectionne = salarieId;
+    if (typeof annee === 'number' && !isNaN(annee)) {
+        anneeHistorique = annee;
+        updateYearNavDisplay();
+    }
+    const select = document.getElementById('selectSalarieHistorique');
+    if (select) select.value = String(salarieId);
+    chargerCalendrierHistorique();
+    // Scroll vers le calendrier pour que l'admin voie le résultat
+    const calendrierDiv = document.getElementById('calendrierHistorique');
+    if (calendrierDiv) {
+        setTimeout(() => calendrierDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+    }
+}
+
+async function validerDemande(absenceId) {
+    const btn = document.querySelector(`.btn-valider-demande[data-id="${absenceId}"]`);
+    const btnRefuser = document.querySelector(`.btn-refuser-demande[data-id="${absenceId}"]`);
+    if (btn) btn.disabled = true;
+    if (btnRefuser) btnRefuser.disabled = true;
+
+    try {
+        await window.api.validerAbsence(absenceId, user.id);
+        await loadDemandesEnAttente();
+        // Rafraîchir le calendrier historique si un salarié est sélectionné
+        if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
+    } catch (err) {
+        console.error('Erreur validation demande:', err);
+        alert('Erreur : ' + (err.message || err));
+        if (btn) btn.disabled = false;
+        if (btnRefuser) btnRefuser.disabled = false;
+    }
+}
+
+function ouvrirModaleRefus(absenceId, demandes) {
+    const demande = demandes.find(d => d.id === absenceId);
+    if (!demande) return;
+    demandeEnCoursRefus = demande;
+
+    const modal = document.getElementById('modalRefusDemande');
+    const infoBloc = document.getElementById('infoRefusDemande');
+    const motifEl = document.getElementById('motifRefusDemande');
+    const msgEl = document.getElementById('refusDemandeMsg');
+
+    const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
+    const labelsType = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup' };
+    const dureeStr = (demande.type === 'RECUP' && !demande.duree_jours) ? `${demande.duree_heures}h` : `${(demande.duree_jours || 0).toFixed(1)}j`;
+
+    infoBloc.innerHTML = `
+        <strong>${escapeHtml(demande.prenom)} ${escapeHtml(demande.nom)}</strong><br>
+        ${labelsType[demande.type] || demande.type} · du ${fmtDate(demande.date_debut)} au ${fmtDate(demande.date_fin)} (${dureeStr})
+        ${demande.commentaire ? `<br><em>« ${escapeHtml(demande.commentaire)} »</em>` : ''}
+    `;
+    motifEl.value = '';
+    if (msgEl) { msgEl.style.display = 'none'; msgEl.textContent = ''; }
+    modal.style.display = 'flex';
+    setTimeout(() => motifEl.focus(), 50);
+}
+
+function fermerModaleRefus() {
+    document.getElementById('modalRefusDemande').style.display = 'none';
+    demandeEnCoursRefus = null;
+}
+
+async function confirmerRefusDemande() {
+    if (!demandeEnCoursRefus) return;
+    const motif = document.getElementById('motifRefusDemande').value.trim();
+    const msgEl = document.getElementById('refusDemandeMsg');
+    if (!motif) {
+        if (msgEl) {
+            msgEl.textContent = 'Le motif de refus est obligatoire.';
+            msgEl.className = 'error-message';
+            msgEl.style.display = 'block';
+        }
+        return;
+    }
+
+    const btnConfirmer = document.getElementById('btnConfirmerRefusDemande');
+    btnConfirmer.disabled = true;
+    try {
+        await window.api.refuserAbsence(demandeEnCoursRefus.id, user.id, motif);
+        fermerModaleRefus();
+        await loadDemandesEnAttente();
+        if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
+    } catch (err) {
+        console.error('Erreur refus demande:', err);
+        if (msgEl) {
+            msgEl.textContent = 'Erreur : ' + (err.message || err);
+            msgEl.className = 'error-message';
+            msgEl.style.display = 'block';
+        }
+    } finally {
+        btnConfirmer.disabled = false;
+    }
+}
+
+// Listeners modale refus (attachés une seule fois)
+(function initModaleRefusDemande() {
+    const closeBtn = document.getElementById('closeModalRefusDemande');
+    const cancelBtn = document.getElementById('btnAnnulerRefusDemande');
+    const confirmBtn = document.getElementById('btnConfirmerRefusDemande');
+    if (closeBtn) closeBtn.addEventListener('click', fermerModaleRefus);
+    if (cancelBtn) cancelBtn.addEventListener('click', fermerModaleRefus);
+    if (confirmBtn) confirmBtn.addEventListener('click', confirmerRefusDemande);
+})();
+
+// Toggle collapse de la bandeau
+(function initBandeauDemandes() {
+    const btn = document.getElementById('btnToggleDemandesAttente');
+    const liste = document.getElementById('listeDemandesAttente');
+    if (!btn || !liste) return;
+    btn.addEventListener('click', () => {
+        const collapsed = liste.classList.toggle('hidden');
+        btn.classList.toggle('collapsed', collapsed);
+    });
+})();
 
 async function chargerJoursFeriesUser() {
     try {
@@ -1231,26 +1475,32 @@ function genererCalendrierUser() {
             // Ne colorer que si ce n'est PAS un jour chômé
             if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !jourFerie) {
                 const type = absence.type.toUpperCase();
+                let tooltipLabel = '';
                 if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');
-                    jourDiv.setAttribute('data-tooltip', 'Congés payés');
+                    tooltipLabel = 'Congés payés';
                 } else if (type === 'RTT') {
                     jourDiv.classList.add('rtt');
-                    jourDiv.setAttribute('data-tooltip', 'RTT');
+                    tooltipLabel = 'RTT';
                 } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
-                    jourDiv.setAttribute('data-tooltip', 'Récupération');
+                    tooltipLabel = 'Récupération';
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
-                    jourDiv.setAttribute('data-tooltip', 'Arrêt maladie');
+                    tooltipLabel = 'Arrêt maladie';
                 }
-                
+
+                if (absence.statut === 'en_attente') {
+                    jourDiv.classList.add('en-attente');
+                    tooltipLabel += ' — En attente de validation';
+                }
+
                 if (absence.commentaire) {
-                    const currentTooltip = jourDiv.getAttribute('data-tooltip');
-                    jourDiv.setAttribute('data-tooltip', `${currentTooltip} - ${absence.commentaire}`);
+                    tooltipLabel += ` · ${absence.commentaire}`;
                 }
+                if (tooltipLabel) jourDiv.setAttribute('data-tooltip', tooltipLabel);
             }
-            
+
             joursMoisDiv.appendChild(jourDiv);
         }
 
@@ -1595,10 +1845,10 @@ async function calculerDureeAbsenceAdmin() {
             alerteSolde.textContent = '✓ Solde suffisant';
         }
         
-        // Vérifier les chevauchements (uniquement absences valides, hors maladie)
+        // Vérifier les chevauchements (absences valides + en attente, hors maladie)
         const absences = await window.api.getAbsences(user.id);
         const chevauchement = absences.find(abs => {
-            if (abs.statut !== 'valide') return false;
+            if (abs.statut !== 'valide' && abs.statut !== 'en_attente') return false;
             return (dateDebut <= abs.date_fin && dateFin >= abs.date_debut);
         });
 
@@ -1608,7 +1858,8 @@ async function calculerDureeAbsenceAdmin() {
             const typesTexte = { CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
             const typeTexte = typesTexte[chevauchement.type] || chevauchement.type;
             const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
-            alertePeriode.textContent = `⚠️ Chevauchement avec ${typeTexte} du ${fmtDate(chevauchement.date_debut)} au ${fmtDate(chevauchement.date_fin)}`;
+            const suffixe = chevauchement.statut === 'en_attente' ? ' (en attente)' : '';
+            alertePeriode.textContent = `⚠️ Chevauchement avec ${typeTexte}${suffixe} du ${fmtDate(chevauchement.date_debut)} au ${fmtDate(chevauchement.date_fin)}`;
             alertePeriode.classList.add('alert-warning');
         }
 
@@ -2957,7 +3208,8 @@ async function creerAbsenceImport(salarieId, absence) {
         duree_jours: absence.duree_jours,
         duree_heures: absence.duree_heures,
         commentaire: 'Import historique',
-        statut: 'valide'
+        autoValide: true,
+        skipNotification: true
     };
 
     return await window.api.createAbsence(absenceData);
@@ -2967,9 +3219,22 @@ if (window.api.onTraitementAutomatique) {
     window.api.onTraitementAutomatique((data) => {
         console.log('Traitement automatique reçu:', data);
 
+        // Notifs du workflow de validation — toast direct + refresh bandeau/badge
+        if (data.type === 'demande_conge' || data.type === 'demande_validee' || data.type === 'demande_refusee') {
+            // Si la notif est ciblée vers un user spécifique, n'afficher que sur son poste
+            if (data.user_id && data.user_id !== user.id) return;
+            const statutToast = data.statut === 'error' ? 'error'
+                              : data.statut === 'success' ? 'success'
+                              : 'partial'; // info mappé à partial (bleu/orange doux)
+            afficherNotificationPersistante(statutToast, data.titre || 'Notification', data.message || '');
+            chargerNotificationsNonLues();
+            loadDemandesEnAttente();
+            return;
+        }
+
         const typeLabel = data.type === 'CP_ANNUEL' ? 'CP Annuel'
             : data.type === 'RTT_ANNUEL' ? 'RTT Annuel'
-            : data.type.startsWith('CP_MENSUEL') ? 'CP Mensuel'
+            : (typeof data.type === 'string' && data.type.startsWith('CP_MENSUEL')) ? 'CP Mensuel'
             : data.type;
 
         if (data.statut === 'success') {
@@ -3239,8 +3504,18 @@ function renderNotifDropdown(notifications) {
 
     list.innerHTML = notifications.map(notif => {
         const statut = notif.statut;
-        const icon = statut === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
-        const cssClass = statut === 'success' ? 'success' : (statut === 'partial' ? 'partial' : 'error');
+        const type = notif.type || '';
+        // Icône par type pour les notifs workflow, sinon par statut
+        const icon = type === 'demande_conge' ? 'fa-clock'
+                   : type === 'demande_validee' ? 'fa-circle-check'
+                   : type === 'demande_refusee' ? 'fa-circle-xmark'
+                   : statut === 'success' ? 'fa-check-circle'
+                   : statut === 'info' ? 'fa-circle-info'
+                   : 'fa-exclamation-circle';
+        const cssClass = statut === 'success' ? 'success'
+                       : statut === 'partial' ? 'partial'
+                       : statut === 'info' ? 'partial'
+                       : 'error';
 
         let dateFormatee = '';
         if (notif.date_creation) {
@@ -3383,10 +3658,13 @@ function afficherNotificationPersistanteAvecId(notificationId, type, titre, mess
 
 async function init() {
     await initMesConges();
-    
+
+    // Charger le badge "demandes à valider" dès le démarrage (visible sur toutes les sections)
+    await loadDemandesEnAttente();
+
     // Initialiser le header et year-nav selon la section active au chargement
     updateYearNavDisplay();
-    
+
     // Initialiser le dropdown de notifications
     initNotifDropdown();
 
@@ -3419,6 +3697,9 @@ async function init() {
             if (calGlobal && calGlobal.classList.contains('active')) {
                 await chargerCalendrierGlobal();
             }
+
+            // Rafraîchir les demandes en attente (badge nav + bandeau si Mes Congés actif)
+            await loadDemandesEnAttente();
         } catch (e) {
             console.error('[POLLING] Erreur:', e);
         }
@@ -3439,6 +3720,9 @@ let evenementsHistoriqueAttaches = false;
 
 async function chargerHistoriqueComplet() {
     try {
+        // Rafraîchir la liste des demandes à valider (bandeau + badge nav)
+        await loadDemandesEnAttente();
+
         // Charger tous les salariés
         const salaries = await window.api.getAllSalaries();
         const select = document.getElementById('selectSalarieHistorique');
@@ -3652,9 +3936,15 @@ function genererCalendrierHistorique() {
                     jourDiv.classList.add('maladie');
                     tooltipLabel = 'Arrêt maladie';
                 }
+
+                if (absence.statut === 'en_attente') {
+                    jourDiv.classList.add('en-attente');
+                    tooltipLabel += ' — En attente de validation';
+                }
+
                 if (tooltipLabel) {
                     const tip = absence.commentaire
-                        ? `${tooltipLabel} — ${absence.commentaire}`
+                        ? `${tooltipLabel} · ${absence.commentaire}`
                         : tooltipLabel;
                     jourDiv.setAttribute('data-tooltip', tip);
                 }
@@ -3744,7 +4034,7 @@ document.getElementById('btnConfirmerMaladie').addEventListener('click', async (
             commentaire: commentaire || null,
             debut_periode: 'matin',
             fin_periode: 'fin-journee',
-            statut: 'valide',
+            autoValide: true,
             skipNotification: true
         });
 
@@ -3861,7 +4151,9 @@ async function supprimerUnJour(absence, dateISO) {
             date_fin:     absence.date_fin,
             duree_jours:  nouvelleDureeJours,
             duree_heures: nouvelleDureeHeures,
-            commentaire:  absence.commentaire
+            commentaire:  absence.commentaire,
+            autoValide:   true,
+            skipNotification: true
         });
         await window.api.updateSoldesAfterAbsence(
             absence.salarie_id, anneeEnCours, absence.type,
@@ -3888,7 +4180,9 @@ async function supprimerUnJour(absence, dateISO) {
             date_fin:     formatDateISO(nouvelleDateFin),
             duree_jours:  nouvelleDureeJours,
             duree_heures: nouvelleDureeHeures,
-            commentaire:  absence.commentaire
+            commentaire:  absence.commentaire,
+            autoValide:   true,
+            skipNotification: true
         });
         await window.api.updateSoldesAfterAbsence(
             absence.salarie_id, anneeEnCours, absence.type,
@@ -3921,7 +4215,9 @@ async function supprimerUnJour(absence, dateISO) {
         date_fin:     formatDateISO(jourAvant),
         duree_jours:  joursPartie1,
         duree_heures: joursPartie1 * 7,
-        commentaire:  absence.commentaire
+        commentaire:  absence.commentaire,
+        autoValide:   true,
+        skipNotification: true
     });
     await window.api.updateSoldesAfterAbsence(
         absence.salarie_id, anneeEnCours, absence.type, joursPartie1, joursPartie1 * 7
@@ -3935,7 +4231,9 @@ async function supprimerUnJour(absence, dateISO) {
         date_fin:     absence.date_fin,
         duree_jours:  joursPartie2,
         duree_heures: joursPartie2 * 7,
-        commentaire:  absence.commentaire
+        commentaire:  absence.commentaire,
+        autoValide:   true,
+        skipNotification: true
     });
     await window.api.updateSoldesAfterAbsence(
         absence.salarie_id, anneeEnCours, absence.type, joursPartie2, joursPartie2 * 7
@@ -4014,7 +4312,7 @@ if (formAbsenceUser) {
                 commentaire: commentaire || null,
                 debut_periode: debutPeriode,
                 fin_periode: finPeriode,
-                statut: 'valide',
+                autoValide: true,
                 skipNotification: true
             };
 

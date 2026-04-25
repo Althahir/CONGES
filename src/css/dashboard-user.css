@@ -345,6 +345,11 @@ body {
     margin-left: auto;
 }
 
+.calendrier-table td[data-tooltip]:hover {
+    z-index: 1000;
+    position: relative;
+}
+
 .calendrier-table td[data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -357,7 +362,7 @@ body {
     border-radius: 4px;
     font-size: 1.1em;
     white-space: nowrap;
-    z-index: 1000;
+    z-index: 1001;
     pointer-events: none;
     margin-bottom: 5px;
 }

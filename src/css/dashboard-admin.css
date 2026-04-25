@@ -871,6 +871,12 @@ h2 {
     font-weight: bold;
 }
 
+/* Hover : remonter le jour au-dessus pour que le tooltip dépasse des voisins */
+.jour[data-tooltip]:hover {
+    z-index: 1000;
+    position: relative;
+}
+
 /* Tooltip (déjà présent mais on s'assure qu'il fonctionne) */
 .jour[data-tooltip]:hover::after {
     content: attr(data-tooltip);
@@ -884,7 +890,7 @@ h2 {
     border-radius: 4px;
     font-size: 0.75em;
     white-space: nowrap;
-    z-index: 1000;
+    z-index: 1001;
     pointer-events: none;
     margin-bottom: 5px;
 }
@@ -1259,6 +1265,10 @@ h2 {
 /* Tooltip calendrier historique */
 .jour-historique[data-tooltip] { position: relative; }
 
+.jour-historique[data-tooltip]:hover {
+    z-index: 1000;
+}
+
 .jour-historique[data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -1271,7 +1281,7 @@ h2 {
     border-radius: 4px;
     font-size: 0.75em;
     white-space: nowrap;
-    z-index: 1000;
+    z-index: 1001;
     pointer-events: none;
 }
 
@@ -2223,6 +2233,11 @@ h2 {
     position: relative;
 }
 
+.indicateur-colonne[data-tooltip]:hover,
+.indicateur-degrade[data-tooltip]:hover {
+    z-index: 1000;
+}
+
 .indicateur-colonne[data-tooltip]:hover::after,
 .indicateur-degrade[data-tooltip]:hover::after {
     content: attr(data-tooltip);
@@ -2236,7 +2251,7 @@ h2 {
     border-radius: 4px;
     font-size: 1.1em;
     white-space: nowrap;
-    z-index: 1000;
+    z-index: 1001;
     pointer-events: none;
 }
 

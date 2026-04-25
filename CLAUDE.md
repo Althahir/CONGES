@@ -117,8 +117,7 @@ notifications         (id, type, titre, message, details, statut, date_creation,
 rtt_annuels           (id, annee_debut, date_debut, date_fin, nb_jours_periode, nb_jours_we,
                        nb_jours_feries_hors_we, nb_jours_travailles, nb_cp_a_deduire, nb_rtt, annee)
 heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation)
-historique_modifs     (id, salarie_id, action, table_concernee, details, date_modif, modifie_par)
-db_version            (version) -- actuellement v2
+db_version            (version) -- actuellement v5
 ```
 
 ---

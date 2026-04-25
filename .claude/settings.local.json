@@ -19,7 +19,17 @@
       "Bash(git commit:*)",
       "Bash(xargs grep:*)",
       "Bash(git add:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(node -e \"require\\(''''./src/main.js''''\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"require\\(''./src/handlers/traitements''\\)\")",
+      "Bash(git diff *)",
+      "Read(//tmp/**)",
+      "Bash(mkdir -p /tmp/conges-backup)",
+      "Bash(cp src/preload.js /tmp/conges-backup/preload.js)",
+      "Bash(cp src/main.js /tmp/conges-backup/main.js)",
+      "Bash(cp CLAUDE.md /tmp/conges-backup/CLAUDE.md)",
+      "Bash(cp src/pages/dashboard-admin.html /tmp/conges-backup/dashboard-admin.html)"
     ]
   }
 }

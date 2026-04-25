@@ -88,7 +88,8 @@ async function loadSoldes() {
         const annee = anneeActuelle;
         const soldes = await window.api.getSoldes(user.id, annee);
         const salarie = await window.api.getSalarie(user.id);
-        
+        const pending = await window.api.getEnAttenteParSalarie(user.id, annee);
+
         if (soldes) {
             function appliquerEtatSolde(tuile, valeur) {
                 if (!tuile) return;
@@ -98,37 +99,62 @@ async function loadSoldes() {
                 else tuile.classList.add('solde-negatif');
             }
 
+            function afficherPending(el, valeur, unite = 'j') {
+                if (!el) return;
+                if (valeur > 0) {
+                    const txt = valeur % 1 === 0 ? valeur : valeur.toFixed(1);
+                    el.textContent = `(-${txt}${unite} en attente)`;
+                    el.classList.add('has-pending');
+                } else {
+                    el.textContent = '';
+                    el.classList.remove('has-pending');
+                }
+            }
+
             document.getElementById('solde-cp-n1').textContent = soldes.cp_n1.toFixed(2) + 'j';
             document.getElementById('solde-cp-n').textContent = soldes.cp_n.toFixed(2) + 'j';
             appliquerEtatSolde(document.querySelector('.solde-card-compact.cp-n1'), soldes.cp_n1);
             appliquerEtatSolde(document.querySelector('.solde-card-compact.cp-n'), soldes.cp_n);
 
+            // Pending CP : on répartit comme debiterSoldes (N-1 puis N)
+            const cpPending = (pending && pending.cp) || 0;
+            const cpN1Pending = Math.min(Math.max(soldes.cp_n1, 0), cpPending);
+            const cpNPending = Math.max(0, cpPending - cpN1Pending);
+            afficherPending(document.getElementById('solde-cp-n1-pending'), cpN1Pending);
+            afficherPending(document.getElementById('solde-cp-n-pending'), cpNPending);
+
             // RTT
             const tuileRTT = document.querySelector('.solde-card-compact.rtt');
+            const pendingRTTEl = document.getElementById('solde-rtt-pending');
             if (salarie.a_droit_rtt === 1) {
                 document.getElementById('solde-rtt').textContent = soldes.rtt.toFixed(2) + 'j';
                 appliquerEtatSolde(tuileRTT, soldes.rtt);
+                afficherPending(pendingRTTEl, (pending && pending.rtt) || 0);
             } else {
                 document.getElementById('solde-rtt').textContent = 'N/A';
                 if (tuileRTT) {
                     tuileRTT.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRTT.classList.add('sans-droit');
                 }
+                afficherPending(pendingRTTEl, 0);
             }
 
             // Récup
             const tuileRecup = document.querySelector('.solde-card-compact.recup');
+            const pendingRecupEl = document.getElementById('solde-recup-pending');
             if (salarie.a_droit_recup === 1) {
                 const recupJours = (soldes.recup_heures / 7).toFixed(2);
                 document.getElementById('solde-recup').innerHTML =
                     `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j)</p>`;
                 appliquerEtatSolde(tuileRecup, soldes.recup_heures);
+                afficherPending(pendingRecupEl, (pending && pending.recup_heures) || 0, 'h');
             } else {
                 document.getElementById('solde-recup').textContent = 'N/A';
                 if (tuileRecup) {
                     tuileRecup.classList.remove('solde-positif', 'solde-zero', 'solde-negatif');
                     tuileRecup.classList.add('sans-droit');
                 }
+                afficherPending(pendingRecupEl, 0);
             }
         }
         
@@ -160,7 +186,9 @@ async function chargerAbsences() {
         console.log('Absences brutes:', absences);
         console.log('Chargement absences pour année:', anneeActuelle); // ← AJOUTE
 
-        
+        // Mettre à jour la liste "Mes demandes en cours" (toutes années confondues)
+        chargerMesDemandesEnCours(absences);
+
         // Filtrer pour l'année actuelle (inclure les absences qui touchent l'année)
         absences = absences.filter(abs => {
             const anneeDebut = new Date(abs.date_debut).getFullYear();
@@ -168,12 +196,50 @@ async function chargerAbsences() {
             // Garder si l'absence commence OU finit dans l'année affichée
             return anneeDebut === anneeActuelle || anneeFin === anneeActuelle;
         });
-        
+
         console.log('Absences filtrées pour', anneeActuelle, ':', absences);
     } catch (error) {
         console.error('Erreur lors du chargement des absences:', error);
         absences = [];
     }
+}
+
+// ========== MES DEMANDES EN COURS (workflow validation) ==========
+
+function escapeHtmlUser(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function chargerMesDemandesEnCours(toutesAbsences) {
+    const section = document.getElementById('mesDemandesCours');
+    const liste = document.getElementById('mesDemandesCoursListe');
+    if (!section || !liste) return;
+
+    const enAttente = (toutesAbsences || []).filter(a => a.statut === 'en_attente');
+    if (enAttente.length === 0) {
+        section.style.display = 'none';
+        liste.innerHTML = '';
+        return;
+    }
+
+    section.style.display = 'block';
+    const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
+    const labelsType = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
+
+    liste.innerHTML = enAttente.map(d => {
+        const dureeStr = (d.type === 'RECUP' && !d.duree_jours) ? `${d.duree_heures}h` : `${(d.duree_jours || 0).toFixed(1)}j`;
+        const periode = d.date_debut === d.date_fin ? fmtDate(d.date_debut) : `${fmtDate(d.date_debut)} → ${fmtDate(d.date_fin)}`;
+        return `
+            <div class="mes-demande-item">
+                <div>
+                    <div class="mes-demande-item-type">${labelsType[d.type] || d.type} · ${dureeStr}</div>
+                    <div class="mes-demande-item-dates">${periode}</div>
+                </div>
+                <span class="mes-demande-item-badge">En attente</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // ========== GÉNÉRATION DU CALENDRIER ==========
@@ -259,25 +325,32 @@ function genererCalendrier() {
             // Ne colorer que si ce n'est PAS un jour chômé
             if (absence && dayOfWeek !== 0 && dayOfWeek !== 6 && !jourFerie) {
                 const type = absence.type.toUpperCase();
+                let tooltipLabel = '';
                 if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                     jourDiv.classList.add('cp');
-                    jourDiv.setAttribute('data-tooltip', 'Congés payés');
+                    tooltipLabel = 'Congés payés';
                 } else if (type === 'RTT') {
                     jourDiv.classList.add('rtt');
-                    jourDiv.setAttribute('data-tooltip', 'RTT');
+                    tooltipLabel = 'RTT';
                 } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
-                    jourDiv.setAttribute('data-tooltip', 'Récupération');
+                    tooltipLabel = 'Récupération';
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
-                    jourDiv.setAttribute('data-tooltip', 'Arrêt maladie');
+                    tooltipLabel = 'Arrêt maladie';
+                }
+
+                // Marquer en attente de validation
+                if (absence.statut === 'en_attente') {
+                    jourDiv.classList.add('en-attente');
+                    tooltipLabel += ' — En attente de validation';
                 }
 
                 // Ajouter le commentaire si présent
                 if (absence.commentaire) {
-                    const currentTooltip = jourDiv.getAttribute('data-tooltip');
-                    jourDiv.setAttribute('data-tooltip', `${currentTooltip} - ${absence.commentaire}`);
+                    tooltipLabel += ` · ${absence.commentaire}`;
                 }
+                if (tooltipLabel) jourDiv.setAttribute('data-tooltip', tooltipLabel);
             }
             
             joursMoisDiv.appendChild(jourDiv);
@@ -498,9 +571,9 @@ async function calculerDureeAbsence() {
     // Surligner les jours dans le calendrier
     surlignerJoursPrevisualisation(dateDebut, dateFin);
 
-    // Vérifier les chevauchements avec les absences existantes (valides uniquement)
+    // Vérifier les chevauchements avec les absences existantes (valides + en attente)
     const chevauchement = absences.find(abs => {
-        if (abs.statut !== 'valide') return false;
+        if (abs.statut !== 'valide' && abs.statut !== 'en_attente') return false;
         return (dateDebut <= abs.date_fin && dateFin >= abs.date_debut);
     });
 
@@ -515,7 +588,8 @@ async function calculerDureeAbsence() {
             'MALADIE': 'Arrêt maladie'
         }[chevauchement.type] || chevauchement.type;
         const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
-        alertePeriode.textContent = `⚠️ Chevauchement avec ${typeTexte} du ${fmtDate(chevauchement.date_debut)} au ${fmtDate(chevauchement.date_fin)}`;
+        const suffixe = chevauchement.statut === 'en_attente' ? ' (en attente)' : '';
+        alertePeriode.textContent = `⚠️ Chevauchement avec ${typeTexte}${suffixe} du ${fmtDate(chevauchement.date_debut)} au ${fmtDate(chevauchement.date_fin)}`;
         alertePeriode.classList.add('show', 'alert-warning');
     }
 
@@ -724,18 +798,35 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
         };
         
         const resultAbsence = await window.api.createAbsence(absenceData);
-        
+
         if (resultAbsence.success) {
-            // Mettre à jour les soldes
+            // Si la demande est en attente, on ne débite PAS les soldes et on ne génère PAS de PDF.
+            // Le débit et le PDF seront faits par l'admin au moment de la validation.
+            if (resultAbsence.statut === 'en_attente') {
+                await loadSoldes();
+                await chargerAbsences();
+                genererCalendrier();
+
+                successMessage.textContent = '✅ Demande envoyée — en attente de validation par l\'administrateur.';
+                successMessage.classList.add('show');
+
+                document.getElementById('formAbsence').reset();
+                document.getElementById('resumeAbsence').style.display = 'none';
+                document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
+
+                setTimeout(() => successMessage.classList.remove('show'), 4000);
+                return;
+            }
+
+            // Statut 'valide' : débit solde + PDF (cas admin ou pose auto-validée)
             const resultSoldes = await window.api.updateSoldesAfterAbsence(
-                user.id, 
-                anneeActuelle, 
-                typeAbsence, 
-                dureeJours, 
+                user.id,
+                anneeActuelle,
+                typeAbsence,
+                dureeJours,
                 dureeHeures
             );
-            
-            // Générer le PDF
+
             const pdfData = {
                 salarie: {
                     nom: user.nom,
@@ -757,7 +848,7 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
                     recup_heures: resultSoldes.recup_heures
                 }
             };
-            
+
             try {
                 const pdfResult = await window.api.genererPDF(pdfData);
                 if (pdfResult.success) {
@@ -766,21 +857,17 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
             } catch (error) {
                 console.error('Erreur génération PDF:', error);
             }
-            
-            // Recharger les données
+
             await loadSoldes();
             await chargerCalendrier();
-            // await afficherHistorique();
-            // Message de succès
+
             successMessage.textContent = '✅ Absence enregistrée avec succès ! PDF généré.';
             successMessage.classList.add('show');
-            
-            // Réinitialiser le formulaire
+
             document.getElementById('formAbsence').reset();
             document.getElementById('resumeAbsence').style.display = 'none';
             document.querySelectorAll('.jour.preview').forEach(j => j.classList.remove('preview'));
-            
-            // Masquer le message après 3 secondes
+
             setTimeout(() => {
                 successMessage.classList.remove('show');
             }, 3000);
@@ -1059,17 +1146,104 @@ async function init() {
     await chargerCalendrier();
     initModalHeuresSup();
 
+    // Afficher au chargement les notifs workflow non lues (validation/refus reçus en absence du user)
+    const _idsNotifsVues = new Set();
+    try {
+        const initNotifs = await window.api.getNotificationsNonLues(user.id);
+        for (const notif of (initNotifs || [])) {
+            if ((notif.type === 'demande_validee' || notif.type === 'demande_refusee') && !_idsNotifsVues.has(notif.id)) {
+                afficherToastUser(notif);
+                _idsNotifsVues.add(notif.id);
+            } else {
+                _idsNotifsVues.add(notif.id);
+            }
+        }
+    } catch (e) { console.error('[INIT NOTIFS]', e); }
+
     // Polling toutes les 30s pour détecter les changements depuis d'autres postes
+    // (validation/refus admin, autres poses, traitements auto)
     setInterval(async () => {
         try {
+            await loadSoldes();
+            await chargerAbsences();
+            genererCalendrier();
+
             const calGlobal = document.getElementById('calendrier-global-section');
             if (calGlobal && calGlobal.classList.contains('active')) {
                 await chargerCalendrierGlobal();
+            }
+
+            // Détecter nouvelles notifications (par id jamais vu) → toast pour les types workflow
+            const notifs = await window.api.getNotificationsNonLues(user.id);
+            for (const notif of (notifs || [])) {
+                if (_idsNotifsVues.has(notif.id)) continue;
+                _idsNotifsVues.add(notif.id);
+                if (notif.type === 'demande_validee' || notif.type === 'demande_refusee') {
+                    afficherToastUser(notif);
+                }
             }
         } catch (e) {
             console.error('[POLLING] Erreur:', e);
         }
     }, 30000);
+}
+
+// ========== TOAST (workflow validation) — même structure que côté admin ==========
+const _toastQueueUser = [];
+let _toastActifUser = false;
+
+function afficherToastUser(notif) {
+    _toastQueueUser.push(notif);
+    _afficherProchainToastUser();
+}
+
+function _afficherProchainToastUser() {
+    if (_toastActifUser || _toastQueueUser.length === 0) return;
+    _toastActifUser = true;
+    const notif = _toastQueueUser.shift();
+
+    const type = notif.statut === 'success' ? 'success' : 'error';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    const titre = (notif.titre || '').replace(/[<>]/g, '');
+    const message = (notif.message || '').replace(/[<>]/g, '');
+
+    const toast = document.createElement('div');
+    toast.className = `notification-persistante ${type}`;
+    toast.innerHTML = `
+        <div class="notification-icon"><i class="fa-solid ${icon}"></i></div>
+        <div class="notification-content">
+            <h4>${titre}</h4>
+            <p>${message}</p>
+        </div>
+        <button class="notification-close"><i class="fa-solid fa-times"></i></button>
+    `;
+
+    document.body.appendChild(toast);
+
+    const dismiss = async () => {
+        if (notif.id) {
+            try { await window.api.marquerNotificationLue(notif.id); } catch (e) { /* */ }
+        }
+        toast.remove();
+        _toastActifUser = false;
+        _afficherProchainToastUser();
+    };
+
+    toast.querySelector('.notification-close').addEventListener('click', dismiss);
+}
+
+// Écouter les notifs temps réel envoyées par le main process (workflow validation)
+if (window.api.onTraitementAutomatique) {
+    window.api.onTraitementAutomatique(async (data) => {
+        if ((data.type === 'demande_validee' || data.type === 'demande_refusee') && data.user_id === user.id) {
+            afficherToastUser({ id: null, titre: data.titre, message: data.message, statut: data.statut });
+            try {
+                await loadSoldes();
+                await chargerAbsences();
+                genererCalendrier();
+            } catch (e) { /* ignorer */ }
+        }
+    });
 }
 
 init();

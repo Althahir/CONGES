@@ -213,18 +213,6 @@ const MIGRATIONS = [
             FOREIGN KEY (salarie_id) REFERENCES salaries(id)
         )`);
 
-        await db.execute(`CREATE TABLE IF NOT EXISTS historique_modifs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            salarie_id INTEGER,
-            action TEXT NOT NULL,
-            table_concernee TEXT NOT NULL,
-            details TEXT,
-            date_modif DATETIME DEFAULT CURRENT_TIMESTAMP,
-            modifie_par INTEGER,
-            FOREIGN KEY (salarie_id) REFERENCES salaries(id),
-            FOREIGN KEY (modifie_par) REFERENCES salaries(id)
-        )`);
-
         // Colonnes potentiellement manquantes — ignorer les erreurs si elles existent déjà
         const alterCols = [
             "ALTER TABLE absences ADD COLUMN debut_periode TEXT DEFAULT 'journee-complete'",
@@ -271,6 +259,61 @@ const MIGRATIONS = [
         }
 
         await db.execute('CREATE INDEX IF NOT EXISTS idx_historique_taux_salarie ON historique_taux(salarie_id)');
+    },
+
+    // v3 : workflow de validation des congés (en_attente / valide / refuse)
+    async function v3(db) {
+        const alterCols = [
+            "ALTER TABLE absences ADD COLUMN motif_refus TEXT",
+            "ALTER TABLE absences ADD COLUMN date_validation TEXT",
+            "ALTER TABLE absences ADD COLUMN validee_par INTEGER",
+        ];
+        for (const sql of alterCols) {
+            try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
+        }
+
+        // Backfill : toute absence existante sans statut clair est considérée validée
+        await db.execute(`UPDATE absences SET statut = 'valide' WHERE statut IS NULL OR statut = ''`);
+
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_absences_statut ON absences(statut)');
+    },
+
+    // v4 : recrée la table absences pour élargir la contrainte CHECK sur statut
+    //      (la DB initiale avait CHECK (statut IN ('valide', 'supprime')) qui bloque en_attente/refuse)
+    async function v4(db) {
+        await db.execute(`CREATE TABLE IF NOT EXISTS absences_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salarie_id INTEGER REFERENCES salaries(id),
+            type TEXT NOT NULL,
+            date_debut DATE NOT NULL,
+            date_fin DATE NOT NULL,
+            duree_jours REAL,
+            duree_heures REAL,
+            statut TEXT DEFAULT 'valide' CHECK (statut IN ('valide', 'en_attente', 'refuse', 'supprime')),
+            commentaire TEXT,
+            date_creation DATETIME DEFAULT CURRENT_TIMESTAMP,
+            debut_periode TEXT DEFAULT 'journee-complete',
+            fin_periode TEXT DEFAULT 'journee-complete',
+            motif_refus TEXT,
+            date_validation TEXT,
+            validee_par INTEGER
+        )`);
+
+        await db.execute(`INSERT INTO absences_new
+            (id, salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire, date_creation, debut_periode, fin_periode, motif_refus, date_validation, validee_par)
+            SELECT id, salarie_id, type, date_debut, date_fin, duree_jours, duree_heures, statut, commentaire, date_creation, debut_periode, fin_periode, motif_refus, date_validation, validee_par
+            FROM absences`);
+
+        await db.execute('DROP TABLE absences');
+        await db.execute('ALTER TABLE absences_new RENAME TO absences');
+
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_absences_salarie ON absences(salarie_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_absences_statut ON absences(statut)');
+    },
+
+    // v5 : suppression de la table historique_modifs (jamais utilisée, pas de handler IPC)
+    async function v5(db) {
+        try { await db.execute('DROP TABLE IF EXISTS historique_modifs'); } catch (e) { /* ignorer */ }
     },
 ];
 

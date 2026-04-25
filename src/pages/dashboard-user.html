@@ -83,18 +83,22 @@
                         <div class="solde-card-compact cp-n1">
                             <div class="solde-label-compact">CP N-1</div>
                             <div class="solde-value-compact" id="solde-cp-n1">-</div>
+                            <div class="solde-pending" id="solde-cp-n1-pending"></div>
                         </div>
                         <div class="solde-card-compact cp-n">
                             <div class="solde-label-compact">CP N</div>
                             <div class="solde-value-compact" id="solde-cp-n">-</div>
+                            <div class="solde-pending" id="solde-cp-n-pending"></div>
                         </div>
                         <div class="solde-card-compact rtt">
                             <div class="solde-label-compact">RTT</div>
                             <div class="solde-value-compact" id="solde-rtt">-</div>
+                            <div class="solde-pending" id="solde-rtt-pending"></div>
                         </div>
                         <div class="solde-card-compact recup">
                             <div class="solde-label-compact">Récup</div>
                             <div class="solde-value-compact" id="solde-recup">-</div>
+                            <div class="solde-pending" id="solde-recup-pending"></div>
                         </div>
                     </div>
                     
@@ -102,6 +106,12 @@
                     <button id="btnAjouterHeuresSup" class="btn-heures-sup" style="display: none;">
                         <i class="fa-solid fa-plus"></i> Ajouter heures sup
                     </button>
+                </div>
+
+                <!-- Mes demandes en cours (workflow validation) -->
+                <div class="panel-section mes-demandes-section" id="mesDemandesCours" style="display: none;">
+                    <h2><i class="fa-solid fa-hourglass-half"></i> En attente de validation</h2>
+                    <div id="mesDemandesCoursListe" class="mes-demandes-liste"></div>
                 </div>
 
                 <!-- Modal Heures Supplémentaires -->

@@ -38,11 +38,14 @@ const { contextBridge, ipcRenderer } = require('electron');
  * @property {string} date_fin - format YYYY-MM-DD
  * @property {number} duree_jours
  * @property {number} [duree_heures]
- * @property {string} statut - 'valide' | 'supprime'
+ * @property {string} statut - 'valide' | 'en_attente' | 'refuse'
  * @property {string} [commentaire]
  * @property {string} [date_creation]
  * @property {string} [debut_periode] - 'journee-complete' | 'apres-midi'
  * @property {string} [fin_periode] - 'journee-complete' | 'midi'
+ * @property {string} [motif_refus]
+ * @property {string} [date_validation]
+ * @property {number} [validee_par]
  */
 
 /**
@@ -206,12 +209,20 @@ contextBridge.exposeInMainWorld('api', {
 
     // Gestion des absences
 
-    /** @param {{salarie_id: number, type: string, date_debut: string, date_fin: string, duree_jours: number, duree_heures?: number, commentaire?: string, debut_periode?: string, fin_periode?: string, skipNotification?: boolean}} data @returns {Promise<SuccessResult>} */
+    /** @param {{salarie_id: number, type: string, date_debut: string, date_fin: string, duree_jours: number, duree_heures?: number, commentaire?: string, debut_periode?: string, fin_periode?: string, skipNotification?: boolean, autoValide?: boolean}} data @returns {Promise<{success: boolean, id: number, statut: 'valide'|'en_attente'}>} */
     createAbsence: (data) => ipcRenderer.invoke('createAbsence', data),
     /** @param {number} salarieId @returns {Promise<Absence[]>} */
     getAbsences: (salarieId) => ipcRenderer.invoke('getAbsences', salarieId),
     /** @returns {Promise<AbsenceAvecSalarie[]>} */
     getAllAbsences: () => ipcRenderer.invoke('getAllAbsences'),
+    /** @returns {Promise<AbsenceAvecSalarie[]>} */
+    getAbsencesEnAttente: () => ipcRenderer.invoke('getAbsencesEnAttente'),
+    /** @param {number} salarieId @param {number} annee @returns {Promise<{cp: number, rtt: number, recup_heures: number}>} */
+    getEnAttenteParSalarie: (salarieId, annee) => ipcRenderer.invoke('getEnAttenteParSalarie', salarieId, annee),
+    /** @param {number} absenceId @param {number} adminId @returns {Promise<SuccessResult>} */
+    validerAbsence: (absenceId, adminId) => ipcRenderer.invoke('validerAbsence', absenceId, adminId),
+    /** @param {number} absenceId @param {number} adminId @param {string} motif @returns {Promise<SuccessResult>} */
+    refuserAbsence: (absenceId, adminId, motif) => ipcRenderer.invoke('refuserAbsence', absenceId, adminId, motif),
     /** @param {number} absenceId @returns {Promise<SuccessResult>} */
     deleteAbsence: (absenceId) => ipcRenderer.invoke('deleteAbsence', absenceId),
     /** @param {number} absenceId @param {Object} updates @returns {Promise<SuccessResult>} */
