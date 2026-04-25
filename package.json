@@ -17,12 +17,17 @@
     "electron"
   ],
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Althahir/CONGES.git"
+  },
   "dependencies": {
     "@libsql/client": "^0.17.2",
     "bcrypt": "^5.1.1",
     "chart.js": "^4.5.1",
     "electron-squirrel-startup": "^1.0.1",
     "pdfkit": "^0.17.2",
+    "update-electron-app": "^3.1.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

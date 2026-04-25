@@ -10,6 +10,17 @@ if (require('electron-squirrel-startup')) {
 // Forcer le dossier userData à "conges-lce" quel que soit le productName
 app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 
+// Mises à jour automatiques via update.electronjs.org (no-op en dev, skip si pas de Squirrel)
+// Check toutes les heures, télécharge en background, applique au prochain redémarrage de l'app
+if (app.isPackaged) {
+    try {
+        const { updateElectronApp } = require('update-electron-app');
+        updateElectronApp({ updateInterval: '1 hour' });
+    } catch (e) {
+        console.error('[update-electron-app] init failed:', e);
+    }
+}
+
 // Contexte partagé avec les handlers
 const ctx = { db: null, mainWindow: null };
 
