@@ -13,6 +13,54 @@
     }
 })();
 
+// ========== PRÉREMPLISSAGE MOT DE PASSE MÉMORISÉ ==========
+async function rafraichirEtatRappel() {
+    const email = document.getElementById('email').value.trim();
+    const passwordInput = document.getElementById('password');
+    const rememberCb = document.getElementById('rememberMe');
+    const btnOublier = document.getElementById('btnOublierMdp');
+
+    if (!email) {
+        rememberCb.checked = false;
+        btnOublier.style.display = 'none';
+        return;
+    }
+
+    try {
+        const stored = await window.api.getCredential(email);
+        if (stored) {
+            passwordInput.value = stored;
+            rememberCb.checked = true;
+            btnOublier.style.display = 'inline-block';
+        } else {
+            // L'email n'a pas de mot de passe mémorisé : on ne touche pas le champ password
+            // (l'utilisateur peut être en train de changer de compte)
+            rememberCb.checked = false;
+            btnOublier.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Erreur lecture credential:', e);
+    }
+}
+
+// Au chargement initial (après pré-remplissage de l'email)
+rafraichirEtatRappel();
+
+// Quand l'utilisateur change l'email manuellement → re-check
+document.getElementById('email').addEventListener('change', rafraichirEtatRappel);
+document.getElementById('email').addEventListener('blur', rafraichirEtatRappel);
+
+// Bouton "Oublier ce mot de passe"
+document.getElementById('btnOublierMdp').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    if (!email) return;
+    if (!confirm('Oublier le mot de passe mémorisé pour cet email ?')) return;
+    await window.api.deleteCredential(email);
+    document.getElementById('password').value = '';
+    document.getElementById('rememberMe').checked = false;
+    document.getElementById('btnOublierMdp').style.display = 'none';
+});
+
 function saveEmailToLocal(email) {
     let emails = JSON.parse(localStorage.getItem('knownEmails') || '[]');
     // Retirer si déjà présent, puis mettre en premier (le plus récent en tête)
@@ -43,10 +91,24 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     
     try {
         const result = await window.api.login(email, password);
-        
+
         if (result.success) {
             // Mémoriser l'email sur ce poste
             saveEmailToLocal(email);
+
+            // Mémoriser le mot de passe (chiffré via safeStorage) si la case est cochée
+            const remember = document.getElementById('rememberMe').checked;
+            try {
+                if (remember) {
+                    await window.api.saveCredential(email, password);
+                } else {
+                    // Si l'utilisateur a décoché alors qu'un mdp était mémorisé, le supprimer
+                    await window.api.deleteCredential(email);
+                }
+            } catch (credErr) {
+                console.error('Erreur sauvegarde credential:', credErr);
+            }
+
             // Stocker les infos utilisateur en session
             sessionStorage.setItem('user', JSON.stringify(result.user));
             

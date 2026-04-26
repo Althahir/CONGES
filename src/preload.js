@@ -179,6 +179,16 @@ contextBridge.exposeInMainWorld('api', {
     /** @param {number} userId @param {string} password @returns {Promise<SuccessResult>} */
     setPassword: (userId, password) => ipcRenderer.invoke('setPassword', userId, password),
 
+    // Mots de passe mémorisés sur le poste (chiffrés via safeStorage)
+    /** @param {string} email @param {string} password @returns {Promise<SuccessResult>} */
+    saveCredential: (email, password) => ipcRenderer.invoke('saveCredential', email, password),
+    /** @param {string} email @returns {Promise<string|null>} Mot de passe en clair si mémorisé, sinon null */
+    getCredential: (email) => ipcRenderer.invoke('getCredential', email),
+    /** @param {string} email @returns {Promise<SuccessResult>} */
+    deleteCredential: (email) => ipcRenderer.invoke('deleteCredential', email),
+    /** @param {string} email @returns {Promise<boolean>} */
+    hasCredential: (email) => ipcRenderer.invoke('hasCredential', email),
+
     // Gestion des salaries
 
     /** @param {number} id @returns {Promise<Salarie>} */
