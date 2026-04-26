@@ -415,9 +415,25 @@ function createWindow() {
 
 app.whenReady().then(async () => {
     const tursoConfig = await getTursoConfig();
-    if (!tursoConfig) return;
+    if (!tursoConfig) {
+        app.quit();
+        return;
+    }
 
-    await connectDatabase(tursoConfig);
+    try {
+        await connectDatabase(tursoConfig);
+    } catch (err) {
+        console.error('Erreur connexion base de données :', err);
+        dialog.showErrorBox(
+            'Connexion à la base impossible',
+            'Impossible de se connecter à la base de données.\n\n' +
+            'Vérifiez votre connexion internet, puis relancez l\'application.\n\n' +
+            'Détail technique : ' + (err && err.message ? err.message : String(err))
+        );
+        app.quit();
+        return;
+    }
+
     createWindow();
 
     setTimeout(async () => {
@@ -431,6 +447,14 @@ app.whenReady().then(async () => {
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+}).catch((err) => {
+    console.error('Erreur fatale au démarrage :', err);
+    dialog.showErrorBox(
+        'Erreur au démarrage',
+        'Une erreur inattendue est survenue au lancement.\n\n' +
+        'Détail technique : ' + (err && err.message ? err.message : String(err))
+    );
+    app.quit();
 });
 
 app.on('window-all-closed', function () {

@@ -2,7 +2,7 @@
   "name": "conges-lce",
   "productName": "Gestion des Congés",
   "author": "Excellium",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Gestion des Congés",
   "main": "src/main.js",
   "scripts": {
