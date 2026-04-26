@@ -238,6 +238,19 @@
                     </div>
                     <div class="modal-body">
                         <div class="form-group-compact">
+                            <label>Type de saisie *</label>
+                            <div id="hsupTypeToggleAdmin" class="hsup-type-toggle" data-active-type="credit">
+                                <button type="button" class="hsup-type-btn active" data-type="credit">
+                                    <i class="fa-solid fa-plus-circle"></i>
+                                    Heures sup. faites à déclarer
+                                </button>
+                                <button type="button" class="hsup-type-btn" data-type="retrait">
+                                    <i class="fa-solid fa-minus-circle"></i>
+                                    Récupération d'heures
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group-compact">
                             <label for="heuresSupNbAdmin">Nombre d'heures *</label>
                             <input type="number" id="heuresSupNbAdmin" min="0.5" step="0.5" placeholder="Ex: 3.5">
                         </div>
@@ -247,7 +260,7 @@
                         </div>
                         <div class="form-group-compact">
                             <label for="heuresSupCommentaireAdmin">Commentaire</label>
-                            <textarea id="heuresSupCommentaireAdmin" rows="3" placeholder="Description du travail effectué..."></textarea>
+                            <textarea id="heuresSupCommentaireAdmin" rows="3" placeholder="Saisir une description"></textarea>
                         </div>
                         <div id="heuresSupMsgAdmin" style="display: none;"></div>
                     </div>
@@ -481,9 +494,12 @@
                 <div class="solde-value" id="soldeRecupHistorique">0h</div>
             </div>
         </div>
-        <div id="btnAjouterMaladieWrapper" style="text-align: center; margin-top: 12px;">
+        <div id="btnAjouterMaladieWrapper" style="text-align: center; margin-top: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button id="btnAjouterMaladie" class="btn-ajouter-maladie">
                 <i class="fa-solid fa-plus"></i> Arrêt maladie
+            </button>
+            <button id="btnHistoriqueRecup" class="btn-historique-recup" style="display: none;">
+                <i class="fa-solid fa-list"></i> Heures de récup
             </button>
         </div>
     </div>
@@ -556,6 +572,52 @@
         <div class="modal-footer">
             <button id="btnAnnulerMaladie" class="btn-secondary">Annuler</button>
             <button id="btnConfirmerMaladie" class="btn-primary">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Historique Heures Récup -->
+<div id="modalHistoriqueRecup" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-header">
+            <h3>Historique des heures de récupération</h3>
+            <button id="closeModalHistoriqueRecup" class="close-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p id="histoRecupSalarieName" style="font-weight:600; margin-bottom:12px;"></p>
+            <div id="histoRecupContenu"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnFermerHistoRecup" class="btn-secondary">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmation Suppression Heure Récup -->
+<div id="modalSuppressionRecup" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>Supprimer cette heure de récupération</h3>
+            <button id="closeModalSuppressionRecup" class="close-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="infoSuppressionRecup" class="info-absence-suppression"></div>
+            <div id="warningSoldeRecup" class="warning-suppression" style="display:none; background: rgba(237, 113, 17, 0.12); border-left: 3px solid var(--orange);">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <p id="warningSoldeRecupTexte"></p>
+            </div>
+            <div class="warning-suppression">
+                <i class="fa-solid fa-exclamation-triangle"></i>
+                <p>Le solde de récupération du salarié sera ajusté automatiquement et il sera notifié de la suppression.</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnAnnulerSuppressionRecup" class="btn-secondary">Annuler</button>
+            <button id="btnConfirmerSuppressionRecup" class="btn-danger">Confirmer la suppression</button>
         </div>
     </div>
 </div>

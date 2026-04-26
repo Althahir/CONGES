@@ -950,8 +950,23 @@ function initModalHeuresSup() {
 
     document.getElementById('heuresSupDate').value = new Date().toISOString().split('T')[0];
 
+    const toggle = document.getElementById('hsupTypeToggle');
+    if (toggle) {
+        toggle.querySelectorAll('.hsup-type-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                toggle.dataset.activeType = btn.dataset.type;
+                toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+            });
+        });
+    }
+
     document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
         document.getElementById('heuresSupMsg').style.display = 'none';
+        // Reset toggle au crédit par défaut à chaque ouverture
+        if (toggle) {
+            toggle.dataset.activeType = 'credit';
+            toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'credit'));
+        }
         modal.style.display = 'flex';
     });
 
@@ -964,28 +979,36 @@ function initModalHeuresSup() {
     });
 
     document.getElementById('btnEnregistrerHeuresSup').addEventListener('click', async () => {
-        const heures = parseFloat(document.getElementById('heuresSupNb').value);
+        const heuresAbs = parseFloat(document.getElementById('heuresSupNb').value);
         const date = document.getElementById('heuresSupDate').value;
         const commentaire = document.getElementById('heuresSupCommentaire').value.trim();
         const msg = document.getElementById('heuresSupMsg');
+        const type = (toggle && toggle.dataset.activeType) || 'credit';
 
-        if (!heures || heures <= 0 || !date) {
+        if (!heuresAbs || heuresAbs <= 0 || !date) {
             msg.textContent = "Veuillez renseigner le nombre d'heures et la date.";
             msg.className = 'form-error';
             msg.style.display = 'block';
             return;
         }
 
+        const heures = type === 'retrait' ? -heuresAbs : heuresAbs;
+        const commentaireDefaut = type === 'retrait'
+            ? `Récupération d'heures du ${date}`
+            : `Heures supplémentaires du ${date}`;
+
         try {
             await window.api.ajouterRecup({
                 salarie_id: user.id,
-                annee: anneeActuelle,
+                annee: new Date(date).getFullYear(),
                 heures,
                 date,
-                commentaire: commentaire || `Heures supplémentaires du ${date}`
+                commentaire: commentaire || commentaireDefaut
             });
 
-            msg.textContent = `${heures}h enregistrées avec succès.`;
+            msg.textContent = type === 'retrait'
+                ? `${heuresAbs}h retirées du solde.`
+                : `${heuresAbs}h ajoutées au solde.`;
             msg.className = 'form-success';
             msg.style.display = 'block';
 
@@ -1152,7 +1175,7 @@ async function init() {
     try {
         const initNotifs = await window.api.getNotificationsNonLues(user.id);
         for (const notif of (initNotifs || [])) {
-            if ((notif.type === 'demande_validee' || notif.type === 'demande_refusee') && !_idsNotifsVues.has(notif.id)) {
+            if ((notif.type === 'demande_validee' || notif.type === 'demande_refusee' || notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee') && !_idsNotifsVues.has(notif.id)) {
                 afficherToastUser(notif);
                 _idsNotifsVues.add(notif.id);
             } else {
@@ -1179,7 +1202,7 @@ async function init() {
             for (const notif of (notifs || [])) {
                 if (_idsNotifsVues.has(notif.id)) continue;
                 _idsNotifsVues.add(notif.id);
-                if (notif.type === 'demande_validee' || notif.type === 'demande_refusee') {
+                if (notif.type === 'demande_validee' || notif.type === 'demande_refusee' || notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee') {
                     afficherToastUser(notif);
                 }
             }

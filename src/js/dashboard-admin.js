@@ -3014,35 +3014,160 @@ let dataImportGlobal = null;
 async function lireExcelImport(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        
+
         reader.onload = (e) => {
             try {
-                // Utiliser la librairie XLSX (déjà disponible)
                 const data = new Uint8Array(e.target.result);
+                // cellDates: false (défaut) — on convertit nous-même les serials Excel via XLSX.SSF.parse_date_code
+                // pour éviter les bugs DST/timezone que xlsx applique sur les Date JS
                 const workbook = XLSX.read(data, { type: 'array' });
-                
-                // Chercher l'onglet "Archives"
+
                 if (!workbook.SheetNames.includes('Archives')) {
                     reject(new Error('Onglet "Archives" introuvable dans le fichier'));
                     return;
                 }
-                
+
+                // Onglet Archives → absences
                 const worksheet = workbook.Sheets['Archives'];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                
-                // Parser les données
-                const parsed = parseDataExcel(jsonData);
-                
-                resolve(parsed);
-                
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: null });
+                const absences = parseDataExcel(jsonData);
+
+                // Onglets "RECUP <Nom>" → heures de récup
+                const heuresRecup = [];
+                for (const sheetName of workbook.SheetNames) {
+                    if (!sheetName.startsWith('RECUP ')) continue;
+                    const ws = workbook.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+                    const saisies = parseRecupSheet(rows, sheetName);
+                    heuresRecup.push(...saisies);
+                }
+
+                resolve({ absences, heuresRecup });
+
             } catch (error) {
                 reject(error);
             }
         };
-        
+
         reader.onerror = () => reject(new Error('Erreur lecture fichier'));
         reader.readAsArrayBuffer(file);
     });
+}
+
+// Parse un onglet "RECUP <Nom Prenom>" et retourne les saisies normalisées
+function parseRecupSheet(jsonData, sheetName) {
+    // Nom du salarié : depuis le titre de l'onglet (priorité), fallback sur ligne 1 col A
+    let personne = sheetName.replace(/^RECUP\s+/i, '').trim();
+    if (jsonData.length > 1 && jsonData[1] && jsonData[1][0]) {
+        const nomLigne = jsonData[1][0].toString().trim();
+        if (nomLigne) personne = nomLigne;
+    }
+
+    // Trouver la ligne d'en-tête (chercher "IDENTIFICATION")
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+        const row = jsonData[i];
+        if (!row) continue;
+        if (row[0] && row[0].toString().toUpperCase().includes('IDENTIFICATION')) {
+            headerRow = i;
+            break;
+        }
+    }
+    if (headerRow === -1) return [];
+
+    const saisies = [];
+    for (let i = headerRow + 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row) continue;
+        const type = row[0] ? row[0].toString().trim().toUpperCase() : '';
+        if (type !== 'H.SUP' && type !== 'RECUP') continue;
+
+        const dateRaw = row[1];
+        const date = parseDateUS(dateRaw);
+        if (!date) continue;
+
+        const objet = row[2] ? row[2].toString().trim() : '';
+        const horaires = row[3] ? row[3].toString().trim() : '';
+        const heuresPos = parseFloat(row[4]);
+        const heuresNeg = parseFloat(row[5]);
+
+        // Skip les RECUP "journée entière" : déjà importées via l'onglet Archives en tant qu'absence
+        if (type === 'RECUP' && /journ[ée]e/i.test(horaires)) {
+            continue;
+        }
+
+        let heures = NaN;
+        if (type === 'H.SUP' && !isNaN(heuresPos)) heures = heuresPos;
+        else if (type === 'RECUP' && !isNaN(heuresNeg)) heures = -heuresNeg;
+        if (isNaN(heures) || heures === 0) continue;
+
+        const commentaireParts = [];
+        if (objet) commentaireParts.push(objet);
+        if (horaires) commentaireParts.push(`(${horaires})`);
+        const commentaire = commentaireParts.join(' ').trim();
+
+        saisies.push({
+            personne,
+            date: formatDateISO(date),
+            heures,
+            commentaire: commentaire || null,
+            type
+        });
+    }
+    return saisies;
+}
+
+// Parse une date depuis cellule Excel : serial number Excel, Date JS, ou string D/M/YY FR / M/D/YY US
+// Détection automatique du format string selon les valeurs (si une partie > 12, elle est forcément le jour)
+function parseDateUS(value) {
+    if (value == null || value === '') return null;
+
+    // Cellule Excel formatée en date → serial number. On le convertit via SSF.parse_date_code
+    // qui retourne {y, m, d} en UTC pure, sans bug DST/timezone
+    if (typeof value === 'number') {
+        if (typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) {
+            const obj = XLSX.SSF.parse_date_code(value);
+            if (obj && obj.y) {
+                const dt = new Date(obj.y, obj.m - 1, obj.d);
+                return isNaN(dt.getTime()) ? null : dt;
+            }
+        }
+        return null;
+    }
+
+    if (value instanceof Date) {
+        if (isNaN(value.getTime())) return null;
+        // xlsx peut décaler les Date JS d'~1 sec selon DST → on corrige via les composants UTC
+        // décalés de l'offset local pour retomber sur le bon jour (lecture en local timezone)
+        const adjusted = new Date(value.getTime() - value.getTimezoneOffset() * 60000 + 12 * 3600 * 1000);
+        return new Date(adjusted.getUTCFullYear(), adjusted.getUTCMonth(), adjusted.getUTCDate());
+    }
+    const parts = value.toString().split('/');
+    if (parts.length !== 3) return null;
+    const a = parseInt(parts[0]);
+    const b = parseInt(parts[1]);
+    let y = parseInt(parts[2]);
+    if (isNaN(a) || isNaN(b) || isNaN(y)) return null;
+    if (y < 100) y = y < 50 ? 2000 + y : 1900 + y;
+
+    let day, month;
+    if (a > 12 && b <= 12) {
+        // parts[0] est forcément le jour → format FR (D/M/Y)
+        day = a; month = b;
+    } else if (b > 12 && a <= 12) {
+        // parts[1] est forcément le jour → format US (M/D/Y)
+        day = b; month = a;
+    } else if (a <= 12 && b <= 12) {
+        // Ambigu : par défaut format français (D/M/Y) puisque le fichier vient d'un contexte FR
+        day = a; month = b;
+    } else {
+        return null; // les deux > 12 : invalide
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const dt = new Date(y, month - 1, day);
+    if (isNaN(dt.getTime())) return null;
+    return dt;
 }
 
 // Parser les données Excel
@@ -3103,21 +3228,33 @@ function parseDataExcel(jsonData) {
 // Afficher la prévisualisation
 function afficherPreviewImport(data) {
     dataImportGlobal = data;
-    
-    // Statistiques
-    const nbLignes = data.length;
-    const personnes = [...new Set(data.map(d => d.personne))];
-    const annees = [...new Set(data.map(d => d.annee))];
-    
+
+    const absences = data.absences || [];
+    const heuresRecup = data.heuresRecup || [];
+
+    // Statistiques absences
+    const personnesAbs = [...new Set(absences.map(d => d.personne))];
+    const anneesAbs = [...new Set(absences.map(d => d.annee))];
+
+    // Statistiques heures récup
+    const personnesRecup = [...new Set(heuresRecup.map(h => h.personne))];
+    const anneesRecup = [...new Set(heuresRecup.map(h => new Date(h.date).getFullYear()))];
+    const totalHsup = heuresRecup.filter(h => h.type === 'H.SUP').length;
+    const totalRecup = heuresRecup.filter(h => h.type === 'RECUP').length;
+
     document.getElementById('previewStatsImport').innerHTML = `
-        <p><strong>${nbLignes}</strong> lignes trouvées</p>
-        <p><strong>${personnes.length}</strong> personnes distinctes</p>
-        <p><strong>Années :</strong> ${annees.sort().join(', ')}</p>
+        <p><strong>Absences (onglet Archives)</strong></p>
+        <p>${absences.length} lignes — ${personnesAbs.length} personne(s) — années ${anneesAbs.sort().join(', ') || '—'}</p>
+        ${heuresRecup.length > 0 ? `
+            <p style="margin-top:10px;"><strong>Heures de récupération (onglets RECUP)</strong></p>
+            <p>${heuresRecup.length} saisies (${totalHsup} H.SUP / ${totalRecup} RECUP) — ${personnesRecup.length} personne(s) — années ${anneesRecup.sort().join(', ') || '—'}</p>
+        ` : '<p style="margin-top:10px; color:var(--text-secondary);">Aucun onglet "RECUP &lt;Nom&gt;" trouvé.</p>'}
     `;
-    
-    // Tableau (5 premières lignes)
-    const preview = data.slice(0, 10);
+
+    // Tableau preview absences
+    const preview = absences.slice(0, 10);
     let tableHTML = `
+        <h5 style="margin-bottom:6px;">Aperçu des absences</h5>
         <table>
             <thead>
                 <tr>
@@ -3129,7 +3266,6 @@ function afficherPreviewImport(data) {
             </thead>
             <tbody>
     `;
-    
     preview.forEach(ligne => {
         tableHTML += `
             <tr>
@@ -3140,15 +3276,48 @@ function afficherPreviewImport(data) {
             </tr>
         `;
     });
-    
     tableHTML += '</tbody></table>';
-    
-    if (data.length > 10) {
-        tableHTML += `<p style="text-align: center; color: #999; margin-top: 10px;">... et ${data.length - 10} autres lignes</p>`;
+    if (absences.length > 10) {
+        tableHTML += `<p style="text-align: center; color: #999; margin-top: 10px;">... et ${absences.length - 10} autres absences</p>`;
     }
-    
+
+    // Tableau preview heures récup
+    if (heuresRecup.length > 0) {
+        const previewR = heuresRecup.slice(0, 10);
+        tableHTML += `
+            <h5 style="margin-top:14px; margin-bottom:6px;">Aperçu des heures de récupération</h5>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Personne</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Heures</th>
+                        <th>Commentaire</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        previewR.forEach(h => {
+            const heuresAffich = (h.heures > 0 ? '+' : '') + h.heures.toFixed(2).replace(/\.?0+$/, '') + 'h';
+            tableHTML += `
+                <tr>
+                    <td>${h.personne}</td>
+                    <td>${new Date(h.date).toLocaleDateString('fr-FR')}</td>
+                    <td>${h.type}</td>
+                    <td style="color:${h.heures > 0 ? 'var(--bleu)' : 'var(--rouge)'}; font-weight:600;">${heuresAffich}</td>
+                    <td>${h.commentaire || ''}</td>
+                </tr>
+            `;
+        });
+        tableHTML += '</tbody></table>';
+        if (heuresRecup.length > 10) {
+            tableHTML += `<p style="text-align: center; color: #999; margin-top: 10px;">... et ${heuresRecup.length - 10} autres saisies</p>`;
+        }
+    }
+
     document.getElementById('previewTableImport').innerHTML = tableHTML;
-    
+
     // Passer à l'étape 2
     document.getElementById('importStep1').style.display = 'none';
     document.getElementById('importStep2').style.display = 'block';
@@ -3169,9 +3338,16 @@ async function executerImport() {
             </div>
         `;
         
-        // Regrouper les données par personne
+        // Compatibilité : si l'appel renvoie encore un array (anciens flux), on l'enveloppe
+        const payload = Array.isArray(dataImportGlobal)
+            ? { absences: dataImportGlobal, heuresRecup: [] }
+            : (dataImportGlobal || { absences: [], heuresRecup: [] });
+        const absencesData = payload.absences || [];
+        const heuresRecupData = payload.heuresRecup || [];
+
+        // Regrouper les absences par personne
         const parPersonne = {};
-        dataImportGlobal.forEach(ligne => {
+        absencesData.forEach(ligne => {
             if (!parPersonne[ligne.personne]) {
                 parPersonne[ligne.personne] = [];
             }
@@ -3224,21 +3400,80 @@ async function executerImport() {
                 }
                 
                 details.push(`✅ ${nomComplet} : ${absences.length} absence(s) créée(s)`);
-                
+
             } catch (error) {
                 nbErreursPersonne++;
                 erreurs.push(`❌ ${nomComplet} : ${error.message}`);
             }
         }
-        
+
+        // ===== Import des heures de récupération (onglets RECUP <Nom>) =====
+        const parPersonneRecup = {};
+        heuresRecupData.forEach(h => {
+            if (!parPersonneRecup[h.personne]) parPersonneRecup[h.personne] = [];
+            parPersonneRecup[h.personne].push(h);
+        });
+
+        let nbRecupCreees = 0;
+        let nbRecupDoublons = 0;
+        let nbRecupInconnus = 0;
+        let nbRecupErreurs = 0;
+
+        for (const [nomComplet, lignes] of Object.entries(parPersonneRecup)) {
+            try {
+                const salarie = await trouverSalarie(nomComplet);
+                if (!salarie) {
+                    nbRecupInconnus++;
+                    erreurs.push(`❌ ${nomComplet} : Salarié inconnu (onglet RECUP ignoré, ${lignes.length} saisie(s) non importée(s))`);
+                    continue;
+                }
+
+                const existantes = await window.api.getHeuresSup(salarie.id);
+                let cree = 0;
+                let dbl = 0;
+
+                for (const ligne of lignes) {
+                    const doublon = existantes.find(e =>
+                        e.date === ligne.date &&
+                        Math.abs(Number(e.heures) - ligne.heures) < 0.001 &&
+                        (e.commentaire || null) === (ligne.commentaire || null)
+                    );
+                    if (doublon) { dbl++; nbRecupDoublons++; continue; }
+
+                    try {
+                        const annee = new Date(ligne.date).getFullYear();
+                        await window.api.ajouterRecup({
+                            salarie_id: salarie.id,
+                            annee,
+                            heures: ligne.heures,
+                            date: ligne.date,
+                            commentaire: ligne.commentaire,
+                            source: 'import_excel'
+                        });
+                        existantes.push({ date: ligne.date, heures: ligne.heures, commentaire: ligne.commentaire });
+                        cree++;
+                        nbRecupCreees++;
+                    } catch (errLigne) {
+                        nbRecupErreurs++;
+                        erreurs.push(`❌ ${nomComplet} (${ligne.date}, ${ligne.heures}h) : ${errLigne.message}`);
+                    }
+                }
+
+                details.push(`📋 ${nomComplet} : ${cree} saisie(s) récup importée(s)${dbl > 0 ? `, ${dbl} doublon(s)` : ''}`);
+            } catch (error) {
+                nbRecupErreurs++;
+                erreurs.push(`❌ ${nomComplet} (récup) : ${error.message}`);
+            }
+        }
+
         // Log dans historique_traitements
         try {
             await window.api.logHistoriqueTraitement({
                 type: 'IMPORT_EXCEL',
                 annee: new Date().getFullYear(),
                 nb_salaries_traites: Object.keys(parPersonne).length - nbErreursPersonne,
-                details: `${nbAbsencesCreees} créée(s), ${nbDoublons} doublon(s), ${nbErreursLignes} erreur(s), ${nbErreursPersonne} introuvable(s)`,
-                statut: (nbErreursPersonne === 0 && nbErreursLignes === 0) ? 'success' : 'partial',
+                details: `Absences : ${nbAbsencesCreees} créée(s), ${nbDoublons} doublon(s), ${nbErreursLignes} erreur(s), ${nbErreursPersonne} introuvable(s) | Récup : ${nbRecupCreees} créée(s), ${nbRecupDoublons} doublon(s), ${nbRecupErreurs} erreur(s), ${nbRecupInconnus} salarié(s) inconnu(s)`,
+                statut: (nbErreursPersonne === 0 && nbErreursLignes === 0 && nbRecupInconnus === 0 && nbRecupErreurs === 0) ? 'success' : 'partial',
                 message_erreur: erreurs.length > 0 ? erreurs.join(' | ') : ''
             });
         } catch (logErr) {
@@ -3247,13 +3482,15 @@ async function executerImport() {
 
         // Afficher le résultat
         let resultHTML = '';
+        const okGlobal = (nbErreursPersonne === 0 && nbErreursLignes === 0 && nbRecupInconnus === 0 && nbRecupErreurs === 0);
 
-        if (nbErreursPersonne === 0 && nbErreursLignes === 0) {
+        if (okGlobal) {
             resultHTML += `
                 <div class="import-success">
                     <h4>✅ Import réussi !</h4>
                     <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s) pour <strong>${Object.keys(parPersonne).length}</strong> personne(s)</p>
-                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) ignoré(s)</p>` : ''}
+                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) absence(s) ignoré(s)</p>` : ''}
+                    ${heuresRecupData.length > 0 ? `<p><strong>${nbRecupCreees}</strong> saisie(s) récup importée(s)${nbRecupDoublons > 0 ? ` — ${nbRecupDoublons} doublon(s) ignoré(s)` : ''}</p>` : ''}
                 </div>
             `;
         } else {
@@ -3261,9 +3498,12 @@ async function executerImport() {
                 <div class="import-error">
                     <h4>⚠️ Import terminé avec des avertissements</h4>
                     <p><strong>${nbAbsencesCreees}</strong> absence(s) créée(s)</p>
-                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) ignoré(s)</p>` : ''}
+                    ${nbDoublons > 0 ? `<p><strong>${nbDoublons}</strong> doublon(s) absence(s) ignoré(s)</p>` : ''}
                     ${nbErreursPersonne > 0 ? `<p><strong>${nbErreursPersonne}</strong> personne(s) non trouvée(s)</p>` : ''}
-                    ${nbErreursLignes > 0 ? `<p><strong>${nbErreursLignes}</strong> ligne(s) en erreur</p>` : ''}
+                    ${nbErreursLignes > 0 ? `<p><strong>${nbErreursLignes}</strong> ligne(s) absence(s) en erreur</p>` : ''}
+                    ${heuresRecupData.length > 0 ? `<p style="margin-top:8px;"><strong>${nbRecupCreees}</strong> saisie(s) récup importée(s)${nbRecupDoublons > 0 ? ` — ${nbRecupDoublons} doublon(s)` : ''}</p>` : ''}
+                    ${nbRecupInconnus > 0 ? `<p><strong>${nbRecupInconnus}</strong> salarié(s) inconnu(s) sur les onglets RECUP</p>` : ''}
+                    ${nbRecupErreurs > 0 ? `<p><strong>${nbRecupErreurs}</strong> erreur(s) sur les saisies récup</p>` : ''}
                 </div>
             `;
         }
@@ -4057,6 +4297,12 @@ async function chargerCalendrierHistorique() {
             cardRecup.classList.add('sans-droit');
             cardRecup.classList.remove('solde-vide');
         }
+
+        // Bouton historique heures de récup : visible uniquement si droit récup
+        const btnHistoRecup = document.getElementById('btnHistoriqueRecup');
+        if (btnHistoRecup) {
+            btnHistoRecup.style.display = salarie.a_droit_recup ? 'inline-flex' : 'none';
+        }
         
         soldesDiv.style.display = 'block';
         
@@ -4268,6 +4514,306 @@ document.getElementById('btnConfirmerMaladie').addEventListener('click', async (
         console.error('Erreur ajout maladie:', error);
         erreur.textContent = 'Erreur lors de l\'enregistrement';
         erreur.classList.add('show');
+    }
+});
+
+// ========== MODAL HISTORIQUE HEURES RÉCUP ==========
+
+let heuresRecupListe = [];
+let heuresRecupSalarie = null;
+let heureRecupASupprimer = null;
+let heureRecupEnEdition = null;
+let anneeFiltreRecup = 'all';
+let moisFiltreRecup = 'all';
+
+const NOMS_MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+function formatDateFR(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR');
+}
+
+async function rafraichirSoldesHistoriqueAvecModaleOuverte() {
+    if (!salarieHistoriqueSelectionne) return;
+    try {
+        const salarie = await window.api.getSalarie(salarieHistoriqueSelectionne);
+        const anneeEnCours = new Date().getFullYear();
+        const soldes = await window.api.getSoldes(salarieHistoriqueSelectionne, anneeEnCours);
+        const recupVal = soldes ? soldes.recup_heures : 0;
+        if (salarie.a_droit_recup) {
+            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(1)}h`;
+            const cardRecup = document.querySelector('#soldesHistorique .solde-card.sh-recup');
+            cardRecup.classList.remove('sans-droit');
+            cardRecup.classList.toggle('solde-vide', recupVal === 0);
+        }
+    } catch (e) { console.error('[REFRESH SOLDES RECUP]', e); }
+}
+
+document.getElementById('btnHistoriqueRecup').addEventListener('click', async () => {
+    if (!salarieHistoriqueSelectionne) return;
+    heuresRecupSalarie = await window.api.getSalarie(salarieHistoriqueSelectionne);
+    heureRecupEnEdition = null;
+    anneeFiltreRecup = 'all';
+    moisFiltreRecup = 'all';
+    document.getElementById('histoRecupSalarieName').textContent = `${heuresRecupSalarie.prenom} ${heuresRecupSalarie.nom}`;
+    await chargerListeHeuresRecup();
+    document.getElementById('modalHistoriqueRecup').style.display = 'flex';
+});
+
+async function chargerListeHeuresRecup() {
+    heuresRecupListe = await window.api.getHistoriqueRecupComplet(salarieHistoriqueSelectionne);
+    renderTableauHeuresRecup();
+}
+
+function renderTableauHeuresRecup() {
+    const container = document.getElementById('histoRecupContenu');
+    if (!heuresRecupListe.length) {
+        container.innerHTML = '<p style="text-align:center; padding: 20px; color: var(--text-secondary);">Aucune heure de récupération saisie pour ce salarié.</p>';
+        return;
+    }
+
+    // Années distinctes triées desc
+    const annees = [...new Set(heuresRecupListe.map(h => new Date(h.date).getFullYear()))].sort((a, b) => b - a);
+
+    // Reset si l'année filtrée n'existe plus
+    if (anneeFiltreRecup !== 'all' && !annees.includes(parseInt(anneeFiltreRecup))) {
+        anneeFiltreRecup = 'all';
+        moisFiltreRecup = 'all';
+    }
+
+    // Filtre étape 1 : par année
+    const apresAnnee = anneeFiltreRecup === 'all'
+        ? heuresRecupListe
+        : heuresRecupListe.filter(h => new Date(h.date).getFullYear() === parseInt(anneeFiltreRecup));
+
+    // Mois distincts dans l'année filtrée (1-12), pour alimenter le select mois
+    const moisDispos = [...new Set(apresAnnee.map(h => new Date(h.date).getMonth() + 1))].sort((a, b) => a - b);
+
+    // Reset mois si plus disponible
+    if (moisFiltreRecup !== 'all' && !moisDispos.includes(parseInt(moisFiltreRecup))) {
+        moisFiltreRecup = 'all';
+    }
+
+    // Filtre étape 2 : par mois
+    const liste = moisFiltreRecup === 'all'
+        ? apresAnnee
+        : apresAnnee.filter(h => (new Date(h.date).getMonth() + 1) === parseInt(moisFiltreRecup));
+
+    let html = `
+        <div class="filtre-recup-row">
+            <label for="filtreAnneeRecup">Année :</label>
+            <select id="filtreAnneeRecup">
+                <option value="all" ${anneeFiltreRecup === 'all' ? 'selected' : ''}>Toutes (${heuresRecupListe.length})</option>
+                ${annees.map(a => {
+                    const nb = heuresRecupListe.filter(h => new Date(h.date).getFullYear() === a).length;
+                    return `<option value="${a}" ${parseInt(anneeFiltreRecup) === a ? 'selected' : ''}>${a} (${nb})</option>`;
+                }).join('')}
+            </select>
+            <label for="filtreMoisRecup">Mois :</label>
+            <select id="filtreMoisRecup">
+                <option value="all" ${moisFiltreRecup === 'all' ? 'selected' : ''}>Tous (${apresAnnee.length})</option>
+                ${moisDispos.map(m => {
+                    const nb = apresAnnee.filter(h => (new Date(h.date).getMonth() + 1) === m).length;
+                    return `<option value="${m}" ${parseInt(moisFiltreRecup) === m ? 'selected' : ''}>${NOMS_MOIS[m - 1]} (${nb})</option>`;
+                }).join('')}
+            </select>
+        </div>
+        <table class="tableau-heures-recup">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Heures</th>
+                    <th>Commentaire</th>
+                    <th>Saisie le</th>
+                    <th class="col-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const h of liste) {
+        const enEdition = heureRecupEnEdition === h.id;
+        const isReadOnly = h._origine === 'absence_recup';
+        const dateSaisieRaw = h.date_creation ? formatDateFR(h.date_creation) : '—';
+        let badge = '';
+        if (h.source === 'import_excel') badge = ' <span class="badge-import">(import excel)</span>';
+        else if (h.source === 'pose_conge') badge = ' <span class="badge-pose-conge">(congé posé)</span>';
+        const dateSaisie = `${dateSaisieRaw}${badge}`;
+        const heuresNum = Number(h.heures);
+        const isPose = heuresNum < 0;
+        const classes = [];
+        if (enEdition) classes.push('ligne-edition');
+        if (isPose && !enEdition) classes.push('ligne-pose');
+        if (isReadOnly) classes.push('ligne-readonly');
+        const heuresAffichage = isPose
+            ? `<span class="heures-pose">${heuresNum.toFixed(1)}h</span>`
+            : `<span class="heures-credit">+${heuresNum.toFixed(1)}h</span>`;
+
+        const tooltipReadOnly = "Cette ligne provient d'un congé posé. Pour la modifier ou la supprimer, double-cliquez sur le jour correspondant dans le calendrier ci-dessous.";
+
+        if (enEdition && !isReadOnly) {
+            html += `
+                <tr data-id="${h.id}" class="${classes.join(' ')}">
+                    <td><input type="date" class="edit-date" value="${h.date}"></td>
+                    <td><input type="number" class="edit-heures" step="0.5" value="${h.heures}"></td>
+                    <td><input type="text" class="edit-commentaire" value="${h.commentaire ? h.commentaire.replace(/"/g, '&quot;') : ''}" placeholder="(optionnel)"></td>
+                    <td class="cellule-saisie">${dateSaisie}</td>
+                    <td class="col-actions">
+                        <button class="btn-icone btn-icone-valider" data-action="save" data-id="${h.id}" title="Valider"><i class="fa-solid fa-check"></i></button>
+                        <button class="btn-icone btn-icone-annuler" data-action="cancel" data-id="${h.id}" title="Annuler"><i class="fa-solid fa-xmark"></i></button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            const actionsHTML = isReadOnly
+                ? `
+                    <button class="btn-icone btn-icone-edit" disabled title="${escapeHtml(tooltipReadOnly)}"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icone btn-icone-delete" disabled title="${escapeHtml(tooltipReadOnly)}"><i class="fa-solid fa-trash"></i></button>
+                `
+                : `
+                    <button class="btn-icone btn-icone-edit" data-action="edit" data-id="${h.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icone btn-icone-delete" data-action="delete" data-id="${h.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+                `;
+            html += `
+                <tr data-id="${h.id}" class="${classes.join(' ')}"${isReadOnly ? ` title="${escapeHtml(tooltipReadOnly)}"` : ''}>
+                    <td>${formatDateFR(h.date)}</td>
+                    <td>${heuresAffichage}</td>
+                    <td class="cellule-commentaire">${h.commentaire ? escapeHtml(h.commentaire) : '<span class="vide">—</span>'}</td>
+                    <td class="cellule-saisie">${dateSaisie}</td>
+                    <td class="col-actions">${actionsHTML}</td>
+                </tr>
+            `;
+        }
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => handleActionRecup(btn.dataset.action, parseInt(btn.dataset.id)));
+    });
+
+    const selectAnnee = document.getElementById('filtreAnneeRecup');
+    if (selectAnnee) {
+        selectAnnee.addEventListener('change', () => {
+            anneeFiltreRecup = selectAnnee.value;
+            moisFiltreRecup = 'all';
+            heureRecupEnEdition = null;
+            renderTableauHeuresRecup();
+        });
+    }
+    const selectMois = document.getElementById('filtreMoisRecup');
+    if (selectMois) {
+        selectMois.addEventListener('change', () => {
+            moisFiltreRecup = selectMois.value;
+            heureRecupEnEdition = null;
+            renderTableauHeuresRecup();
+        });
+    }
+}
+
+async function handleActionRecup(action, id) {
+    // Garde-fou : les lignes provenant d'absences RECUP ne sont pas éditables ici
+    const ligne = heuresRecupListe.find(x => x.id === id);
+    if (ligne && ligne._origine === 'absence_recup') return;
+
+    if (action === 'edit') {
+        heureRecupEnEdition = id;
+        renderTableauHeuresRecup();
+    } else if (action === 'cancel') {
+        heureRecupEnEdition = null;
+        renderTableauHeuresRecup();
+    } else if (action === 'save') {
+        await sauverEditionRecup(id);
+    } else if (action === 'delete') {
+        ouvrirModalSuppressionRecup(id);
+    }
+}
+
+async function sauverEditionRecup(id) {
+    const ligne = document.querySelector(`#histoRecupContenu tr[data-id="${id}"]`);
+    const date = ligne.querySelector('.edit-date').value;
+    const heures = parseFloat(ligne.querySelector('.edit-heures').value);
+    const commentaire = ligne.querySelector('.edit-commentaire').value.trim();
+
+    if (!date || isNaN(heures) || heures === 0) {
+        afficherNotificationPersistante('error', 'Saisie invalide', 'La date est obligatoire et le nombre d\'heures ne peut pas être 0.');
+        return;
+    }
+
+    try {
+        await window.api.updateHeureSup({ id, date, heures, commentaire });
+        heureRecupEnEdition = null;
+        await chargerListeHeuresRecup();
+        await rafraichirSoldesHistoriqueAvecModaleOuverte();
+        afficherNotificationPersistante('success', 'Modification enregistrée', `Saisie mise à jour : ${heures}h du ${formatDateFR(date)}.`, 3000);
+    } catch (error) {
+        console.error('Erreur modification heure récup:', error);
+        afficherNotificationPersistante('error', 'Erreur', "La modification n'a pas pu être enregistrée.");
+    }
+}
+
+function ouvrirModalSuppressionRecup(id) {
+    const h = heuresRecupListe.find(x => x.id === id);
+    if (!h) return;
+    heureRecupASupprimer = h;
+
+    document.getElementById('infoSuppressionRecup').innerHTML = `
+        <p><strong>Date :</strong> ${formatDateFR(h.date)}</p>
+        <p><strong>Heures :</strong> ${Number(h.heures).toFixed(1)}h</p>
+        ${h.commentaire ? `<p><strong>Commentaire :</strong> ${escapeHtml(h.commentaire)}</p>` : ''}
+    `;
+
+    const anneeSaisie = new Date(h.date).getFullYear();
+    const anneeEnCours = new Date().getFullYear();
+    const soldeAffiche = parseFloat(document.getElementById('soldeRecupHistorique').textContent) || 0;
+    const warning = document.getElementById('warningSoldeRecup');
+    const warningTexte = document.getElementById('warningSoldeRecupTexte');
+
+    if (anneeSaisie === anneeEnCours && (soldeAffiche - Number(h.heures)) < 0) {
+        const futurSolde = (soldeAffiche - Number(h.heures)).toFixed(1);
+        warningTexte.textContent = `Attention : le solde de récupération deviendra négatif (${futurSolde}h). La suppression est tout de même autorisée.`;
+        warning.style.display = 'flex';
+    } else {
+        warning.style.display = 'none';
+    }
+
+    document.getElementById('modalSuppressionRecup').style.display = 'flex';
+}
+
+document.getElementById('closeModalHistoriqueRecup').addEventListener('click', () => {
+    document.getElementById('modalHistoriqueRecup').style.display = 'none';
+    heureRecupEnEdition = null;
+});
+document.getElementById('btnFermerHistoRecup').addEventListener('click', () => {
+    document.getElementById('modalHistoriqueRecup').style.display = 'none';
+    heureRecupEnEdition = null;
+});
+
+document.getElementById('closeModalSuppressionRecup').addEventListener('click', () => {
+    document.getElementById('modalSuppressionRecup').style.display = 'none';
+    heureRecupASupprimer = null;
+});
+document.getElementById('btnAnnulerSuppressionRecup').addEventListener('click', () => {
+    document.getElementById('modalSuppressionRecup').style.display = 'none';
+    heureRecupASupprimer = null;
+});
+
+document.getElementById('btnConfirmerSuppressionRecup').addEventListener('click', async () => {
+    if (!heureRecupASupprimer) return;
+    try {
+        await window.api.deleteHeureSup(heureRecupASupprimer.id);
+        const heuresSuppr = Number(heureRecupASupprimer.heures);
+        const dateSuppr = formatDateFR(heureRecupASupprimer.date);
+        document.getElementById('modalSuppressionRecup').style.display = 'none';
+        heureRecupASupprimer = null;
+        await chargerListeHeuresRecup();
+        await rafraichirSoldesHistoriqueAvecModaleOuverte();
+        afficherNotificationPersistante('success', 'Saisie supprimée', `${heuresSuppr.toFixed(1)}h du ${dateSuppr} retirées du solde.`, 3000);
+    } catch (error) {
+        console.error('Erreur suppression heure récup:', error);
+        afficherNotificationPersistante('error', 'Erreur', "La suppression n'a pas pu être effectuée.");
     }
 });
 
@@ -4624,8 +5170,22 @@ function initModalHeuresSupAdmin() {
 
     document.getElementById('heuresSupDateAdmin').value = new Date().toISOString().split('T')[0];
 
+    const toggle = document.getElementById('hsupTypeToggleAdmin');
+    if (toggle) {
+        toggle.querySelectorAll('.hsup-type-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                toggle.dataset.activeType = btn.dataset.type;
+                toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+            });
+        });
+    }
+
     document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
         document.getElementById('heuresSupMsgAdmin').style.display = 'none';
+        if (toggle) {
+            toggle.dataset.activeType = 'credit';
+            toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'credit'));
+        }
         modal.style.display = 'flex';
     });
 
@@ -4638,28 +5198,36 @@ function initModalHeuresSupAdmin() {
     });
 
     document.getElementById('btnEnregistrerHeuresSupAdmin').addEventListener('click', async () => {
-        const heures = parseFloat(document.getElementById('heuresSupNbAdmin').value);
+        const heuresAbs = parseFloat(document.getElementById('heuresSupNbAdmin').value);
         const date = document.getElementById('heuresSupDateAdmin').value;
         const commentaire = document.getElementById('heuresSupCommentaireAdmin').value.trim();
         const msg = document.getElementById('heuresSupMsgAdmin');
+        const type = (toggle && toggle.dataset.activeType) || 'credit';
 
-        if (!heures || heures <= 0 || !date) {
+        if (!heuresAbs || heuresAbs <= 0 || !date) {
             msg.textContent = "Veuillez renseigner le nombre d'heures et la date.";
             msg.className = 'form-error';
             msg.style.display = 'block';
             return;
         }
 
+        const heures = type === 'retrait' ? -heuresAbs : heuresAbs;
+        const commentaireDefaut = type === 'retrait'
+            ? `Récupération d'heures du ${date}`
+            : `Heures supplémentaires du ${date}`;
+
         try {
             await window.api.ajouterRecup({
                 salarie_id: user.id,
-                annee: anneeActuelle,
+                annee: new Date(date).getFullYear(),
                 heures,
                 date,
-                commentaire: commentaire || `Heures supplémentaires du ${date}`
+                commentaire: commentaire || commentaireDefaut
             });
 
-            msg.textContent = `${heures}h enregistrées avec succès.`;
+            msg.textContent = type === 'retrait'
+                ? `${heuresAbs}h retirées du solde.`
+                : `${heuresAbs}h ajoutées au solde.`;
             msg.className = 'form-success';
             msg.style.display = 'block';
 

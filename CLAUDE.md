@@ -122,8 +122,10 @@ historique_traitements(id, type, date_execution, annee, nb_salaries_traites, det
 notifications         (id, type, titre, message, details, statut, date_creation, lue, user_id)
 rtt_annuels           (id, annee_debut, date_debut, date_fin, nb_jours_periode, nb_jours_we,
                        nb_jours_feries_hors_we, nb_jours_travailles, nb_cp_a_deduire, nb_rtt, annee)
-heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation)
-db_version            (version) -- actuellement v6
+heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation, source)
+                      -- heures: peut être négatif (retrait/récupération) ou positif (crédit)
+                      -- source: 'manuel' (saisie modale) | 'import_excel' (import des onglets RECUP <Nom>)
+db_version            (version) -- actuellement v7
 ```
 
 ---
@@ -152,7 +154,7 @@ db_version            (version) -- actuellement v6
 **Salariés** (`salaries.js`) : `getSalarie`, `getAllSalaries`, `createSalarie`, `updateSalarie`, `deactivateSalarie`
 **Soldes** (`soldes.js`) : `getSoldes`, `updateSoldes`, `updateSoldesAfterAbsence`
 **Absences** (`absences.js`) : `createAbsence`, `getAbsences`, `getAllAbsences`, `deleteAbsence`, `updateAbsence`, `validerAbsence`, `refuserAbsence`, `getAbsencesEnAttente`, `getEnAttenteParSalarie`
-**Heures sup** (`heures-sup.js`) : `ajouter-recup`, `getHeuresSup`
+**Heures sup** (`heures-sup.js`) : `ajouter-recup`, `getHeuresSup`, `updateHeureSup`, `deleteHeureSup`, `getHistoriqueRecupComplet` (union heures_supplementaires + absences RECUP pour la modale « Heures de récup »)
 **Jours fériés** (`jours-feries.js`) : `getJoursFeries`, `addJourFerie`, `deleteJourFerie`
 **RTT** (`rtt.js`) : `getRTTAnnuels`, `addRTTAnnuel`
 **Traitements** (`traitements.js`) : `executerTraitementCP`, `executerTraitementCPMensuel`, `executerTraitementRTT`, `getConfigTraitements`, `updateConfigTraitement`, `getHistoriqueTraitements`, `logHistoriqueTraitement`
@@ -201,7 +203,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (25/04/2026 — v1.0.0)
+## État actuel du projet (26/04/2026 — v1.0.4 en préparation)
 
 **Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
 
@@ -216,6 +218,14 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 **Production** : v1.0.0 taggée et pushée le 25/04/2026. Installeur disponible : `out/make/squirrel.windows/x64/Gestion des Congés-X.X.X Setup.exe`. Guide d'installation : `DOCS/Guide_Installation_Conges_LCE.docx` (généré par `scripts/build-install-guide.py`).
 
 **Auto-update** (depuis 25/04/2026) : la lib `update-electron-app` (config dans `main.js`) check `update.electronjs.org/Althahir/CONGES` toutes les heures, télécharge la maj en background, puis le renderer affiche un toast custom « Mise à jour disponible — Redémarrer » (sans croix de fermeture, l'utilisateur clique quand il est prêt). Bandeau « Version installée » dans la section Paramètres admin pour validation visuelle. Procédure de release : bump `package.json` → `npm run make` → uploader les 3 fichiers de `out/make/squirrel.windows/x64/` (Setup.exe, .nupkg, RELEASES) sur une nouvelle GitHub Release. Pré-requis : repo GitHub public.
+
+**Modale « Heures de récup »** (depuis 26/04/2026 — v1.0.4) : nouveau bouton mauve « Heures de récup » dans la section Validation, à côté de « Arrêt maladie », visible si `a_droit_recup === 1`. Affiche un tableau unifié des 3 sources de saisies récupération : crédits/retraits manuels (modale Heures sup), imports Excel, et absences RECUP du calendrier. Filtres par année + mois (contextuels), colonne « Saisie le » avec badges colorés selon la source : `(import excel)` mauve, `(congé posé)` orange (lecture seule, boutons grisés + tooltip explicative pointant vers le calendrier historique). Édition inline pour les saisies natives (date, heures, commentaire) avec ajustement automatique du solde — gère le changement d'année. Suppression avec modale de confirmation jolie (bandeau orange si solde devient négatif). Notifs ciblées au salarié à chaque modif/suppression. Lignes négatives (jours posés) en rouge avec fond léger.
+
+**Modale « Ajouter heures sup »** (depuis 26/04/2026 — v1.0.4) : refonte avec un toggle clair en haut du formulaire — boutons « Heures sup. faites à déclarer » (bleu, crédit) ou « Récupération d'heures » (rouge, retrait). L'utilisateur saisit toujours un nombre positif, le code applique automatiquement le bon signe avant l'envoi à `ajouter-recup`. Année déduite de la date (et non plus `anneeActuelle`) pour cohérence avec l'imputation par année.
+
+**Import Excel — onglets RECUP** (depuis 26/04/2026 — v1.0.4) : `Ctrl+L+O+A+D` lit en plus tous les onglets dont le nom commence par `RECUP `. Chaque ligne `H.SUP` est importée comme crédit positif, chaque ligne `RECUP` horaire (genre RDV médical) comme retrait négatif. Les `RECUP` marquées « 1 journée(s) » sont **automatiquement ignorées** car elles correspondent à des absences déjà importées via l'onglet `Archives` (sinon double comptage). Détection de doublons par `(salarie_id, date, heures, commentaire)`. Salariés inconnus listés dans le rapport. Robustesse dates : conversion via `XLSX.SSF.parse_date_code()` sur les serials Excel pour éviter les bugs DST de `cellDates: true`, parser FR/US automatique pour les cellules texte.
+
+**Migration v7** (depuis 26/04/2026) : ajout colonne `source` à `heures_supplementaires` ('manuel' / 'import_excel') pour tracer l'origine de chaque saisie et afficher le badge correspondant dans la modale.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 

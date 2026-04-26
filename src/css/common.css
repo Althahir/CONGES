@@ -457,6 +457,61 @@ body {
     margin-top: 4px;
 }
 
+/* Toggle Heures sup / Récupération (modale Ajouter heures sup) */
+.hsup-type-toggle {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+.hsup-type-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--bg-surface-alt, #f4f4f4);
+    color: var(--text-secondary, #666);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.hsup-type-btn:hover {
+    background: rgba(0, 108, 137, 0.08);
+    color: var(--text-primary, #333);
+}
+.hsup-type-btn.active[data-type="credit"] {
+    background: var(--bleu);
+    color: white;
+    border-color: var(--bleu);
+}
+.hsup-type-btn.active[data-type="retrait"] {
+    background: var(--rouge);
+    color: white;
+    border-color: var(--rouge);
+}
+[data-theme="dark"] .hsup-type-btn {
+    background: var(--bg-surface-alt);
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .hsup-type-btn:hover {
+    background: rgba(92, 189, 213, 0.15);
+    color: var(--text-primary);
+}
+[data-theme="dark"] .hsup-type-btn.active[data-type="credit"] {
+    background: #5cbdd5;
+    color: #1a1a1a;
+    border-color: #5cbdd5;
+}
+[data-theme="dark"] .hsup-type-btn.active[data-type="retrait"] {
+    background: #e86880;
+    color: #1a1a1a;
+    border-color: #e86880;
+}
+
 #mes-conges-section .period-btn {
     flex: 1;
     padding: 2px 0;

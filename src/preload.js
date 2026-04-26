@@ -206,6 +206,12 @@ contextBridge.exposeInMainWorld('api', {
     ajouterRecup: (data) => ipcRenderer.invoke('ajouter-recup', data),
     /** @param {number} salarieId @returns {Promise<HeureSup[]>} */
     getHeuresSup: (salarieId) => ipcRenderer.invoke('getHeuresSup', salarieId),
+    /** @param {number} salarieId @returns {Promise<Array>} Liste fusionnée heures_supplementaires + absences RECUP (lecture seule) */
+    getHistoriqueRecupComplet: (salarieId) => ipcRenderer.invoke('getHistoriqueRecupComplet', salarieId),
+    /** @param {{id: number, date: string, heures: number, commentaire?: string}} payload @returns {Promise<SuccessResult>} */
+    updateHeureSup: (payload) => ipcRenderer.invoke('updateHeureSup', payload),
+    /** @param {number} id @returns {Promise<SuccessResult>} */
+    deleteHeureSup: (id) => ipcRenderer.invoke('deleteHeureSup', id),
 
     // Gestion des absences
 

@@ -355,6 +355,13 @@ const MIGRATIONS = [
             try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
         }
     },
+
+    // v7 : source de chaque saisie d'heures sup/récup ('manuel' ou 'import_excel')
+    async function v7(db) {
+        try {
+            await db.execute("ALTER TABLE heures_supplementaires ADD COLUMN source TEXT DEFAULT 'manuel'");
+        } catch (e) { /* colonne existe déjà */ }
+    },
 ];
 
 async function runMigrations() {
