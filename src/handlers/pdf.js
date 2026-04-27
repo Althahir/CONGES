@@ -2,131 +2,241 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { shell, dialog } = require('electron');
+const { shell, dialog, BrowserWindow } = require('electron');
 
 module.exports = function registerPDFHandlers(ctx, safeHandle) {
 
-    safeHandle('genererPDF', async (event, absenceData) => {
-        return new Promise((resolve, reject) => {
+    // === Constantes destination OneDrive partagée LCE ===
+    const ONEDRIVE_SUBPATH = path.join(
+        'LA CIOTAT ENTREPRENDRE - DONNEES',
+        '17 DOSSIERS SALARIES',
+        'CONGES',
+        'PDF'
+    );
+
+    function resolveOneDrivePath() {
+        const root = process.env.OneDriveCommercial || process.env.OneDrive;
+        if (!root) return null;
+        const target = path.join(root, ONEDRIVE_SUBPATH);
+        try {
+            if (!fs.existsSync(target)) return null;
+            fs.accessSync(target, fs.constants.W_OK);
+            return target;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    const TYPE_LABELS_FILE = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'RECUP', MALADIE: 'MALADIE' };
+
+    function sanitizeForFilename(s) {
+        return String(s || '').replace(/[\\/:*?"<>|\s]/g, '_').replace(/_+/g, '_');
+    }
+
+    function buildFileName(salarie, absence, annulation = false) {
+        const type = TYPE_LABELS_FILE[absence.type] || absence.type;
+        const prefix = annulation ? 'ANNULATION_' : '';
+        const nom = sanitizeForFilename(salarie.nom.toUpperCase());
+        const prenom = sanitizeForFilename(salarie.prenom);
+        return `${nom}_${prenom}_${prefix}${type}_Du_${absence.date_debut}_Au_${absence.date_fin}.pdf`;
+    }
+
+    const MOIS_COURTS = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+    function formatDateLong(d = new Date()) {
+        return `${String(d.getDate()).padStart(2, '0')} ${MOIS_COURTS[d.getMonth()]} ${d.getFullYear()}`;
+    }
+
+    const MOIS_LONGS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    function formatDateHeader(d = new Date()) {
+        return `${String(d.getDate()).padStart(2, '0')} ${MOIS_LONGS[d.getMonth()]} ${d.getFullYear()}`;
+    }
+
+    // Tente l'impression directe sur l'imprimante par défaut Windows
+    async function tryPrintAuto(filePath) {
+        try {
+            const printers = await ctx.mainWindow.webContents.getPrintersAsync();
+            const defaultPrinter = printers.find(p => p.isDefault);
+            if (!defaultPrinter) return { printed: false, reason: 'no_default_printer' };
+
+            const printWin = new BrowserWindow({
+                show: false,
+                webPreferences: { plugins: true, sandbox: false }
+            });
+
             try {
-                const { salarie, absence, soldes } = absenceData;
+                await printWin.loadURL('file:///' + filePath.replace(/\\/g, '/'));
+            } catch (e) {
+                if (!printWin.isDestroyed()) printWin.close();
+                return { printed: false, reason: 'load_failed: ' + e.message };
+            }
 
-                const fileName = `demande_conges_${salarie.nom}_${salarie.prenom}_${Date.now()}.pdf`;
-                const filePath = path.join(os.tmpdir(), fileName);
+            // Laisser le rendu PDF se terminer
+            await new Promise(r => setTimeout(r, 1200));
 
-                const doc = new PDFDocument({
-                    size: 'A4',
-                    margin: 50
+            return new Promise((resolve) => {
+                printWin.webContents.print({
+                    silent: true,
+                    deviceName: defaultPrinter.name,
+                    printBackground: true
+                }, (success, errorType) => {
+                    setTimeout(() => { if (!printWin.isDestroyed()) printWin.close(); }, 500);
+                    if (success) resolve({ printed: true, printer: defaultPrinter.name });
+                    else resolve({ printed: false, reason: errorType || 'print_failed' });
                 });
-                const stream = fs.createWriteStream(filePath);
+            });
+        } catch (e) {
+            return { printed: false, reason: e.message };
+        }
+    }
 
+    // Selon le mode, enregistre/imprime le PDF temporaire et retourne l'issue
+    async function dispatchPDF(tmpFilePath, fileName, mode) {
+        // Mode 'auto' : OneDrive auto, fallback showSaveDialog
+        if (mode === 'auto') {
+            const oneDrivePath = resolveOneDrivePath();
+            if (oneDrivePath) {
+                const target = path.join(oneDrivePath, fileName);
+                fs.copyFileSync(tmpFilePath, target);
+                return { savedPath: target, autoSaved: true };
+            }
+            const result = await dialog.showSaveDialog(ctx.mainWindow, {
+                title: 'OneDrive indisponible — Enregistrer le PDF',
+                defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            });
+            if (!result.canceled && result.filePath) {
+                fs.copyFileSync(tmpFilePath, result.filePath);
+                return { savedPath: result.filePath, autoSaved: false };
+            }
+            return { savedPath: null, autoSaved: false, canceled: true };
+        }
+
+        // Mode 'print' : impression auto, fallback showSaveDialog si pas d'imprimante
+        if (mode === 'print') {
+            const printResult = await tryPrintAuto(tmpFilePath);
+            if (printResult.printed) {
+                return { savedPath: tmpFilePath, printed: true, printer: printResult.printer };
+            }
+            const result = await dialog.showSaveDialog(ctx.mainWindow, {
+                title: 'Aucune imprimante par défaut — Enregistrer le PDF',
+                defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            });
+            if (!result.canceled && result.filePath) {
+                fs.copyFileSync(tmpFilePath, result.filePath);
+                return { savedPath: result.filePath, printed: false, autoSaved: false };
+            }
+            return { savedPath: null, printed: false, canceled: true };
+        }
+
+        // Mode 'dialog' : showSaveDialog seul (sans ouverture auto)
+        const result = await dialog.showSaveDialog(ctx.mainWindow, {
+            title: 'Enregistrer le PDF',
+            defaultPath: path.join(os.homedir(), 'Documents', fileName),
+            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        });
+        if (!result.canceled && result.filePath) {
+            fs.copyFileSync(tmpFilePath, result.filePath);
+            return { savedPath: result.filePath, autoSaved: false };
+        }
+        return { savedPath: null, canceled: true };
+    }
+
+    safeHandle('genererPDF', async (event, absenceData) => {
+        const { salarie, absence, soldes, valideur, annulation, mode } = absenceData;
+        const finalMode = mode || (salarie.role === 'admin' ? 'print' : 'dialog');
+
+        const fileName = buildFileName(salarie, absence, annulation);
+        const tmpFilePath = path.join(os.tmpdir(), `tmp_${Date.now()}_${fileName}`);
+
+        // === Génération du PDF ===
+        await new Promise((resolve, reject) => {
+            try {
+                const doc = new PDFDocument({ size: 'A4', margin: 50 });
+                const stream = fs.createWriteStream(tmpFilePath);
                 doc.pipe(stream);
 
                 const bleu = '#006C89';
+                const rouge = '#B5163F';
+                const couleurTitre = annulation ? rouge : bleu;
                 const pageW = doc.page.width;
                 const margin = 50;
                 const contentW = pageW - margin * 2;
                 const logoPath = path.join(__dirname, '..', 'assets', 'logo.png');
 
-                // === EN-TÊTE (fond blanc, style stats) ===
+                // === EN-TÊTE ===
                 try {
                     doc.image(logoPath, margin, 15, { fit: [120, 60] });
                 } catch (e) { /* logo absent */ }
 
-                doc.fillColor(bleu)
+                const titre = annulation ? 'ANNULATION DE CONGÉS' : 'DEMANDE DE CONGÉS';
+                doc.fillColor(couleurTitre)
                    .fontSize(20).font('Helvetica-Bold')
-                   .text('DEMANDE DE CONGÉS', 200, 20, { width: pageW - 250, align: 'right' })
+                   .text(titre, 200, 20, { width: pageW - 250, align: 'right' })
                    .fontSize(9).font('Helvetica').fillColor('#888')
-                   .text('La Ciotat Entreprendre', 200, 45, { width: pageW - 250, align: 'right' });
+                   .text(`La Ciotat Entreprendre  ·  Le ${formatDateHeader()}`, 200, 45, { width: pageW - 250, align: 'right' });
 
-                // Ligne bleue de séparation
-                doc.moveTo(margin, 80).lineTo(pageW - margin, 80).lineWidth(2).strokeColor(bleu).stroke();
+                doc.moveTo(margin, 80).lineTo(pageW - margin, 80).lineWidth(2).strokeColor(couleurTitre).stroke();
 
                 let yPos = 95;
 
-                // Helper : dessiner un en-tête de section arrondi en haut
                 function drawSectionHeader(y, h, title) {
                     doc.save();
                     doc.roundedRect(margin, y, contentW, h, 5).clip();
-                    doc.rect(margin, y, contentW, 22).fill(bleu);
+                    doc.rect(margin, y, contentW, 22).fill(couleurTitre);
                     doc.restore();
-                    doc.roundedRect(margin, y, contentW, h, 5).lineWidth(1).stroke(bleu);
+                    doc.roundedRect(margin, y, contentW, h, 5).lineWidth(1).stroke(couleurTitre);
                     doc.fillColor('white').fontSize(10).font('Helvetica-Bold')
                        .text(title, margin + 12, y + 6, { lineBreak: false });
                 }
 
-                // === INFORMATIONS DU SALARIÉ ===
+                // === INFOS SALARIÉ ===
                 drawSectionHeader(yPos, 70, 'INFORMATIONS DU SALARIÉ');
-
                 doc.fillColor('black').fontSize(11).font('Helvetica')
                    .text(`Nom : ${salarie.nom.toUpperCase()}`, margin + 12, yPos + 30, { lineBreak: false })
                    .text(`Prénom : ${salarie.prenom}`, margin + 12, yPos + 48, { lineBreak: false });
-
                 yPos += 80;
 
-                // === PÉRIODE DE CONGÉS ===
+                // === PÉRIODE ===
                 drawSectionHeader(yPos, 140, 'PÉRIODE DE CONGÉS');
-
                 const yPeriode = yPos;
 
                 const typeLabels = {
-                    'CP': 'Congés Payés',
-                    'CP_N': 'Congés Payés',
-                    'CP_N1': 'Congés Payés',
-                    'RTT': 'RTT',
-                    'RECUP': 'Récupération',
-                    'MALADIE': 'Arrêt Maladie'
+                    'CP': 'Congés Payés', 'CP_N': 'Congés Payés', 'CP_N1': 'Congés Payés',
+                    'RTT': 'RTT', 'RECUP': 'Récupération', 'MALADIE': 'Arrêt Maladie'
                 };
 
                 doc.fontSize(11).fillColor('black').font('Helvetica-Bold')
                    .text('Type de congé : ', margin + 12, yPeriode + 30, { continued: true })
-                   .font('Helvetica')
-                   .text(typeLabels[absence.type] || absence.type);
+                   .font('Helvetica').text(typeLabels[absence.type] || absence.type);
 
-                const dateD = new Date(absence.date_debut).toLocaleDateString('fr-FR', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                });
-                const dateF = new Date(absence.date_fin).toLocaleDateString('fr-FR', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                });
+                const dateD = new Date(absence.date_debut).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const dateF = new Date(absence.date_fin).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-                doc.font('Helvetica-Bold')
-                   .text('Du : ', margin + 12, yPeriode + 55, { continued: true })
+                doc.font('Helvetica-Bold').text('Du : ', margin + 12, yPeriode + 55, { continued: true })
                    .font('Helvetica').text(dateD);
-
-                doc.font('Helvetica-Bold')
-                   .text('Au : ', margin + 12, yPeriode + 75, { continued: true })
+                doc.font('Helvetica-Bold').text('Au : ', margin + 12, yPeriode + 75, { continued: true })
                    .font('Helvetica').text(dateF);
-
-                doc.font('Helvetica-Bold')
-                   .text('Durée : ', margin + 12, yPeriode + 100, { continued: true })
+                doc.font('Helvetica-Bold').text('Durée : ', margin + 12, yPeriode + 100, { continued: true })
                    .font('Helvetica');
-
-                if (absence.duree_jours) {
-                    doc.text(`${absence.duree_jours.toFixed(2)} jour(s)`);
-                } else if (absence.duree_heures) {
-                    doc.text(`${absence.duree_heures.toFixed(1)} heure(s)`);
-                }
+                if (absence.duree_jours) doc.text(`${absence.duree_jours.toFixed(2)} jour(s)`);
+                else if (absence.duree_heures) doc.text(`${absence.duree_heures.toFixed(1)} heure(s)`);
 
                 yPos += 150;
 
-                // === SOLDES APRÈS DÉDUCTION ===
+                // === SOLDES ===
                 const rowHeight = 25;
                 const soldesH = 22 + rowHeight * 4;
-                drawSectionHeader(yPos, soldesH, 'SOLDES APRÈS DÉDUCTION');
-
-                // En-tête colonnes
+                drawSectionHeader(yPos, soldesH, annulation ? 'SOLDES APRÈS ANNULATION' : 'SOLDES APRÈS DÉDUCTION');
                 const col1 = margin + 12;
                 const col2 = margin + contentW / 2;
                 const tableTop = yPos + 22;
-
                 const soldesData = [
                     ['CP N-1', `${soldes.cp_n1.toFixed(2)} jours`],
                     ['CP N', `${soldes.cp_n.toFixed(2)} jours`],
                     ['RTT', `${soldes.rtt.toFixed(2)} jours`],
                     ['Récupération', `${soldes.recup_heures.toFixed(1)} heures`]
                 ];
-
                 soldesData.forEach((row, i) => {
                     const y = tableTop + (i * rowHeight);
                     if (i % 2 === 0) {
@@ -134,82 +244,49 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     }
                     doc.fillColor('#333').fontSize(10).font('Helvetica')
                        .text(row[0], col1, y + 8, { lineBreak: false });
-                    doc.fillColor(bleu).font('Helvetica-Bold')
+                    doc.fillColor(couleurTitre).font('Helvetica-Bold')
                        .text(row[1], col2, y + 8, { lineBreak: false });
                 });
 
                 yPos += soldesH + 15;
 
-                // === SIGNATURES (selon le rôle) ===
-                const isAdmin = salarie.role === 'admin';
+                // === SIGNATURE / VALIDATION ===
+                // Si valideur présent (validation par admin ou annulation par admin) :
+                //   → mention "Validé/Annulé par : ..." en bas de page, pas de bloc signature
+                // Sinon (pose admin pour soi-même) :
+                //   → bloc signature classique (Salarié + Président)
                 const ySign = doc.page.height - 160;
+                doc.moveTo(margin, ySign).lineTo(pageW - margin, ySign).lineWidth(0.5).strokeColor(couleurTitre).stroke();
 
-                doc.moveTo(margin, ySign).lineTo(pageW - margin, ySign).lineWidth(0.5).strokeColor(bleu).stroke();
-
-                // Titre de section
-                doc.fillColor(bleu).fontSize(11).font('Helvetica-Bold')
-                   .text('Signatures :', margin + 10, ySign + 10, { lineBreak: false });
-
-                if (isAdmin) {
-                    // Admin : 2 colonnes — Salarié(e) + Président(e)
-                    const colW = contentW / 2;
-
-                    doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Salarié(e)', margin + 10, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(9).font('Helvetica')
-                       .text('Date : _______________', margin + 10, ySign + 85, { lineBreak: false });
-
-                    doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Président(e)', margin + colW + 10, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(9).font('Helvetica')
-                       .text('Date : _______________', margin + colW + 10, ySign + 85, { lineBreak: false });
+                if (valideur && valideur.nom && valideur.prenom) {
+                    const dateMention = formatDateLong(new Date());
+                    const verbe = annulation ? 'Annulé par' : 'Validé par';
+                    const mention = `${verbe} : ${valideur.prenom} ${valideur.nom.toUpperCase()}, Secrétaire Général le ${dateMention}`;
+                    doc.fillColor(couleurTitre).fontSize(11).font('Helvetica-Bold')
+                       .text(mention, margin + 10, ySign + 20, { width: contentW - 20, align: 'left' });
                 } else {
-                    // User : 2 colonnes — Salarié(e) + Responsable
+                    const isAdmin = salarie.role === 'admin';
+                    doc.fillColor(couleurTitre).fontSize(11).font('Helvetica-Bold')
+                       .text('Signatures :', margin + 10, ySign + 10, { lineBreak: false });
+
                     const colW = contentW / 2;
+                    const labelDroite = isAdmin ? 'Président(e)' : 'Responsable';
 
                     doc.fillColor('#333').fontSize(10).font('Helvetica')
                        .text('Salarié(e)', margin + 10, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(9).font('Helvetica')
-                       .text('Date : _______________', margin + 10, ySign + 85, { lineBreak: false });
-
                     doc.fillColor('#333').fontSize(10).font('Helvetica')
-                       .text('Responsable', margin + colW + 10, ySign + 30, { lineBreak: false });
-                    doc.fillColor('#666').fontSize(9).font('Helvetica')
-                       .text('Date : _______________', margin + colW + 10, ySign + 85, { lineBreak: false });
+                       .text(labelDroite, margin + colW + 10, ySign + 30, { lineBreak: false });
                 }
 
                 doc.end();
-
-                stream.on('finish', () => {
-                    shell.openPath(filePath).then(() => {
-                        console.log('PDF ouvert:', filePath);
-                    });
-
-                    setTimeout(() => {
-                        dialog.showSaveDialog(ctx.mainWindow, {
-                            title: 'Enregistrer ou imprimer le PDF',
-                            defaultPath: path.join(os.homedir(), 'Documents', fileName),
-                            filters: [{ name: 'PDF', extensions: ['pdf'] }]
-                        }).then(result => {
-                            if (!result.canceled && result.filePath) {
-                                fs.copyFileSync(filePath, result.filePath);
-                                console.log('PDF sauvegardé à:', result.filePath);
-                                shell.openPath(result.filePath);
-                            }
-                        });
-                    }, 500);
-
-                    resolve({ success: true, filePath });
-                });
-
-                stream.on('error', (err) => {
-                    reject(err);
-                });
-
-            } catch (error) {
-                reject(error);
-            }
+                stream.on('finish', resolve);
+                stream.on('error', reject);
+            } catch (e) { reject(e); }
         });
+
+        // === Distribution selon le mode ===
+        const issue = await dispatchPDF(tmpFilePath, fileName, finalMode);
+        return { success: true, mode: finalMode, fileName, ...issue };
     });
 
     safeHandle('exporterRecapPDF', async (event, data) => {
@@ -355,19 +432,15 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 doc.end();
 
                 stream.on('finish', () => {
-                    shell.openPath(filePath);
-                    setTimeout(() => {
-                        dialog.showSaveDialog(ctx.mainWindow, {
-                            title: 'Enregistrer le récapitulatif PDF',
-                            defaultPath: path.join(os.homedir(), 'Documents', fileName),
-                            filters: [{ name: 'PDF', extensions: ['pdf'] }]
-                        }).then(result => {
-                            if (!result.canceled && result.filePath) {
-                                fs.copyFileSync(filePath, result.filePath);
-                                shell.openPath(result.filePath);
-                            }
-                        });
-                    }, 500);
+                    dialog.showSaveDialog(ctx.mainWindow, {
+                        title: 'Enregistrer le récapitulatif PDF',
+                        defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+                    }).then(result => {
+                        if (!result.canceled && result.filePath) {
+                            fs.copyFileSync(filePath, result.filePath);
+                        }
+                    });
                     resolve({ success: true, filePath });
                 });
 
@@ -530,19 +603,15 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 doc.end();
 
                 stream.on('finish', () => {
-                    shell.openPath(filePath);
-                    setTimeout(() => {
-                        dialog.showSaveDialog(ctx.mainWindow, {
-                            title: 'Enregistrer le PDF',
-                            defaultPath: path.join(os.homedir(), 'Documents', fileName),
-                            filters: [{ name: 'PDF', extensions: ['pdf'] }]
-                        }).then(result => {
-                            if (!result.canceled && result.filePath) {
-                                fs.copyFileSync(filePath, result.filePath);
-                                shell.openPath(result.filePath);
-                            }
-                        });
-                    }, 500);
+                    dialog.showSaveDialog(ctx.mainWindow, {
+                        title: 'Enregistrer le PDF',
+                        defaultPath: path.join(os.homedir(), 'Documents', fileName),
+                        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+                    }).then(result => {
+                        if (!result.canceled && result.filePath) {
+                            fs.copyFileSync(filePath, result.filePath);
+                        }
+                    });
                     resolve({ success: true, filePath });
                 });
 

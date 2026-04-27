@@ -1643,4 +1643,27 @@ body {
     box-shadow: 0 2px 8px rgba(181, 22, 63, 0.4);
 }
 
+/* ========== BADGE DEV (mode développement) ========== */
+.dev-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    background: var(--rouge);
+    color: white;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(181, 22, 63, 0.4);
+    cursor: help;
+    user-select: none;
+    text-transform: uppercase;
+}
+
+.dev-badge-floating {
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    z-index: 9999;
+}
+
 

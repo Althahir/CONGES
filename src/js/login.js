@@ -1,3 +1,9 @@
+// ========== BADGE DEV ==========
+window.api.getIsDev().then(isDev => {
+    const badge = document.getElementById('devBadge');
+    if (badge && isDev) badge.style.display = 'inline-block';
+}).catch(() => { /* silencieux */ });
+
 // ========== AUTOCOMPLÉTION EMAILS (localStorage) ==========
 (function () {
     const saved = JSON.parse(localStorage.getItem('knownEmails') || '[]');

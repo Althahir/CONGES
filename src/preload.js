@@ -338,6 +338,9 @@ contextBridge.exposeInMainWorld('api', {
     /** @returns {Promise<string>} version de l'app (ex: '1.0.1') */
     getAppVersion: () => ipcRenderer.invoke('getAppVersion'),
 
+    /** @returns {Promise<boolean>} true si lancé en dev (npm start), false en prod (installeur) */
+    getIsDev: () => ipcRenderer.invoke('getIsDev'),
+
     /** @param {(data: {version: string}) => void} callback - appelé quand une mise à jour a été téléchargée */
     onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, data) => callback(data)),
 

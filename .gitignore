@@ -5,5 +5,12 @@ database/*.sqbpro
 .DS_Store
 out/
 DOCS/TODO.md
+# DB locale de dev (contient les vraies données copiées depuis Turso — JAMAIS la commiter)
+DOCS/*.db
+DOCS/*.db.bak
+DOCS/*.db-journal
+# Fichiers Claude Code locaux (lock + config locale poste)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
 # Fichiers temporaires Microsoft Office (lock pendant édition)
 ~$*

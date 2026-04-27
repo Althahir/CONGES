@@ -60,6 +60,24 @@ function saveConfig(config) {
 }
 
 async function getTursoConfig() {
+    // En dev (npm start) → DB locale SQLite (DOCS/conges.db)
+    if (!app.isPackaged) {
+        const dbLocalPath = path.resolve(__dirname, '..', 'DOCS', 'conges.db');
+        if (!fs.existsSync(dbLocalPath)) {
+            await dialog.showMessageBox({
+                type: 'error',
+                title: 'DB locale introuvable',
+                message: `Mode développement : le fichier DB locale est manquant.\n\nChemin attendu : ${dbLocalPath}`,
+                buttons: ['Quitter'],
+            });
+            app.quit();
+            return null;
+        }
+        console.log('[DEV] Connexion DB locale SQLite :', dbLocalPath);
+        return { url: `file:${dbLocalPath}`, authToken: null };
+    }
+
+    // En prod → Turso cloud (config.json dans AppData)
     const config = readConfig();
     if (config && config.tursoUrl && config.tursoToken) {
         console.log('Config Turso (config.json) :', config.tursoUrl);
@@ -95,6 +113,9 @@ function safeHandle(channel, handler) {
 // Handler simple pour exposer la version de l'app (lue depuis package.json)
 safeHandle('getAppVersion', async () => app.getVersion());
 
+// Indique si l'app tourne en dev (npm start) ou en prod (installeur)
+safeHandle('getIsDev', async () => !app.isPackaged);
+
 const { verifierTraitementsAutomatiques } = require('./handlers/traitements')(ctx, safeHandle);
 require('./handlers/auth')(ctx, safeHandle);
 require('./handlers/salaries')(ctx, safeHandle);
@@ -114,11 +135,10 @@ require('./handlers/credentials')(ctx, safeHandle);
 // ========== BASE DE DONNÉES TURSO ==========
 
 async function connectDatabase(tursoConfig) {
-    ctx.db = createClient({
-        url: tursoConfig.url,
-        authToken: tursoConfig.authToken,
-    });
-    console.log('Connecté à Turso :', tursoConfig.url);
+    const clientOpts = { url: tursoConfig.url };
+    if (tursoConfig.authToken) clientOpts.authToken = tursoConfig.authToken;
+    ctx.db = createClient(clientOpts);
+    console.log('Connecté :', tursoConfig.url);
     await runMigrations();
 }
 

@@ -18,6 +18,12 @@ window.api.getAppVersion().then(v => {
     if (el) el.textContent = `v${v}`;
 }).catch(() => { /* silencieux si la lib échoue */ });
 
+// Badge DEV en mode développement (DB locale, prod intacte)
+window.api.getIsDev().then(isDev => {
+    const badge = document.getElementById('devBadge');
+    if (badge && isDev) badge.style.display = 'inline-block';
+}).catch(() => { /* silencieux */ });
+
 // Toast quand une mise à jour a été téléchargée (en remplacement du dialog Electron par défaut)
 if (window.api.onUpdateDownloaded) {
     window.api.onUpdateDownloaded(({ version }) => afficherToastMaj(version));
@@ -1325,12 +1331,12 @@ async function validerDemande(absenceId) {
         await window.api.validerAbsence(absenceId, user.id);
         afficherNotificationPersistante('success', 'Demande validée', 'La validation a bien été enregistrée.', 3000);
 
-        // Génération du PDF officiel (comportement d'avant le workflow validation)
+        // Génération du PDF officiel : enregistrement OneDrive auto + mention valideur
         if (demande) {
             try {
                 const annee = new Date(demande.date_debut).getFullYear();
                 const soldesAJour = await window.api.getSoldes(demande.salarie_id, annee);
-                await window.api.genererPDF({
+                const pdfResult = await window.api.genererPDF({
                     salarie: { nom: demande.nom, prenom: demande.prenom, role: 'user' },
                     absence: {
                         type: demande.type,
@@ -1345,8 +1351,13 @@ async function validerDemande(absenceId) {
                         cp_n: soldesAJour ? soldesAJour.cp_n : 0,
                         rtt: soldesAJour ? soldesAJour.rtt : 0,
                         recup_heures: soldesAJour ? soldesAJour.recup_heures : 0
-                    }
+                    },
+                    valideur: { nom: user.nom, prenom: user.prenom },
+                    mode: 'auto'
                 });
+                if (pdfResult && pdfResult.savedPath) {
+                    afficherNotificationPersistante('success', 'Document enregistré avec succès', pdfResult.fileName, 4000);
+                }
             } catch (pdfErr) {
                 console.error('Erreur génération PDF après validation:', pdfErr);
             }
@@ -4561,6 +4572,30 @@ document.getElementById('btnHistoriqueRecup').addEventListener('click', async ()
     document.getElementById('modalHistoriqueRecup').style.display = 'flex';
 });
 
+// Ouvre la même modale historique mais pour l'admin lui-même (depuis section "Mes Congés")
+async function ouvrirHistoriqueRecupAdminSelf() {
+    // Bascule temporairement le contexte sur l'admin connecté, restoration au close
+    const previousSalarieId = salarieHistoriqueSelectionne;
+    salarieHistoriqueSelectionne = user.id;
+    heuresRecupSalarie = await window.api.getSalarie(user.id);
+    heureRecupEnEdition = null;
+    anneeFiltreRecup = 'all';
+    moisFiltreRecup = 'all';
+    document.getElementById('histoRecupSalarieName').textContent = `${heuresRecupSalarie.prenom} ${heuresRecupSalarie.nom}`;
+    await chargerListeHeuresRecup();
+    document.getElementById('modalHistoriqueRecup').style.display = 'flex';
+
+    const restore = () => {
+        salarieHistoriqueSelectionne = previousSalarieId;
+        document.getElementById('closeModalHistoriqueRecup').removeEventListener('click', restore);
+        const fermer = document.getElementById('btnFermerHistoRecup');
+        if (fermer) fermer.removeEventListener('click', restore);
+    };
+    document.getElementById('closeModalHistoriqueRecup').addEventListener('click', restore);
+    const btnFermer = document.getElementById('btnFermerHistoRecup');
+    if (btnFermer) btnFermer.addEventListener('click', restore);
+}
+
 async function chargerListeHeuresRecup() {
     heuresRecupListe = await window.api.getHistoriqueRecupComplet(salarieHistoriqueSelectionne);
     renderTableauHeuresRecup();
@@ -4847,7 +4882,11 @@ function ouvrirModalSuppression(absence, dateISO) {
     `;
     
     document.getElementById('jourSelectionne').textContent = dateCliquee;
-    
+
+    // Reset la checkbox PDF d'annulation à chaque ouverture
+    const cbPdf = document.getElementById('genererPdfAnnulation');
+    if (cbPdf) cbPdf.checked = false;
+
     // Afficher/masquer l'option "jour seul"
     const optionJour = document.querySelector('input[value="jour"]').parentElement;
     if (absence.date_debut === absence.date_fin) {
@@ -4873,21 +4912,66 @@ document.getElementById('btnAnnulerSuppression').addEventListener('click', () =>
 // Confirmer la suppression
 document.getElementById('btnConfirmerSuppression').addEventListener('click', async () => {
     const typeSuppression = document.querySelector('input[name="typeSuppression"]:checked').value;
-    
+    const genererPdf = document.getElementById('genererPdfAnnulation').checked;
+
     try {
         if (typeSuppression === 'complete') {
-            // Supprimer toute l'absence
+            // Capturer les infos salarié AVANT la suppression si PDF demandé
+            let salarieInfo = null;
+            if (genererPdf) {
+                try {
+                    salarieInfo = await window.api.getSalarie(absenceCliquee.salarie_id);
+                } catch (e) {
+                    console.error('Impossible de récupérer le salarié pour le PDF d\'annulation:', e);
+                }
+            }
+
+            // Supprimer toute l'absence (recalcule les soldes en interne)
             await window.api.deleteAbsence(absenceCliquee.id);
+
+            // Générer le PDF d'annulation après recalcul des soldes
+            if (genererPdf && salarieInfo) {
+                try {
+                    const annee = new Date(absenceCliquee.date_debut).getFullYear();
+                    const soldesApres = await window.api.getSoldes(absenceCliquee.salarie_id, annee);
+                    const pdfResult = await window.api.genererPDF({
+                        salarie: { nom: salarieInfo.nom, prenom: salarieInfo.prenom, role: salarieInfo.role || 'user' },
+                        absence: {
+                            type: absenceCliquee.type,
+                            date_debut: absenceCliquee.date_debut,
+                            date_fin: absenceCliquee.date_fin,
+                            duree_jours: absenceCliquee.duree_jours,
+                            duree_heures: absenceCliquee.duree_heures,
+                            commentaire: absenceCliquee.commentaire || null
+                        },
+                        soldes: {
+                            cp_n1: soldesApres ? soldesApres.cp_n1 : 0,
+                            cp_n: soldesApres ? soldesApres.cp_n : 0,
+                            rtt: soldesApres ? soldesApres.rtt : 0,
+                            recup_heures: soldesApres ? soldesApres.recup_heures : 0
+                        },
+                        valideur: { nom: user.nom, prenom: user.prenom },
+                        annulation: true,
+                        mode: 'auto'
+                    });
+                    if (pdfResult && pdfResult.savedPath) {
+                        afficherNotificationPersistante('success', 'PDF d\'annulation enregistré', pdfResult.fileName, 4000);
+                    }
+                } catch (pdfErr) {
+                    console.error('Erreur génération PDF d\'annulation:', pdfErr);
+                }
+            }
+
             alert('✅ Absence supprimée avec succès !\nLes soldes ont été recalculés.');
         } else {
-            // Supprimer uniquement le jour cliqué
+            // Supprimer uniquement le jour cliqué (pas de PDF d'annulation dans ce cas)
             await supprimerUnJour(absenceCliquee, jourClique);
         }
-        
+
         // Fermer la modal et recharger
         document.getElementById('modalSuppressionAbsence').style.display = 'none';
         await chargerCalendrierHistorique();
-        
+
     } catch (error) {
         console.error('Erreur suppression:', error);
         alert('❌ Erreur lors de la suppression : ' + error.message);
@@ -5107,7 +5191,7 @@ if (formAbsenceUser) {
                 // Récupérer les soldes mis à jour
                 const soldesApres = await window.api.getSoldes(user.id, anneeActuelle);
 
-                // Générer le PDF avec la structure attendue par main.js
+                // Générer le PDF avec la structure attendue par main.js (impression directe)
                 const pdfData = {
                     salarie: {
                         nom: salarieInfo.nom,
@@ -5127,13 +5211,20 @@ if (formAbsenceUser) {
                         cp_n: soldesApres.cp_n,
                         rtt: soldesApres.rtt,
                         recup_heures: soldesApres.recup_heures
-                    }
+                    },
+                    mode: 'print'
                 };
 
-await window.api.genererPDF(pdfData);
-                
-                // Afficher succès
-                successMsg.textContent = '✅ Absence enregistrée avec succès ! Le PDF a été généré.';
+                const pdfResult = await window.api.genererPDF(pdfData);
+
+                // Afficher succès (adapté selon impression réussie ou pas)
+                if (pdfResult && pdfResult.printed) {
+                    successMsg.textContent = `✅ Absence enregistrée ! Document envoyé à l'imprimante (${pdfResult.printer}).`;
+                } else if (pdfResult && pdfResult.savedPath) {
+                    successMsg.textContent = '✅ Absence enregistrée ! PDF sauvegardé.';
+                } else {
+                    successMsg.textContent = '✅ Absence enregistrée avec succès !';
+                }
                 successMsg.classList.add('show');
                 setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
 
@@ -5180,13 +5271,31 @@ function initModalHeuresSupAdmin() {
         });
     }
 
-    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+    // Fonction réutilisable d'ouverture de la modale de saisie (toggle reset à crédit)
+    function ouvrirSaisieHeuresSupAdmin() {
         document.getElementById('heuresSupMsgAdmin').style.display = 'none';
         if (toggle) {
             toggle.dataset.activeType = 'credit';
             toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'credit'));
         }
         modal.style.display = 'flex';
+    }
+
+    // Bouton principal "Heures sup" → modale de choix (voir / saisir)
+    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+        document.getElementById('modalChoixHeuresSupAdmin').style.display = 'flex';
+    });
+
+    // Boutons de la modale de choix
+    const fermerChoixAdmin = () => { document.getElementById('modalChoixHeuresSupAdmin').style.display = 'none'; };
+    document.getElementById('closeModalChoixHeuresSupAdmin').addEventListener('click', fermerChoixAdmin);
+    document.getElementById('btnChoixNouvelleSaisieAdmin').addEventListener('click', () => {
+        fermerChoixAdmin();
+        ouvrirSaisieHeuresSupAdmin();
+    });
+    document.getElementById('btnChoixVoirSaisiesAdmin').addEventListener('click', async () => {
+        fermerChoixAdmin();
+        await ouvrirHistoriqueRecupAdminSelf();
     });
 
     document.getElementById('closeModalHeuresSupAdmin').addEventListener('click', () => {

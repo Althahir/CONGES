@@ -39,6 +39,7 @@
         <button id="btnThemeToggle" class="btn-theme-toggle" title="Changer de thème">
             <i class="fa-solid fa-moon"></i>
         </button>
+        <span id="devBadge" class="dev-badge" style="display: none;" title="Mode développement — DB locale, prod intacte">DEV</span>
         <span id="userName" class="user-name">Admin</span>
         <button id="logoutBtn" class="btn-secondary btn-small">Déconnexion</button>
     </div>
@@ -223,8 +224,35 @@
                 
                 <!-- Bouton Heures sup (visible uniquement si a_droit_recup) -->
                 <button id="btnAjouterHeuresSup" class="btn-heures-sup" style="display: none;">
-                    <i class="fa-solid fa-plus"></i> Ajouter heures sup
+                    <i class="fa-solid fa-clock"></i> Heures sup
                 </button>
+            </div>
+
+            <!-- Modal Choix Heures sup admin (voir / saisir) -->
+            <div id="modalChoixHeuresSupAdmin" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 480px;">
+                    <div class="modal-header">
+                        <h3><i class="fa-solid fa-clock"></i> Heures supplémentaires</h3>
+                        <button id="closeModalChoixHeuresSupAdmin" class="close-modal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="choix-heures-sup-question">Que souhaitez-vous faire ?</p>
+                        <div class="choix-heures-sup-grid">
+                            <button id="btnChoixVoirSaisiesAdmin" class="btn-choix-heures-sup">
+                                <i class="fa-solid fa-list"></i>
+                                <span class="choix-titre">Mes saisies</span>
+                                <span class="choix-sous-titre">Voir / modifier l'historique</span>
+                            </button>
+                            <button id="btnChoixNouvelleSaisieAdmin" class="btn-choix-heures-sup">
+                                <i class="fa-solid fa-plus"></i>
+                                <span class="choix-titre">Nouvelle saisie</span>
+                                <span class="choix-sous-titre">Déclarer ou récupérer</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Modal Heures Supplémentaires (admin) -->
@@ -529,7 +557,12 @@
                     <span>Supprimer uniquement le <strong id="jourSelectionne"></strong></span>
                 </label>
             </div>
-            
+
+            <label class="option-checkbox-pdf">
+                <input type="checkbox" id="genererPdfAnnulation">
+                <span>Générer un PDF d'annulation (archivage OneDrive)</span>
+            </label>
+
             <div class="warning-suppression">
                 <i class="fa-solid fa-exclamation-triangle"></i>
                 <p>Les soldes seront automatiquement recalculés après la suppression.</p>

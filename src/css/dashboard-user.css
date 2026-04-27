@@ -533,3 +533,247 @@ body {
 [data-theme="dark"] .calendrier-table td[data-tooltip]:hover::before {
     border-top-color: var(--bg-surface-alt);
 }
+
+/* ========== MODALE CHOIX HEURES SUP (voir / saisir) ========== */
+#modalChoixHeuresSup .modal-header {
+    background: var(--bleu);
+}
+.choix-heures-sup-question {
+    text-align: center;
+    margin-bottom: 16px;
+    color: var(--text-secondary);
+    font-size: 0.95em;
+}
+.choix-heures-sup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.btn-choix-heures-sup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 22px 14px;
+    border: 2px solid var(--bleu);
+    border-radius: 8px;
+    background: white;
+    color: var(--bleu);
+    cursor: pointer;
+    transition: all 0.18s;
+    text-align: center;
+}
+.btn-choix-heures-sup:hover {
+    background: var(--bleu);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 108, 137, 0.25);
+}
+.btn-choix-heures-sup i {
+    font-size: 1.7em;
+    margin-bottom: 4px;
+}
+.btn-choix-heures-sup .choix-titre {
+    font-weight: 700;
+    font-size: 1em;
+}
+.btn-choix-heures-sup .choix-sous-titre {
+    font-size: 0.78em;
+    opacity: 0.85;
+    font-weight: 400;
+}
+[data-theme="dark"] .btn-choix-heures-sup {
+    background: var(--bg-surface);
+    border-color: #5cbdd5;
+    color: #5cbdd5;
+}
+[data-theme="dark"] .btn-choix-heures-sup:hover {
+    background: #5cbdd5;
+    color: #1a1a1a;
+}
+
+/* ========== MODALE HISTORIQUE HEURES DE RÉCUP ========== */
+
+#modalHistoriqueRecupUser .modal-content {
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+#modalHistoriqueRecupUser .modal-body {
+    overflow-y: auto;
+    flex: 1;
+}
+#modalHistoriqueRecupUser .modal-header {
+    background: var(--bleu);
+}
+
+.filtre-recup-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    background: rgba(0, 108, 137, 0.06);
+    border-radius: 6px;
+    border: 1px solid rgba(0, 108, 137, 0.15);
+}
+.filtre-recup-row label {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-secondary, #555);
+}
+.filtre-recup-row select {
+    padding: 5px 10px;
+    border: 1px solid var(--bleu);
+    border-radius: 4px;
+    background: var(--bg-input, white);
+    color: var(--text-primary, #333);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+[data-theme="dark"] .filtre-recup-row {
+    background: rgba(92, 189, 213, 0.08);
+    border-color: rgba(92, 189, 213, 0.25);
+}
+[data-theme="dark"] .filtre-recup-row select {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border-color: #5cbdd5;
+}
+
+.tableau-heures-recup {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+.tableau-heures-recup thead th {
+    background: var(--bleu);
+    color: white;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85em;
+}
+.tableau-heures-recup tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color, #eee);
+    vertical-align: middle;
+}
+.tableau-heures-recup tbody tr:nth-child(even) {
+    background: rgba(0, 108, 137, 0.04);
+}
+.tableau-heures-recup tbody tr:hover {
+    background: rgba(0, 108, 137, 0.08);
+}
+.tableau-heures-recup .cellule-commentaire {
+    color: var(--text-secondary, #666);
+    font-style: italic;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tableau-heures-recup .cellule-commentaire .vide {
+    opacity: 0.5;
+    font-style: normal;
+}
+.tableau-heures-recup .cellule-saisie {
+    color: var(--text-secondary, #888);
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+.tableau-heures-recup .badge-import,
+.tableau-heures-recup .badge-pose-conge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    color: white;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    font-style: normal;
+    vertical-align: middle;
+}
+.tableau-heures-recup .badge-import { background: var(--mauve); }
+.tableau-heures-recup .badge-pose-conge { background: var(--orange); }
+[data-theme="dark"] .tableau-heures-recup .badge-import {
+    background: #c98edb;
+    color: #1a1a1a;
+}
+[data-theme="dark"] .tableau-heures-recup .badge-pose-conge {
+    background: #f0a050;
+    color: #1a1a1a;
+}
+.tableau-heures-recup .ligne-pose {
+    background: rgba(181, 22, 63, 0.06) !important;
+    border-left: 3px solid var(--rouge);
+}
+.tableau-heures-recup .ligne-pose:hover {
+    background: rgba(181, 22, 63, 0.12) !important;
+}
+.tableau-heures-recup .heures-pose {
+    color: var(--rouge);
+    font-weight: 700;
+}
+.tableau-heures-recup .heures-credit {
+    color: var(--bleu);
+    font-weight: 600;
+}
+[data-theme="dark"] .tableau-heures-recup .ligne-pose {
+    background: rgba(232, 104, 128, 0.10) !important;
+    border-left-color: #e86880;
+}
+
+.tableau-heures-recup .col-actions {
+    width: 110px;
+    text-align: center;
+}
+.tableau-heures-recup td.col-actions {
+    text-align: center;
+    white-space: nowrap;
+}
+.tableau-heures-recup .ligne-edition {
+    background: rgba(237, 113, 17, 0.08) !important;
+}
+.tableau-heures-recup .ligne-edition input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid var(--bleu);
+    border-radius: 4px;
+    font-size: 0.9em;
+    background: var(--bg-input, white);
+    color: var(--text-primary, #333);
+    box-sizing: border-box;
+}
+.tableau-heures-recup .ligne-edition input.edit-heures {
+    max-width: 80px;
+}
+
+.btn-icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0 2px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    color: white;
+    font-size: 0.85em;
+}
+.btn-icone:hover { opacity: 0.85; transform: scale(1.05); }
+.btn-icone:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+}
+.btn-icone:disabled:hover { opacity: 0.4; transform: none !important; }
+.btn-icone-edit { background: var(--bleu); }
+.btn-icone-delete { background: var(--rouge); }
+.btn-icone-valider { background: #2a9b4f; }
+.btn-icone-annuler { background: #888; }

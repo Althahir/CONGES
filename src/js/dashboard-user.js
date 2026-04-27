@@ -11,6 +11,12 @@ if (!user) {
 // Afficher le nom de l'utilisateur
 document.getElementById('userName').textContent = `${user.prenom} ${user.nom}`;
 
+// Badge DEV en mode développement (DB locale, prod intacte)
+window.api.getIsDev().then(isDev => {
+    const badge = document.getElementById('devBadge');
+    if (badge && isDev) badge.style.display = 'inline-block';
+}).catch(() => { /* silencieux */ });
+
 // ========== TOGGLE THEME SOMBRE/CLAIR ==========
 (function initTheme() {
     const saved = localStorage.getItem('theme') || 'light';
@@ -158,14 +164,11 @@ async function loadSoldes() {
             }
         }
         
-        // Afficher le bouton heures sup si le salarié a droit récup
+        // Afficher le bouton "Heures sup" si le salarié a droit récup
         const btnHeuresSup = document.getElementById('btnAjouterHeuresSup');
-        if (btnHeuresSup && salarie && salarie.a_droit_recup === 1) {
-            btnHeuresSup.style.display = 'block';
-        } else if (btnHeuresSup) {
-            btnHeuresSup.style.display = 'none';
-        }
-        
+        const aDroitRecup = salarie && salarie.a_droit_recup === 1;
+        if (btnHeuresSup) btnHeuresSup.style.display = aDroitRecup ? 'block' : 'none';
+
     } catch (error) {
         console.error('Erreur chargement soldes:', error);
     }
@@ -960,14 +963,31 @@ function initModalHeuresSup() {
         });
     }
 
-    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+    // Fonction réutilisable pour ouvrir la modale de saisie (toggle reset à crédit)
+    function ouvrirSaisieHeuresSup() {
         document.getElementById('heuresSupMsg').style.display = 'none';
-        // Reset toggle au crédit par défaut à chaque ouverture
         if (toggle) {
             toggle.dataset.activeType = 'credit';
             toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'credit'));
         }
         modal.style.display = 'flex';
+    }
+
+    // Bouton principal "Heures sup" → ouvre la modale de choix (voir / saisir)
+    document.getElementById('btnAjouterHeuresSup').addEventListener('click', () => {
+        document.getElementById('modalChoixHeuresSup').style.display = 'flex';
+    });
+
+    // Boutons de la modale de choix
+    const fermerChoix = () => { document.getElementById('modalChoixHeuresSup').style.display = 'none'; };
+    document.getElementById('closeModalChoixHeuresSup').addEventListener('click', fermerChoix);
+    document.getElementById('btnChoixVoirSaisies').addEventListener('click', async () => {
+        fermerChoix();
+        await ouvrirModalHistoriqueRecup();
+    });
+    document.getElementById('btnChoixNouvelleSaisie').addEventListener('click', () => {
+        fermerChoix();
+        ouvrirSaisieHeuresSup();
     });
 
     document.getElementById('closeModalHeuresSup').addEventListener('click', () => {
@@ -1300,5 +1320,260 @@ function afficherToastMaj(version) {
         window.api.applyUpdate();
     });
 }
+
+// ========== MODALE HISTORIQUE HEURES DE RÉCUP ==========
+
+const NOMS_MOIS_USER = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+let _heuresRecupUserListe = [];
+let _filtreAnneeRecupUser = 'all';
+let _filtreMoisRecupUser = 'all';
+let _heureRecupEnEditionUser = null;
+
+function formatDateFRUser(iso) {
+    if (!iso) return '';
+    const datePart = String(iso).slice(0, 10);
+    const [y, m, d] = datePart.split('-');
+    if (!y || !m || !d) return iso;
+    return `${d}/${m}/${y}`;
+}
+
+async function ouvrirModalHistoriqueRecup() {
+    _filtreAnneeRecupUser = 'all';
+    _filtreMoisRecupUser = 'all';
+    _heureRecupEnEditionUser = null;
+    await chargerListeHeuresRecupUser();
+    document.getElementById('modalHistoriqueRecupUser').style.display = 'flex';
+}
+
+async function chargerListeHeuresRecupUser() {
+    try {
+        _heuresRecupUserListe = await window.api.getHistoriqueRecupComplet(user.id);
+    } catch (e) {
+        console.error('Erreur chargement historique récup user:', e);
+        _heuresRecupUserListe = [];
+    }
+    renderTableauHeuresRecupUser();
+}
+
+function renderTableauHeuresRecupUser() {
+    const container = document.getElementById('histoRecupContenuUser');
+    if (!_heuresRecupUserListe.length) {
+        container.innerHTML = '<p style="text-align:center; padding: 20px; color: var(--text-secondary);">Aucune heure de récupération enregistrée pour le moment.</p>';
+        return;
+    }
+
+    const annees = [...new Set(_heuresRecupUserListe.map(h => new Date(h.date).getFullYear()))].sort((a, b) => b - a);
+    if (_filtreAnneeRecupUser !== 'all' && !annees.includes(parseInt(_filtreAnneeRecupUser))) {
+        _filtreAnneeRecupUser = 'all';
+        _filtreMoisRecupUser = 'all';
+    }
+
+    const apresAnnee = _filtreAnneeRecupUser === 'all'
+        ? _heuresRecupUserListe
+        : _heuresRecupUserListe.filter(h => new Date(h.date).getFullYear() === parseInt(_filtreAnneeRecupUser));
+
+    const moisDispos = [...new Set(apresAnnee.map(h => new Date(h.date).getMonth() + 1))].sort((a, b) => a - b);
+    if (_filtreMoisRecupUser !== 'all' && !moisDispos.includes(parseInt(_filtreMoisRecupUser))) {
+        _filtreMoisRecupUser = 'all';
+    }
+
+    const liste = _filtreMoisRecupUser === 'all'
+        ? apresAnnee
+        : apresAnnee.filter(h => (new Date(h.date).getMonth() + 1) === parseInt(_filtreMoisRecupUser));
+
+    let html = `
+        <div class="filtre-recup-row">
+            <label for="filtreAnneeRecupUser">Année :</label>
+            <select id="filtreAnneeRecupUser">
+                <option value="all" ${_filtreAnneeRecupUser === 'all' ? 'selected' : ''}>Toutes (${_heuresRecupUserListe.length})</option>
+                ${annees.map(a => {
+                    const nb = _heuresRecupUserListe.filter(h => new Date(h.date).getFullYear() === a).length;
+                    return `<option value="${a}" ${parseInt(_filtreAnneeRecupUser) === a ? 'selected' : ''}>${a} (${nb})</option>`;
+                }).join('')}
+            </select>
+            <label for="filtreMoisRecupUser">Mois :</label>
+            <select id="filtreMoisRecupUser">
+                <option value="all" ${_filtreMoisRecupUser === 'all' ? 'selected' : ''}>Tous (${apresAnnee.length})</option>
+                ${moisDispos.map(m => {
+                    const nb = apresAnnee.filter(h => (new Date(h.date).getMonth() + 1) === m).length;
+                    return `<option value="${m}" ${parseInt(_filtreMoisRecupUser) === m ? 'selected' : ''}>${NOMS_MOIS_USER[m - 1]} (${nb})</option>`;
+                }).join('')}
+            </select>
+        </div>
+        <table class="tableau-heures-recup">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Heures</th>
+                    <th>Commentaire</th>
+                    <th>Saisie le</th>
+                    <th class="col-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    const tooltipNonModif = "non modifiable";
+
+    for (const h of liste) {
+        const enEdition = _heureRecupEnEditionUser === h.id;
+        const isReadOnlyPose = h._origine === 'absence_recup';
+        const isImport = h.source === 'import_excel';
+        const heuresNum = Number(h.heures);
+        const isPose = heuresNum < 0;
+        // Modifiable si : saisie manuelle ET pas un import ET pas un négatif (pose) ET pas une absence_recup
+        const editable = !isReadOnlyPose && !isImport && !isPose;
+
+        const dateSaisieRaw = h.date_creation ? formatDateFRUser(h.date_creation) : '—';
+        let badge = '';
+        if (isImport) badge = ' <span class="badge-import">(import excel)</span>';
+        else if (h.source === 'pose_conge') badge = ' <span class="badge-pose-conge">(congé posé)</span>';
+        const dateSaisie = `${dateSaisieRaw}${badge}`;
+
+        const heuresAffichage = isPose
+            ? `<span class="heures-pose">${heuresNum.toFixed(1)}h</span>`
+            : `<span class="heures-credit">+${heuresNum.toFixed(1)}h</span>`;
+
+        const classes = [];
+        if (enEdition) classes.push('ligne-edition');
+        if (isPose && !enEdition) classes.push('ligne-pose');
+
+        if (enEdition && editable) {
+            html += `
+                <tr data-id="${h.id}" class="${classes.join(' ')}">
+                    <td><input type="date" class="edit-date" value="${h.date}"></td>
+                    <td><input type="number" class="edit-heures" min="0.5" step="0.5" value="${h.heures}"></td>
+                    <td><input type="text" class="edit-commentaire" value="${h.commentaire ? h.commentaire.replace(/"/g, '&quot;') : ''}" placeholder="(optionnel)"></td>
+                    <td class="cellule-saisie">${dateSaisie}</td>
+                    <td class="col-actions">
+                        <button class="btn-icone btn-icone-valider" data-action="save" data-id="${h.id}" title="Valider"><i class="fa-solid fa-check"></i></button>
+                        <button class="btn-icone btn-icone-annuler" data-action="cancel" data-id="${h.id}" title="Annuler"><i class="fa-solid fa-xmark"></i></button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            let actionsHTML;
+            if (editable) {
+                actionsHTML = `
+                    <button class="btn-icone btn-icone-edit" data-action="edit" data-id="${h.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icone btn-icone-delete" data-action="delete" data-id="${h.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+                `;
+            } else {
+                actionsHTML = `
+                    <button class="btn-icone btn-icone-edit" disabled title="${escapeHtmlUser(tooltipNonModif)}"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icone btn-icone-delete" disabled title="${escapeHtmlUser(tooltipNonModif)}"><i class="fa-solid fa-trash"></i></button>
+                `;
+            }
+            const trTitle = !editable ? ` title="${escapeHtmlUser(tooltipNonModif)}"` : '';
+            html += `
+                <tr data-id="${h.id}" class="${classes.join(' ')}"${trTitle}>
+                    <td>${formatDateFRUser(h.date)}</td>
+                    <td>${heuresAffichage}</td>
+                    <td class="cellule-commentaire">${h.commentaire ? escapeHtmlUser(h.commentaire) : '<span class="vide">—</span>'}</td>
+                    <td class="cellule-saisie">${dateSaisie}</td>
+                    <td class="col-actions">${actionsHTML}</td>
+                </tr>
+            `;
+        }
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => handleActionRecupUser(btn.dataset.action, parseInt(btn.dataset.id)));
+    });
+
+    const selectAnnee = document.getElementById('filtreAnneeRecupUser');
+    if (selectAnnee) {
+        selectAnnee.addEventListener('change', () => {
+            _filtreAnneeRecupUser = selectAnnee.value;
+            _filtreMoisRecupUser = 'all';
+            _heureRecupEnEditionUser = null;
+            renderTableauHeuresRecupUser();
+        });
+    }
+    const selectMois = document.getElementById('filtreMoisRecupUser');
+    if (selectMois) {
+        selectMois.addEventListener('change', () => {
+            _filtreMoisRecupUser = selectMois.value;
+            _heureRecupEnEditionUser = null;
+            renderTableauHeuresRecupUser();
+        });
+    }
+}
+
+async function handleActionRecupUser(action, id) {
+    const ligne = _heuresRecupUserListe.find(x => x.id === id);
+    // Garde-fou : seules les saisies manuelles positives sont modifiables
+    if (!ligne || ligne._origine === 'absence_recup' || ligne.source === 'import_excel' || Number(ligne.heures) < 0) return;
+
+    if (action === 'edit') {
+        _heureRecupEnEditionUser = id;
+        renderTableauHeuresRecupUser();
+    } else if (action === 'cancel') {
+        _heureRecupEnEditionUser = null;
+        renderTableauHeuresRecupUser();
+    } else if (action === 'save') {
+        await sauverEditionRecupUser(id);
+    } else if (action === 'delete') {
+        await supprimerRecupUser(id);
+    }
+}
+
+async function sauverEditionRecupUser(id) {
+    const tr = document.querySelector(`#histoRecupContenuUser tr[data-id="${id}"]`);
+    if (!tr) return;
+    const date = tr.querySelector('.edit-date').value;
+    const heures = parseFloat(tr.querySelector('.edit-heures').value);
+    const commentaire = tr.querySelector('.edit-commentaire').value.trim();
+
+    if (!date || isNaN(heures) || heures <= 0) {
+        alert('La date est obligatoire et le nombre d\'heures doit être positif.');
+        return;
+    }
+
+    try {
+        await window.api.updateHeureSup({ id, date, heures, commentaire });
+        _heureRecupEnEditionUser = null;
+        await chargerListeHeuresRecupUser();
+        await loadSoldes();
+    } catch (e) {
+        console.error('Erreur modification heure récup:', e);
+        alert('Erreur lors de la modification : ' + (e.message || e));
+    }
+}
+
+async function supprimerRecupUser(id) {
+    const ligne = _heuresRecupUserListe.find(x => x.id === id);
+    if (!ligne) return;
+    const dateAffichee = formatDateFRUser(ligne.date);
+    const heuresAffichees = `${Number(ligne.heures).toFixed(1)}h`;
+    const commentaire = ligne.commentaire ? `\nCommentaire : ${ligne.commentaire}` : '';
+
+    if (!confirm(`Supprimer cette saisie ?\n\nDate : ${dateAffichee}\nHeures : ${heuresAffichees}${commentaire}\n\nVotre solde de récupération sera ajusté automatiquement.`)) return;
+
+    try {
+        await window.api.deleteHeureSup(id);
+        await chargerListeHeuresRecupUser();
+        await loadSoldes();
+    } catch (e) {
+        console.error('Erreur suppression heure récup:', e);
+        alert('Erreur lors de la suppression : ' + (e.message || e));
+    }
+}
+
+(function initModalHistoriqueRecupUser() {
+    // Le bouton d'ouverture est dans la modale de choix (initModalHeuresSup),
+    // pas besoin de listener supplémentaire ici.
+    const btnClose = document.getElementById('closeModalHistoriqueRecupUser');
+    if (btnClose) btnClose.addEventListener('click', () => {
+        document.getElementById('modalHistoriqueRecupUser').style.display = 'none';
+    });
+    const btnFermer = document.getElementById('btnFermerHistoRecupUser');
+    if (btnFermer) btnFermer.addEventListener('click', () => {
+        document.getElementById('modalHistoriqueRecupUser').style.display = 'none';
+    });
+})();
 
 init();
