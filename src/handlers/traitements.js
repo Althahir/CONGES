@@ -1,4 +1,4 @@
-const { calculerCPMensuel, getTauxGlobaux: getTauxGlobauxUtil, getJoursFeriesAnnee } = require('./utils-cp');
+const { calculerCPMensuel, calculerCPMensuelDetail, getTauxGlobaux: getTauxGlobauxUtil, getJoursFeriesAnnee } = require('./utils-cp');
 
 module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
@@ -76,7 +76,8 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 });
                 const historique = histResult.rows;
 
-                const cpAAjouter = calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries);
+                const calculDetail = calculerCPMensuelDetail(salarie, annee, mois, taux, historique, joursFeries);
+                const cpAAjouter = calculDetail.total;
                 if (cpAAjouter <= 0) continue;
 
                 const soldesResult = await ctx.db.execute({
@@ -104,8 +105,23 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 details.push({
                     salarie_id: salarie.id,
                     nom: `${salarie.prenom} ${salarie.nom}`,
-                    cp_ajoutes: cpAAjouter.toFixed(5),
-                    nouveau_cp_n: nouveauCPN.toFixed(5)
+                    ancien_cp_n: ancienCPN,
+                    cp_ajoutes: cpAAjouter,
+                    nouveau_cp_n: nouveauCPN,
+                    // Audit complet (utile pour reconstituer le calcul a posteriori)
+                    audit: {
+                        date_embauche: calculDetail.dateEmbauche,
+                        en_arret_maladie: calculDetail.enArretMaladie,
+                        date_arret_maladie: calculDetail.dateArretMaladie,
+                        nb_historique_taux: calculDetail.nbHistoriqueTaux,
+                        taux_normal: calculDetail.tauxNormal,
+                        taux_arret: calculDetail.tauxArret,
+                        fallback_arret_applique: calculDetail.fallbackArretApplique,
+                        nb_jours_mois: calculDetail.nbJoursMois,
+                        jour_debut: calculDetail.jourDebut,
+                        total_jours_ouvres: calculDetail.totalJoursOuvres,
+                        segments: calculDetail.segments
+                    }
                 });
 
             } catch (error) {
@@ -406,7 +422,8 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 });
                 const historique = histResult.rows;
 
-                const cpAAjouter = calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries);
+                const calculDetail = calculerCPMensuelDetail(salarie, annee, mois, taux, historique, joursFeries);
+                const cpAAjouter = calculDetail.total;
                 if (cpAAjouter <= 0) continue;
 
                 const soldesResult = await ctx.db.execute({
@@ -434,8 +451,23 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 details.push({
                     salarie_id: salarie.id,
                     nom: `${salarie.prenom} ${salarie.nom}`,
-                    cp_ajoutes: cpAAjouter.toFixed(5),
-                    nouveau_cp_n: nouveauCPN.toFixed(5)
+                    ancien_cp_n: ancienCPN,
+                    cp_ajoutes: cpAAjouter,
+                    nouveau_cp_n: nouveauCPN,
+                    // Audit complet (utile pour reconstituer le calcul a posteriori)
+                    audit: {
+                        date_embauche: calculDetail.dateEmbauche,
+                        en_arret_maladie: calculDetail.enArretMaladie,
+                        date_arret_maladie: calculDetail.dateArretMaladie,
+                        nb_historique_taux: calculDetail.nbHistoriqueTaux,
+                        taux_normal: calculDetail.tauxNormal,
+                        taux_arret: calculDetail.tauxArret,
+                        fallback_arret_applique: calculDetail.fallbackArretApplique,
+                        nb_jours_mois: calculDetail.nbJoursMois,
+                        jour_debut: calculDetail.jourDebut,
+                        total_jours_ouvres: calculDetail.totalJoursOuvres,
+                        segments: calculDetail.segments
+                    }
                 });
 
             } catch (error) {
