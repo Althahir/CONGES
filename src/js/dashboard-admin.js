@@ -167,6 +167,9 @@ navBtns.forEach(btn => {
         sectionActiveAdmin = sectionName;
         document.getElementById(`${sectionName}-section`).classList.add('active');
 
+        // Si l'admin arrive sur la section Validation, le toast d'alerte initiale n'a plus lieu d'être
+        if (sectionName === 'historique') dismissToastsByTag('demandes-pending');
+
         // Mettre à jour le titre du header
         document.getElementById('headerTitle').textContent = titresSectionAdmin[sectionName] || 'Administration';
 
@@ -257,7 +260,7 @@ async function chargerSalaries() {
                             </div>
                             <div class="solde-mini">
                                 <div class="solde-mini-label">Récup</div>
-                                <div class="solde-mini-value">${soldes.recup_heures.toFixed(1)}h</div>
+                                <div class="solde-mini-value">${soldes.recup_heures.toFixed(2)}h</div>
                             </div>
                         </div>
                     ` : ''}
@@ -313,20 +316,17 @@ async function chargerCalendrierGlobal() {
         const salaries = await window.api.getAllSalaries();
         const toutesAbsences = await window.api.getAllAbsences();
         const joursFeries = await window.api.getJoursFeries(anneeCalendrier);
-        
-        // Filtrer les absences pour l'année sélectionnée (inclure celles qui touchent l'année)
+
         // Filtrer les absences pour l'année sélectionnée (inclure celles qui touchent l'année)
         const absencesAnnee = toutesAbsences.filter(abs => {
             const anneeDebut = new Date(abs.date_debut).getFullYear();
             const anneeFin = new Date(abs.date_fin).getFullYear();
             return anneeDebut === anneeCalendrier || anneeFin === anneeCalendrier;
         });
-        
+
         // Déterminer quels salariés ont au moins une absence cette année
         const salariesAvecAbsences = new Set();
-        absencesAnnee.forEach(abs => {
-            salariesAvecAbsences.add(abs.salarie_id);
-        });
+        absencesAnnee.forEach(abs => salariesAvecAbsences.add(abs.salarie_id));
         
         // Filtrer et trier les salariés qui ont des absences (par ordre alphabétique)
         const salariesActifs = salaries
@@ -420,8 +420,10 @@ async function chargerCalendrierGlobal() {
                     if (estFerie) {
                         tooltip = ferie.libelle;
                     }
-                    if (absentsJour.length > 0) {
-                        const noms = absentsJour.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
+                    // Tooltip de cellule : ne lister que les absences validées (en_attente exclues)
+                    const absentsValides = absentsJour.filter(abs => abs.statut !== 'en_attente');
+                    if (absentsValides.length > 0) {
+                        const noms = absentsValides.map(abs => `${abs.prenom} ${abs.nom}`).join(', ');
                         tooltip = tooltip ? `${tooltip} - ${noms}` : noms;
                     }
                     // Si c'est un weekend ou jour férié, ne pas afficher d'absences
@@ -483,12 +485,22 @@ async function chargerCalendrierGlobal() {
                             const indicateurs = new Array(8).fill(null);
                             const nomsSalaries = new Array(8).fill(null);
                             const statutsIndicateurs = new Array(8).fill(null);
+                            const periodesIndicateurs = new Array(8).fill(null);
+                            const idsIndicateurs = new Array(8).fill(null);
+                            const salarieIdsIndicateurs = new Array(8).fill(null);
                             absentsJour.forEach(abs => {
                                 const position = positionsSalaries[abs.salarie_id];
                                 if (position !== undefined && position < 8) {
+                                    // Période réelle pour ce jour : 'matin' (matin seulement), 'apres-midi' (après-midi seulement), 'plein' sinon
+                                    let periode = 'plein';
+                                    if (dateISO === abs.date_debut && abs.debut_periode === 'apres-midi') periode = 'apres-midi';
+                                    else if (dateISO === abs.date_fin && abs.fin_periode === 'midi') periode = 'matin';
                                     indicateurs[position] = couleursSalaries[abs.salarie_id];
                                     nomsSalaries[position] = `${abs.prenom} ${abs.nom}`;
                                     statutsIndicateurs[position] = abs.statut;
+                                    periodesIndicateurs[position] = periode;
+                                    idsIndicateurs[position] = abs.id;
+                                    salarieIdsIndicateurs[position] = abs.salarie_id;
                                 }
                             });
 
@@ -496,8 +508,20 @@ async function chargerCalendrierGlobal() {
                                 if (couleur) {
                                     const enAttente = statutsIndicateurs[idx] === 'en_attente';
                                     const classeAttente = enAttente ? ' en-attente' : '';
-                                    const suffixe = enAttente ? ' (en attente)' : '';
-                                    tableHTML += `<div class="indicateur-colonne actif${classeAttente}" style="background: ${couleur};" data-tooltip="${nomsSalaries[idx]}${suffixe}"></div>`;
+                                    const periode = periodesIndicateurs[idx];
+                                    let suffixe = enAttente ? ' (en attente)' : '';
+                                    if (periode === 'matin') suffixe = ' · matin' + suffixe;
+                                    else if (periode === 'apres-midi') suffixe = ' · après-midi' + suffixe;
+                                    // Demi-journées : dégradé vertical (matin coloré en haut, après-midi en bas)
+                                    let bg = couleur;
+                                    if (periode === 'matin') bg = `linear-gradient(to bottom, ${couleur} 50%, transparent 50%)`;
+                                    else if (periode === 'apres-midi') bg = `linear-gradient(to top, ${couleur} 50%, transparent 50%)`;
+                                    // Si en attente : ajouter data-absence-id + data-salarie-id pour permettre le clic vers la card + ouverture du calendrier
+                                    const anneeAbs = new Date(dateISO).getFullYear();
+                                    const dataAbs = enAttente
+                                        ? ` data-absence-id="${idsIndicateurs[idx]}" data-salarie-id="${salarieIdsIndicateurs[idx]}" data-annee="${anneeAbs}"`
+                                        : '';
+                                    tableHTML += `<div class="indicateur-colonne actif${classeAttente}" style="background: ${bg};" data-tooltip="${nomsSalaries[idx]}${suffixe}"${dataAbs}></div>`;
                                 } else {
                                     tableHTML += '<div class="indicateur-colonne"></div>';
                                 }
@@ -526,7 +550,29 @@ async function chargerCalendrierGlobal() {
         
         // Injecter dans le DOM
         container.innerHTML = legendeHTML + tableHTML;
-        
+
+        // Délégation : clic sur un indicateur d'une demande en attente
+        // → bascule sur Validation + ouvre le calendrier du salarié + scroll vers la card
+        container.querySelectorAll('.indicateur-colonne[data-absence-id]').forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', () => {
+                const absenceId = el.dataset.absenceId;
+                const salarieId = parseInt(el.dataset.salarieId, 10);
+                const annee = parseInt(el.dataset.annee, 10);
+                const btnHisto = document.querySelector('.nav-btn[data-section="historique"]');
+                if (btnHisto) btnHisto.click();
+                setTimeout(() => {
+                    if (salarieId) ouvrirCalendrierSalarieHistorique(salarieId, annee, { skipScroll: true });
+                    const card = document.querySelector(`.demande-card[data-kind="absence"][data-absence-id="${absenceId}"]`);
+                    if (card) {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        card.classList.add('demande-card-highlight');
+                        setTimeout(() => card.classList.remove('demande-card-highlight'), 2000);
+                    }
+                }, 200);
+            });
+        });
+
     } catch (error) {
         console.error('Erreur chargement calendrier global:', error);
     }
@@ -1113,6 +1159,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 // ========== SECTION MES CONGÉS (reprise du dashboard user) ==========
 let joursFeriesUser = [];
 let absencesUser = [];
+let heuresRecupPoseesUser = []; // saisies hsup négatives à afficher sur le calendrier admin Mes Congés
 let hasChevauchementAdmin = false;
 
 async function initMesConges() {
@@ -1142,7 +1189,7 @@ async function loadSoldesAdmin() {
             function afficherPending(el, valeur, unite = 'j') {
                 if (!el) return;
                 if (valeur > 0) {
-                    const txt = valeur % 1 === 0 ? valeur : valeur.toFixed(1);
+                    const txt = valeur % 1 === 0 ? valeur : valeur.toFixed(2);
                     el.textContent = `(-${txt}${unite} en attente)`;
                     el.classList.add('has-pending');
                 } else {
@@ -1185,7 +1232,7 @@ async function loadSoldesAdmin() {
             if (salarie.a_droit_recup === 1) {
                 const recupJours = (soldes.recup_heures / 7).toFixed(2);
                 document.getElementById('solde-recup-user').innerHTML =
-                    `${soldes.recup_heures.toFixed(1)}h<p>(${recupJours}j)</p>`;
+                    `${soldes.recup_heures.toFixed(2)}h<p>(${recupJours}j)</p>`;
                 appliquerEtatSolde(tuileRecup, soldes.recup_heures);
                 afficherPending(pendingRecupEl, (pending && pending.recup_heures) || 0, 'h');
             } else {
@@ -1215,16 +1262,22 @@ async function loadSoldesAdmin() {
 
 let _demandesEnAttenteCache = [];
 
+let _heuresSupEnAttenteCache = [];
+
 async function loadDemandesEnAttente() {
     try {
-        const demandes = await window.api.getAbsencesEnAttente();
+        const [demandes, hsupDemandes] = await Promise.all([
+            window.api.getAbsencesEnAttente(),
+            window.api.getHeuresSupEnAttente()
+        ]);
         _demandesEnAttenteCache = demandes;
+        _heuresSupEnAttenteCache = hsupDemandes;
         const bandeau = document.getElementById('bandeauDemandesAttente');
         const liste = document.getElementById('listeDemandesAttente');
         const nbEl = document.getElementById('nbDemandesAttente');
         const badge = document.getElementById('navBadgeDemandes');
 
-        const count = demandes.length;
+        const count = demandes.length + hsupDemandes.length;
         if (nbEl) nbEl.textContent = count;
         if (badge) {
             if (count > 0) {
@@ -1246,24 +1299,24 @@ async function loadDemandesEnAttente() {
         const fmtDate = (d) => d.split('-').reverse().slice(0, 2).join('/');
         const labelsType = { CP: 'CP', CP_N: 'CP', CP_N1: 'CP', RTT: 'RTT', RECUP: 'Récup', MALADIE: 'Maladie' };
 
-        liste.innerHTML = demandes.map(d => {
-            const dureeStr = (d.type === 'RECUP' && !d.duree_jours) ? `${d.duree_heures}h` : `${(d.duree_jours || 0).toFixed(1)}j`;
+        const cardsAbsences = demandes.map(d => {
+            const dureeStr = (d.type === 'RECUP' && !d.duree_jours) ? `${d.duree_heures}h` : `${(d.duree_jours || 0).toFixed(2)}j`;
             const periode = d.date_debut === d.date_fin ? fmtDate(d.date_debut) : `${fmtDate(d.date_debut)} → ${fmtDate(d.date_fin)}`;
             const commentaire = d.commentaire
                 ? `<div class="demande-card-commentaire" title="${escapeHtml(d.commentaire)}">« ${escapeHtml(d.commentaire)} »</div>`
                 : '';
             return `
-                <div class="demande-card type-${d.type}" data-absence-id="${d.id}" data-salarie-id="${d.salarie_id}" data-annee="${new Date(d.date_debut).getFullYear()}" title="Voir dans le calendrier du salarié">
+                <div class="demande-card type-${d.type}" data-kind="absence" data-absence-id="${d.id}" data-salarie-id="${d.salarie_id}" data-annee="${new Date(d.date_debut).getFullYear()}" title="Voir dans le calendrier du salarié">
                     <div class="demande-card-info">
                         <div class="demande-card-salarie">${escapeHtml(d.prenom)} ${escapeHtml(d.nom)}</div>
                         <div class="demande-card-details">${labelsType[d.type] || d.type} · ${periode} · ${dureeStr}</div>
                         ${commentaire}
                     </div>
                     <div class="demande-card-actions">
-                        <button class="btn-valider-demande" data-id="${d.id}" title="Valider">
+                        <button class="btn-valider-demande" data-kind="absence" data-id="${d.id}" title="Valider">
                             <i class="fa-solid fa-check"></i> Valider
                         </button>
-                        <button class="btn-refuser-demande" data-id="${d.id}" title="Refuser">
+                        <button class="btn-refuser-demande" data-kind="absence" data-id="${d.id}" title="Refuser">
                             <i class="fa-solid fa-xmark"></i> Refuser
                         </button>
                     </div>
@@ -1271,7 +1324,35 @@ async function loadDemandesEnAttente() {
             `;
         }).join('');
 
-        // Clic sur la card → ouvre le calendrier du salarié à l'année de la demande
+        const cardsHsup = hsupDemandes.map(h => {
+            const heuresAbs = Math.abs(Number(h.heures));
+            const dateStr = fmtDate(h.date);
+            const annee = new Date(h.date).getFullYear();
+            const commentaire = h.commentaire
+                ? `<div class="demande-card-commentaire" title="${escapeHtml(h.commentaire)}">« ${escapeHtml(h.commentaire)} »</div>`
+                : '';
+            return `
+                <div class="demande-card type-RECUP" data-kind="hsup" data-hsup-id="${h.id}" data-salarie-id="${h.salarie_id}" data-annee="${annee}" title="Voir dans le calendrier du salarié">
+                    <div class="demande-card-info">
+                        <div class="demande-card-salarie">${escapeHtml(h.prenom)} ${escapeHtml(h.nom)}</div>
+                        <div class="demande-card-details">Récup · ${dateStr} · ${heuresAbs}h</div>
+                        ${commentaire}
+                    </div>
+                    <div class="demande-card-actions">
+                        <button class="btn-valider-demande" data-kind="hsup" data-id="${h.id}" title="Valider">
+                            <i class="fa-solid fa-check"></i> Valider
+                        </button>
+                        <button class="btn-refuser-demande" data-kind="hsup" data-id="${h.id}" title="Refuser">
+                            <i class="fa-solid fa-xmark"></i> Refuser
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        liste.innerHTML = cardsAbsences + cardsHsup;
+
+        // Clic sur n'importe quelle card → ouvre le calendrier du salarié à l'année concernée
         liste.querySelectorAll('.demande-card').forEach(card => {
             card.addEventListener('click', () => {
                 const salarieId = parseInt(card.dataset.salarieId, 10);
@@ -1280,21 +1361,90 @@ async function loadDemandesEnAttente() {
             });
         });
 
-        // Boutons Valider / Refuser : stopPropagation pour ne pas déclencher le clic sur la card
+        // Boutons Valider / Refuser
         liste.querySelectorAll('.btn-valider-demande').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                validerDemande(parseInt(btn.dataset.id, 10));
+                const id = parseInt(btn.dataset.id, 10);
+                if (btn.dataset.kind === 'hsup') validerDemandeHeureSup(id);
+                else validerDemande(id);
             });
         });
         liste.querySelectorAll('.btn-refuser-demande').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                refuserDemande(parseInt(btn.dataset.id, 10));
+                const id = parseInt(btn.dataset.id, 10);
+                if (btn.dataset.kind === 'hsup') refuserDemandeHeureSup(id);
+                else refuserDemande(id);
             });
         });
     } catch (err) {
         console.error('Erreur chargement demandes en attente:', err);
+    }
+}
+
+async function validerDemandeHeureSup(id) {
+    const demande = (_heuresSupEnAttenteCache || []).find(h => h.id === id);
+    const info = demande
+        ? `<strong>${escapeHtml(demande.prenom)} ${escapeHtml(demande.nom)}</strong><br>Récup · ${new Date(demande.date).toLocaleDateString('fr-FR')} · ${Math.abs(Number(demande.heures))}h`
+        : null;
+    const ok = await confirmModal({
+        titre: 'Valider la demande',
+        info,
+        message: 'Confirmer la validation de cette demande de récup ?',
+        iconClass: 'fa-circle-check',
+        confirmText: 'Valider',
+        confirmClass: 'btn-success'
+    });
+    if (!ok) return;
+
+    const btn = document.querySelector(`.btn-valider-demande[data-kind="hsup"][data-id="${id}"]`);
+    const btnRefuser = document.querySelector(`.btn-refuser-demande[data-kind="hsup"][data-id="${id}"]`);
+    if (btn) btn.disabled = true;
+    if (btnRefuser) btnRefuser.disabled = true;
+
+    try {
+        await window.api.validerHeureSup({ id, adminId: user.id });
+        afficherNotificationPersistante('success', 'Demande validée', 'La saisie de récup a été validée.', 3000, undefined, undefined, true);
+        await loadDemandesEnAttente();
+        await loadSoldesAdmin();
+    } catch (e) {
+        console.error('Erreur validation demande hsup:', e);
+        afficherNotificationPersistante('error', 'Erreur', e.message || 'Validation impossible.');
+        if (btn) btn.disabled = false;
+        if (btnRefuser) btnRefuser.disabled = false;
+    }
+}
+
+async function refuserDemandeHeureSup(id) {
+    const demande = (_heuresSupEnAttenteCache || []).find(h => h.id === id);
+    const info = demande
+        ? `<strong>${escapeHtml(demande.prenom)} ${escapeHtml(demande.nom)}</strong><br>Récup · ${new Date(demande.date).toLocaleDateString('fr-FR')} · ${Math.abs(Number(demande.heures))}h`
+        : null;
+    const ok = await confirmModal({
+        titre: 'Refuser la demande',
+        info,
+        message: 'Confirmer le refus de cette demande de récup ?',
+        iconClass: 'fa-circle-xmark',
+        confirmText: 'Refuser',
+        confirmClass: 'btn-danger'
+    });
+    if (!ok) return;
+
+    const btn = document.querySelector(`.btn-valider-demande[data-kind="hsup"][data-id="${id}"]`);
+    const btnRefuser = document.querySelector(`.btn-refuser-demande[data-kind="hsup"][data-id="${id}"]`);
+    if (btn) btn.disabled = true;
+    if (btnRefuser) btnRefuser.disabled = true;
+
+    try {
+        await window.api.refuserHeureSup({ id, adminId: user.id });
+        afficherNotificationPersistante('success', 'Demande refusée', 'Le refus a été enregistré.', 3000, undefined, undefined, true);
+        await loadDemandesEnAttente();
+    } catch (e) {
+        console.error('Erreur refus demande hsup:', e);
+        afficherNotificationPersistante('error', 'Erreur', e.message || 'Refus impossible.');
+        if (btn) btn.disabled = false;
+        if (btnRefuser) btnRefuser.disabled = false;
     }
 }
 
@@ -1303,7 +1453,41 @@ function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function ouvrirCalendrierSalarieHistorique(salarieId, annee) {
+// Modale de confirmation jolie réutilisable. Retourne une promise true/false.
+// Options : { titre, message, info?, iconClass?, confirmText?, confirmClass?, cancelText? }
+function confirmModal({ titre, message, info, iconClass, confirmText, confirmClass, cancelText }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <div class="modal-content" style="max-width: 440px;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid ${iconClass || 'fa-circle-question'}"></i> ${escapeHtml(titre)}</h3>
+                    <button class="close-modal js-close"><i class="fa-solid fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    ${info ? `<p class="info-refus-demande">${info}</p>` : ''}
+                    <p class="texte-refus-demande">${escapeHtml(message)}</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary js-cancel">${escapeHtml(cancelText || 'Annuler')}</button>
+                    <button class="${confirmClass || 'btn-primary'} js-confirm">${escapeHtml(confirmText || 'Confirmer')}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const close = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+        overlay.querySelector('.js-close').addEventListener('click', () => close(false));
+        overlay.querySelector('.js-cancel').addEventListener('click', () => close(false));
+        overlay.querySelector('.js-confirm').addEventListener('click', () => close(true));
+    });
+}
+
+function ouvrirCalendrierSalarieHistorique(salarieId, annee, options) {
     if (!salarieId) return;
     salarieHistoriqueSelectionne = salarieId;
     if (typeof annee === 'number' && !isNaN(annee)) {
@@ -1313,7 +1497,8 @@ function ouvrirCalendrierSalarieHistorique(salarieId, annee) {
     const select = document.getElementById('selectSalarieHistorique');
     if (select) select.value = String(salarieId);
     chargerCalendrierHistorique();
-    // Scroll vers le calendrier pour que l'admin voie le résultat
+    // Scroll vers le calendrier (sauf si options.skipScroll = true, par exemple quand on veut garder le focus sur la card)
+    if (options && options.skipScroll) return;
     const calendrierDiv = document.getElementById('calendrierHistorique');
     if (calendrierDiv) {
         setTimeout(() => calendrierDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
@@ -1330,7 +1515,7 @@ async function validerDemande(absenceId) {
 
     try {
         await window.api.validerAbsence(absenceId, user.id);
-        afficherNotificationPersistante('success', 'Demande validée', 'La validation a bien été enregistrée.', 3000);
+        afficherNotificationPersistante('success', 'Demande validée', 'La validation a bien été enregistrée.', 3000, undefined, undefined, true);
 
         // Génération du PDF officiel : enregistrement OneDrive auto + mention valideur
         if (demande) {
@@ -1406,7 +1591,7 @@ async function confirmerRefusDemande() {
     try {
         await window.api.refuserAbsence(absenceId, user.id);
         fermerModalRefusDemande();
-        afficherNotificationPersistante('success', 'Demande refusée', 'Le refus a bien été enregistré.', 3000);
+        afficherNotificationPersistante('success', 'Demande refusée', 'Le refus a bien été enregistré.', 3000, undefined, undefined, true);
         await loadDemandesEnAttente();
         if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
     } catch (err) {
@@ -1456,9 +1641,15 @@ async function chargerAbsencesUser() {
             const anneeFin = new Date(abs.date_fin).getFullYear();
             return anneeDebut === anneeActuelle || anneeFin === anneeActuelle;
         });
+        // Charger aussi les heures de récup posées (saisies hsup négatives, statut != refuse)
+        try {
+            const allHsup = await window.api.getHeuresSup(user.id);
+            heuresRecupPoseesUser = allHsup.filter(h => Number(h.heures) < 0);
+        } catch (e) { heuresRecupPoseesUser = []; }
     } catch (error) {
         console.error('Erreur chargement absences:', error);
         absencesUser = [];
+        heuresRecupPoseesUser = [];
     }
 }
 
@@ -1542,7 +1733,7 @@ function genererCalendrierUser() {
                     tooltipLabel = 'RTT';
                 } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
-                    tooltipLabel = 'Récupération';
+                    tooltipLabel = 'Récup.';
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
                     tooltipLabel = 'Arrêt maladie';
@@ -1553,10 +1744,50 @@ function genererCalendrierUser() {
                     tooltipLabel += ' — En attente de validation';
                 }
 
+                // Demi-journées : dégradé horizontal (matin = gauche, après-midi = droite)
+                const estPremier = dateISO === absence.date_debut;
+                const estDernier = dateISO === absence.date_fin;
+                if (estPremier && absence.debut_periode === 'apres-midi') {
+                    jourDiv.classList.add('demi-pm');
+                    tooltipLabel += ' (après-midi)';
+                }
+                if (estDernier && absence.fin_periode === 'midi') {
+                    jourDiv.classList.add('demi-am');
+                    tooltipLabel += ' (matin)';
+                }
+
                 if (absence.commentaire) {
-                    tooltipLabel += ` · ${absence.commentaire}`;
+                    tooltipLabel += `\n${absence.commentaire}`;
                 }
                 if (tooltipLabel) jourDiv.setAttribute('data-tooltip', tooltipLabel);
+            }
+
+            // Heures de récup posées (saisies hsup négatives) — superposable à une demi-journée d'absence
+            if (dayOfWeek !== 0 && dayOfWeek !== 6 && !jourFerie) {
+                const saisiesJour = heuresRecupPoseesUser.filter(h => h.date === dateISO);
+                if (saisiesJour.length > 0) {
+                    const totalHeures = saisiesJour.reduce((s, h) => s + Math.abs(Number(h.heures)), 0);
+                    const enAttente = saisiesJour.some(h => h.statut === 'en_attente');
+                    jourDiv.classList.add('hsup-pose');
+                    if (enAttente) jourDiv.classList.add('en-attente');
+                    const coin = document.createElement('span');
+                    coin.className = 'hsup-coin';
+                    jourDiv.appendChild(coin);
+                    const badge = document.createElement('span');
+                    badge.className = 'hsup-badge';
+                    badge.textContent = `${totalHeures}h`;
+                    jourDiv.appendChild(badge);
+                    const commentaireGenerique = /^(Récupération d'heures|Heures supplémentaires) du \d{4}-\d{2}-\d{2}$/;
+                    const lignes = saisiesJour.map(h => {
+                        const hAbs = Math.abs(Number(h.heures));
+                        const att = h.statut === 'en_attente' ? ' (en attente)' : '';
+                        const com = h.commentaire && !commentaireGenerique.test(h.commentaire) ? h.commentaire : null;
+                        return com ? `${hAbs}h · ${com}${att}` : `${hAbs}h${att}`;
+                    });
+                    const tooltipHsup = `Récup.\n${lignes.join('\n')}`;
+                    const existing = jourDiv.getAttribute('data-tooltip');
+                    jourDiv.setAttribute('data-tooltip', existing ? `${existing}\n${tooltipHsup}` : tooltipHsup);
+                }
             }
 
             joursMoisDiv.appendChild(jourDiv);
@@ -1579,6 +1810,22 @@ function genererCalendrierUser() {
 
 let dragStartDate = null;
 let isDragging = false;
+
+// Réinitialise les toggles de période (matin pour début, après-midi pour fin)
+// du formulaire admin "Mes Congés".
+function resetPeriodTogglesAdmin() {
+    const debutHidden = document.getElementById('debutApremUser');
+    const finHidden = document.getElementById('finMidiUser');
+    if (debutHidden) debutHidden.value = 'am';
+    if (finHidden) finHidden.value = 'pm';
+    document.querySelectorAll('#mes-conges-section .period-toggle').forEach(toggle => {
+        toggle.querySelectorAll('.period-btn').forEach(b => {
+            const target = b.dataset.target;
+            const expected = target === 'debutApremUser' ? 'am' : 'pm';
+            b.classList.toggle('active', b.dataset.value === expected);
+        });
+    });
+}
 
 function initCalendrierDragSelect() {
     const container = document.getElementById('calendrierAnnuelUser');
@@ -1611,6 +1858,7 @@ function initCalendrierDragSelect() {
         if (!isDragging) return;
         isDragging = false;
         dragStartDate = null;
+        resetPeriodTogglesAdmin();
         calculerDureeAbsenceAdmin();
     });
 }
@@ -1694,6 +1942,7 @@ async function initFormAbsenceAdmin() {
     // Calcul automatique sur changement de dates
     if (dateDebut) {
         dateDebut.addEventListener('change', () => {
+            resetPeriodTogglesAdmin();
             calculerDureeAbsenceAdmin();
             updateBtnValiderAdmin();
             if (dateFin.value) {
@@ -1704,6 +1953,7 @@ async function initFormAbsenceAdmin() {
 
     if (dateFin) {
         dateFin.addEventListener('change', () => {
+            resetPeriodTogglesAdmin();
             calculerDureeAbsenceAdmin();
             updateBtnValiderAdmin();
             if (dateDebut.value) {
@@ -1752,6 +2002,9 @@ function updateBtnValiderAdmin() {
     }
     if (type === 'RECUP' && recupType === 'heures' && (!recupHeures || recupHeures <= 0)) {
         manquants.push('nombre d\'heures');
+    }
+    if (type === 'RECUP' && recupType === 'heures' && parseFloat(recupHeures) > 2.5) {
+        manquants.push('au-delà de 2h30, posez une demi-journée');
     }
     if (hasChevauchementAdmin) {
         manquants.push('chevauchement avec une absence existante');
@@ -1839,7 +2092,7 @@ async function calculerDureeAbsenceAdmin() {
         } else {
             const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
             dureeJours = result.dureeJours;
-            dureeHeures = dureeJours * 7;
+            dureeHeures = result.dureeHeures;
         }
 
         // Bloquer si durée = 0 (jour férié, weekend...)
@@ -1856,7 +2109,7 @@ async function calculerDureeAbsenceAdmin() {
 
         // Afficher la durée
         resumeDuree.textContent = typeAbsence === 'RECUP' && recupType === 'heures'
-            ? `${dureeHeures.toFixed(1)} heure(s)`
+            ? `${dureeHeures.toFixed(2)} heure(s)`
             : `${dureeJours.toFixed(2)} jour(s)`;
 
         // Calculer et afficher le décompte selon le type
@@ -1884,6 +2137,12 @@ async function calculerDureeAbsenceAdmin() {
             </table>`;
 
         } else if (typeAbsence === 'RECUP') {
+            // Plafond RECUP horaire à 2h30 : au-delà, demi-journée obligatoire
+            if (recupType === 'heures' && parseFloat(recupHeures) > 2.5) {
+                alertePeriode.textContent = '⚠️ Au-delà de 2h30, posez une demi-journée (matin ou après-midi) au lieu d\'heures';
+                alertePeriode.classList.add('alert-warning');
+            }
+
             const nouvelleRecup = soldes.recup_heures - dureeHeures;
             if (nouvelleRecup < 0) soldeNegatif = true;
             resumeDecompte.innerHTML = `<table>
@@ -1978,7 +2237,7 @@ async function afficherHistoriqueAdmin() {
         historiqueContainer.innerHTML = dernieresAbsences.map(abs => {
             const dateD = new Date(abs.date_debut).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
             const dateF = new Date(abs.date_fin).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-            const duree = abs.duree_jours ? `${abs.duree_jours.toFixed(1)}j` : `${abs.duree_heures.toFixed(1)}h`;
+            const duree = abs.duree_jours ? `${abs.duree_jours.toFixed(2)}j` : `${abs.duree_heures.toFixed(2)}h`;
             
             return `
                 <div class="historique-item ${typeClasses[abs.type]}">
@@ -2162,24 +2421,45 @@ document.getElementById('btnEnregistrerConfig').addEventListener('click', async 
 const _toastQueue = [];
 let _toastActif = false;
 
-function afficherNotificationPersistante(type, titre, message, autoDismissMs) {
+// Si notificationId est fourni, la fermeture du toast (manuelle OU auto) marque
+// la notif DB comme lue et rafraîchit le badge cloche.
+// Si onClick est fourni, cliquer sur le contenu du toast l'exécute + ferme le toast.
+// Si silencieux=true, le son du toast est forcé à false (pour les actions admin contextuelles).
+// Si tag fourni, le toast peut être fermé programmatiquement via dismissToastsByTag(tag).
+function afficherNotificationPersistante(type, titre, message, autoDismissMs, notificationId, onClick, silencieux, tag) {
     // Le son ne joue qu'une fois par rafale : si un toast est déjà visible ou
     // dans la file, ce push rejoint la rafale en silence.
-    const playSon = !_toastActif && _toastQueue.length === 0;
-    _toastQueue.push({ type, titre, message, autoDismissMs, playSon });
+    const playSon = !silencieux && !_toastActif && _toastQueue.length === 0;
+    _toastQueue.push({ type, titre, message, autoDismissMs, playSon, notificationId, onClick, tag });
     _afficherProchainToast();
 }
 
 function _afficherProchainToast() {
     if (_toastActif || _toastQueue.length === 0) return;
     _toastActif = true;
-    const { type, titre, message, autoDismissMs, playSon } = _toastQueue.shift();
-    _rendreToast(type, titre, message, autoDismissMs, playSon);
+    const { type, titre, message, autoDismissMs, playSon, notificationId, onClick, tag } = _toastQueue.shift();
+    _rendreToast(type, titre, message, autoDismissMs, playSon, notificationId, onClick, tag);
 }
 
-function _rendreToast(type, titre, message, autoDismissMs, playSon) {
+// Ferme tous les toasts (DOM + file) ayant le tag fourni.
+function dismissToastsByTag(tag) {
+    if (!tag) return;
+    // Retire de la file les toasts pas encore affichés
+    for (let i = _toastQueue.length - 1; i >= 0; i--) {
+        if (_toastQueue[i].tag === tag) _toastQueue.splice(i, 1);
+    }
+    // Ferme les toasts déjà affichés
+    document.querySelectorAll(`.notification-persistante[data-toast-tag="${tag}"]`).forEach(t => {
+        const closeBtn = t.querySelector('.notification-close');
+        if (closeBtn) closeBtn.click();
+    });
+}
+
+function _rendreToast(type, titre, message, autoDismissMs, playSon, notificationId, onClick, tag) {
     const toast = document.createElement('div');
     toast.className = `notification-persistante ${type}`;
+    if (onClick) toast.style.cursor = 'pointer';
+    if (tag) toast.setAttribute('data-toast-tag', tag);
 
     const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
     toast.innerHTML = `
@@ -2195,17 +2475,38 @@ function _rendreToast(type, titre, message, autoDismissMs, playSon) {
     if (playSon && typeof window.jouerSonToast === 'function') window.jouerSonToast();
 
     let dismissed = false;
-    const dismiss = () => {
+    const dismiss = async () => {
         if (dismissed) return;
         dismissed = true;
         clearTimeout(timer);
-        toast.remove();
-        _toastActif = false;
-        _afficherProchainToast();
+        toast.classList.add('dismissing');
+        if (notificationId) {
+            try {
+                await window.api.marquerNotificationLue(notificationId);
+                await chargerNotificationsNonLues();
+            } catch (e) {
+                console.error('Erreur marquage notif lue:', e);
+            }
+        }
+        setTimeout(() => {
+            toast.remove();
+            _toastActif = false;
+            _afficherProchainToast();
+        }, 300);
     };
 
     const timer = autoDismissMs ? setTimeout(dismiss, autoDismissMs) : null;
-    toast.querySelector('.notification-close').addEventListener('click', dismiss);
+    toast.querySelector('.notification-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismiss();
+    });
+
+    if (onClick) {
+        toast.addEventListener('click', () => {
+            try { onClick(); } catch (e) { console.error('onClick toast:', e); }
+            dismiss();
+        });
+    }
 }
 
 // TEST NOTIFICATION
@@ -3714,14 +4015,21 @@ if (window.api.onTraitementAutomatique) {
     window.api.onTraitementAutomatique((data) => {
         console.log('Traitement automatique reçu:', data);
 
+        // Demande retirée par le salarié → juste refresh silencieux du bandeau
+        if (data.type === 'demande_supprimee') {
+            loadDemandesEnAttente();
+            return;
+        }
+
         // Notifs du workflow de validation — toast direct + refresh bandeau/badge
-        if (data.type === 'demande_conge' || data.type === 'demande_validee' || data.type === 'demande_refusee') {
+        if (data.type === 'demande_conge' || data.type === 'demande_validee' || data.type === 'demande_refusee'
+            || data.type === 'demande_recup' || data.type === 'recup_validee' || data.type === 'recup_refusee') {
             // Si la notif est ciblée vers un user spécifique, n'afficher que sur son poste
             if (data.user_id && data.user_id !== user.id) return;
             const statutToast = data.statut === 'error' ? 'error'
                               : data.statut === 'success' ? 'success'
                               : 'partial'; // info mappé à partial (bleu/orange doux)
-            afficherNotificationPersistante(statutToast, data.titre || 'Notification', data.message || '');
+            afficherNotificationPersistante(statutToast, data.titre || 'Notification', data.message || '', undefined, data.id);
             chargerNotificationsNonLues();
             loadDemandesEnAttente();
             return;
@@ -4013,7 +4321,7 @@ function afficherToastsAuDemarrage(notifications) {
                      : notif.statut === 'partial' ? 'partial'
                      : notif.statut === 'info' ? 'partial'
                      : 'success';
-        afficherNotificationPersistante(statut, notif.titre, notif.message);
+        afficherNotificationPersistante(statut, notif.titre, notif.message, undefined, notif.id);
     }
 }
 
@@ -4207,6 +4515,19 @@ async function init() {
     await chargerNotificationsNonLues();
     afficherToastsAuDemarrage(window._notificationsEnAttente || []);
 
+    // Toast cliquable si des demandes sont en attente : redirige vers la section Validation
+    const nbAbsAttente = (_demandesEnAttenteCache || []).length;
+    const nbHsupAttente = (_heuresSupEnAttenteCache || []).length;
+    const totalAttente = nbAbsAttente + nbHsupAttente;
+    if (totalAttente > 0) {
+        const titre = `${totalAttente} demande${totalAttente > 1 ? 's' : ''} de validation en attente`;
+        const message = "Cliquez ici pour y accéder";
+        afficherNotificationPersistante('partial', titre, message, undefined, undefined, () => {
+            const btnHisto = document.querySelector('.nav-btn[data-section="historique"]');
+            if (btnHisto) btnHisto.click();
+        }, false, 'demandes-pending');
+    }
+
     // Polling toutes les 30s pour détecter les changements depuis d'autres postes
     let _dernierNbNotifs = (window._notificationsEnAttente || []).length;
     setInterval(async () => {
@@ -4224,7 +4545,11 @@ async function init() {
             if (nouvelles > anciennes) {
                 const nouvellesNotifs = notifications.slice(0, nouvelles - anciennes);
                 for (const notif of nouvellesNotifs) {
-                    afficherNotificationPersistante('success', notif.titre, notif.message);
+                    const statut = notif.statut === 'error' ? 'error'
+                                 : notif.statut === 'partial' ? 'partial'
+                                 : notif.statut === 'info' ? 'partial'
+                                 : 'success';
+                    afficherNotificationPersistante(statut, notif.titre, notif.message, undefined, notif.id);
                 }
             }
 
@@ -4249,6 +4574,7 @@ let tousSalaries = [];
 // ========== SECTION HISTORIQUE - CALENDRIER ==========
 let salarieHistoriqueSelectionne = null;
 let absencesHistorique = [];
+let heuresRecupPoseesHistorique = []; // saisies hsup négatives du salarié sélectionné
 let joursFeriesHistorique = [];
 let absenceCliquee = null;
 let jourClique = null;
@@ -4317,7 +4643,13 @@ async function chargerCalendrierHistorique() {
         
         absencesHistorique = await window.api.getAbsences(salarieHistoriqueSelectionne);
         joursFeriesHistorique = await window.api.getJoursFeries(anneeHistorique);
-        
+
+        // Heures de récup posées du salarié (saisies hsup négatives, statut != refuse)
+        try {
+            const allHsup = await window.api.getHeuresSup(salarieHistoriqueSelectionne);
+            heuresRecupPoseesHistorique = allHsup.filter(h => Number(h.heures) < 0);
+        } catch (e) { heuresRecupPoseesHistorique = []; }
+
         // Filtrer les absences pour l'année sélectionnée (pour le calendrier)
         absencesHistorique = absencesHistorique.filter(abs => {
             const anneeDebut = new Date(abs.date_debut).getFullYear();
@@ -4339,36 +4671,66 @@ async function chargerCalendrierHistorique() {
         const rttVal    = soldes ? soldes.rtt    : 0;
         const recupVal  = soldes ? soldes.recup_heures : 0;
 
+        // Récupérer les engagements en attente de validation pour les afficher
+        let pending = { cp: 0, rtt: 0, recup_heures: 0 };
+        try {
+            pending = await window.api.getEnAttenteParSalarie(salarieHistoriqueSelectionne, anneeEnCours);
+        } catch (e) { /* fallback à 0 */ }
+
+        function afficherPendingHisto(elId, valeur, unite = 'j') {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            if (valeur > 0) {
+                const txt = valeur % 1 === 0 ? valeur : valeur.toFixed(2);
+                el.textContent = `(-${txt}${unite} en attente)`;
+                el.classList.add('has-pending');
+            } else {
+                el.textContent = '';
+                el.classList.remove('has-pending');
+            }
+        }
+
         // CP N-1 (toujours avec droits)
-        document.getElementById('soldeCPN1Historique').textContent = `${cpN1Val.toFixed(1)}j`;
+        document.getElementById('soldeCPN1Historique').textContent = `${cpN1Val.toFixed(2)}j`;
         cardCPN1.classList.remove('sans-droit');
         cardCPN1.classList.toggle('solde-vide', cpN1Val === 0);
 
         // CP N (toujours avec droits)
-        document.getElementById('soldeCPNHistorique').textContent = `${cpNVal.toFixed(1)}j`;
+        document.getElementById('soldeCPNHistorique').textContent = `${cpNVal.toFixed(2)}j`;
         cardCPN.classList.remove('sans-droit');
         cardCPN.classList.toggle('solde-vide', cpNVal === 0);
 
+        // Pending CP : on répartit comme debiterSoldes (N-1 d'abord, puis N)
+        const cpPending = pending.cp || 0;
+        const cpN1Pending = Math.min(Math.max(cpN1Val, 0), cpPending);
+        const cpNPending = Math.max(0, cpPending - cpN1Pending);
+        afficherPendingHisto('soldeCPN1HistoriquePending', cpN1Pending);
+        afficherPendingHisto('soldeCPNHistoriquePending', cpNPending);
+
         // RTT
         if (salarie.a_droit_rtt) {
-            document.getElementById('soldeRTTHistorique').textContent = `${rttVal.toFixed(1)}j`;
+            document.getElementById('soldeRTTHistorique').textContent = `${rttVal.toFixed(2)}j`;
             cardRTT.classList.remove('sans-droit');
             cardRTT.classList.toggle('solde-vide', rttVal === 0);
+            afficherPendingHisto('soldeRTTHistoriquePending', pending.rtt || 0);
         } else {
             document.getElementById('soldeRTTHistorique').textContent = 'N/A';
             cardRTT.classList.add('sans-droit');
             cardRTT.classList.remove('solde-vide');
+            afficherPendingHisto('soldeRTTHistoriquePending', 0);
         }
 
         // Récupération
         if (salarie.a_droit_recup) {
-            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(1)}h`;
+            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(2)}h`;
             cardRecup.classList.remove('sans-droit');
             cardRecup.classList.toggle('solde-vide', recupVal === 0);
+            afficherPendingHisto('soldeRecupHistoriquePending', pending.recup_heures || 0, 'h');
         } else {
             document.getElementById('soldeRecupHistorique').textContent = 'N/A';
             cardRecup.classList.add('sans-droit');
             cardRecup.classList.remove('solde-vide');
+            afficherPendingHisto('soldeRecupHistoriquePending', 0, 'h');
         }
 
         // Bouton historique heures de récup : visible uniquement si droit récup
@@ -4473,7 +4835,7 @@ function genererCalendrierHistorique() {
                     tooltipLabel = 'RTT';
                 } else if (type === 'RECUP') {
                     jourDiv.classList.add('recup');
-                    tooltipLabel = 'Récupération';
+                    tooltipLabel = 'Récup.';
                 } else if (type === 'MALADIE') {
                     jourDiv.classList.add('maladie');
                     tooltipLabel = 'Arrêt maladie';
@@ -4484,19 +4846,83 @@ function genererCalendrierHistorique() {
                     tooltipLabel += ' — En attente de validation';
                 }
 
+                // Demi-journées : dégradé horizontal (matin = gauche, après-midi = droite)
+                const estPremier = dateISO === absence.date_debut;
+                const estDernier = dateISO === absence.date_fin;
+                if (estPremier && absence.debut_periode === 'apres-midi') {
+                    jourDiv.classList.add('demi-pm');
+                    tooltipLabel += ' (après-midi)';
+                }
+                if (estDernier && absence.fin_periode === 'midi') {
+                    jourDiv.classList.add('demi-am');
+                    tooltipLabel += ' (matin)';
+                }
+
                 if (tooltipLabel) {
                     const tip = absence.commentaire
-                        ? `${tooltipLabel} · ${absence.commentaire}`
+                        ? `${tooltipLabel}\n${absence.commentaire}`
                         : tooltipLabel;
                     jourDiv.setAttribute('data-tooltip', tip);
                 }
 
                 // Événement clic
                 jourDiv.addEventListener('click', () => {
+                    // Si en attente de validation, on remonte sur la card du bandeau plutôt
+                    // que d'ouvrir la modale de suppression — l'admin doit valider/refuser.
+                    if (absence.statut === 'en_attente') {
+                        const card = document.querySelector(`.demande-card[data-kind="absence"][data-absence-id="${absence.id}"]`);
+                        if (card) {
+                            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            card.classList.add('demande-card-highlight');
+                            setTimeout(() => card.classList.remove('demande-card-highlight'), 2000);
+                        }
+                        return;
+                    }
                     ouvrirModalSuppression(absence, dateISO);
                 });
             }
-            
+
+            // Heures de récup posées (saisies hsup négatives) — superposable à une demi-journée d'absence
+            if (dayOfWeek !== 0 && dayOfWeek !== 6 && !ferie) {
+                const saisiesJour = heuresRecupPoseesHistorique.filter(h => h.date === dateISO);
+                if (saisiesJour.length > 0) {
+                    const totalHeures = saisiesJour.reduce((s, h) => s + Math.abs(Number(h.heures)), 0);
+                    const enAttente = saisiesJour.some(h => h.statut === 'en_attente');
+                    jourDiv.classList.add('hsup-pose');
+                    if (enAttente) jourDiv.classList.add('en-attente');
+                    const coin = document.createElement('span');
+                    coin.className = 'hsup-coin';
+                    jourDiv.appendChild(coin);
+                    const badge = document.createElement('span');
+                    badge.className = 'hsup-badge';
+                    badge.textContent = `${totalHeures}h`;
+                    jourDiv.appendChild(badge);
+                    const commentaireGenerique = /^(Récupération d'heures|Heures supplémentaires) du \d{4}-\d{2}-\d{2}$/;
+                    const lignes = saisiesJour.map(h => {
+                        const hAbs = Math.abs(Number(h.heures));
+                        const att = h.statut === 'en_attente' ? ' (en attente)' : '';
+                        const com = h.commentaire && !commentaireGenerique.test(h.commentaire) ? h.commentaire : null;
+                        return com ? `${hAbs}h · ${com}${att}` : `${hAbs}h${att}`;
+                    });
+                    const tooltipHsup = `Récup.\n${lignes.join('\n')}`;
+                    const existing = jourDiv.getAttribute('data-tooltip');
+                    jourDiv.setAttribute('data-tooltip', existing ? `${existing}\n${tooltipHsup}` : tooltipHsup);
+
+                    // Clic : si en_attente, remonter sur la card hsup ; sinon rien (pas de suppression depuis le calendrier)
+                    if (enAttente) {
+                        const hsupId = saisiesJour.find(h => h.statut === 'en_attente').id;
+                        jourDiv.addEventListener('click', () => {
+                            const card = document.querySelector(`.demande-card[data-kind="hsup"][data-hsup-id="${hsupId}"]`);
+                            if (card) {
+                                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                card.classList.add('demande-card-highlight');
+                                setTimeout(() => card.classList.remove('demande-card-highlight'), 2000);
+                            }
+                        });
+                    }
+                }
+            }
+
             joursMoisDiv.appendChild(jourDiv);
         }
         
@@ -4572,7 +4998,7 @@ document.getElementById('btnConfirmerMaladie').addEventListener('click', async (
             date_debut: debut,
             date_fin: fin,
             duree_jours: duree.dureeJours,
-            duree_heures: duree.dureeJours * 7,
+            duree_heures: duree.dureeHeures,
             commentaire: commentaire || null,
             debut_periode: 'matin',
             fin_periode: 'fin-journee',
@@ -4615,7 +5041,7 @@ async function rafraichirSoldesHistoriqueAvecModaleOuverte() {
         const soldes = await window.api.getSoldes(salarieHistoriqueSelectionne, anneeEnCours);
         const recupVal = soldes ? soldes.recup_heures : 0;
         if (salarie.a_droit_recup) {
-            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(1)}h`;
+            document.getElementById('soldeRecupHistorique').textContent = `${recupVal.toFixed(2)}h`;
             const cardRecup = document.querySelector('#soldesHistorique .solde-card.sh-recup');
             cardRecup.classList.remove('sans-droit');
             cardRecup.classList.toggle('solde-vide', recupVal === 0);
@@ -4744,8 +5170,8 @@ function renderTableauHeuresRecup() {
         if (isPose && !enEdition) classes.push('ligne-pose');
         if (isReadOnly) classes.push('ligne-readonly');
         const heuresAffichage = isPose
-            ? `<span class="heures-pose">${heuresNum.toFixed(1)}h</span>`
-            : `<span class="heures-credit">+${heuresNum.toFixed(1)}h</span>`;
+            ? `<span class="heures-pose">${heuresNum.toFixed(2)}h</span>`
+            : `<span class="heures-credit">+${heuresNum.toFixed(2)}h</span>`;
 
         const tooltipReadOnly = "Cette ligne provient d'un congé posé. Pour la modifier ou la supprimer, double-cliquez sur le jour correspondant dans le calendrier ci-dessous.";
 
@@ -4840,10 +5266,13 @@ async function sauverEditionRecup(id) {
     }
 
     try {
-        await window.api.updateHeureSup({ id, date, heures, commentaire });
+        await window.api.updateHeureSup({ id, date, heures, commentaire, actorId: user.id });
         heureRecupEnEdition = null;
         await chargerListeHeuresRecup();
         await rafraichirSoldesHistoriqueAvecModaleOuverte();
+        await loadSoldesAdmin();
+        await chargerCalendrierUser();
+        if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
         afficherNotificationPersistante('success', 'Modification enregistrée', `Saisie mise à jour : ${heures}h du ${formatDateFR(date)}.`, 3000);
     } catch (error) {
         console.error('Erreur modification heure récup:', error);
@@ -4858,7 +5287,7 @@ function ouvrirModalSuppressionRecup(id) {
 
     document.getElementById('infoSuppressionRecup').innerHTML = `
         <p><strong>Date :</strong> ${formatDateFR(h.date)}</p>
-        <p><strong>Heures :</strong> ${Number(h.heures).toFixed(1)}h</p>
+        <p><strong>Heures :</strong> ${Number(h.heures).toFixed(2)}h</p>
         ${h.commentaire ? `<p><strong>Commentaire :</strong> ${escapeHtml(h.commentaire)}</p>` : ''}
     `;
 
@@ -4869,7 +5298,7 @@ function ouvrirModalSuppressionRecup(id) {
     const warningTexte = document.getElementById('warningSoldeRecupTexte');
 
     if (anneeSaisie === anneeEnCours && (soldeAffiche - Number(h.heures)) < 0) {
-        const futurSolde = (soldeAffiche - Number(h.heures)).toFixed(1);
+        const futurSolde = (soldeAffiche - Number(h.heures)).toFixed(2);
         warningTexte.textContent = `Attention : le solde de récupération deviendra négatif (${futurSolde}h). La suppression est tout de même autorisée.`;
         warning.style.display = 'flex';
     } else {
@@ -4900,14 +5329,17 @@ document.getElementById('btnAnnulerSuppressionRecup').addEventListener('click', 
 document.getElementById('btnConfirmerSuppressionRecup').addEventListener('click', async () => {
     if (!heureRecupASupprimer) return;
     try {
-        await window.api.deleteHeureSup(heureRecupASupprimer.id);
+        await window.api.deleteHeureSup({ id: heureRecupASupprimer.id, actorId: user.id });
         const heuresSuppr = Number(heureRecupASupprimer.heures);
         const dateSuppr = formatDateFR(heureRecupASupprimer.date);
         document.getElementById('modalSuppressionRecup').style.display = 'none';
         heureRecupASupprimer = null;
         await chargerListeHeuresRecup();
         await rafraichirSoldesHistoriqueAvecModaleOuverte();
-        afficherNotificationPersistante('success', 'Saisie supprimée', `${heuresSuppr.toFixed(1)}h du ${dateSuppr} retirées du solde.`, 3000);
+        await loadSoldesAdmin();
+        await chargerCalendrierUser();
+        if (salarieHistoriqueSelectionne) await chargerCalendrierHistorique();
+        afficherNotificationPersistante('success', 'Saisie supprimée', `${heuresSuppr.toFixed(2)}h du ${dateSuppr} retirées du solde.`, 3000);
     } catch (error) {
         console.error('Erreur suppression heure récup:', error);
         afficherNotificationPersistante('error', 'Erreur', "La suppression n'a pas pu être effectuée.");
@@ -4926,7 +5358,7 @@ function ouvrirModalSuppression(absence, dateISO) {
     const dateDebut = new Date(absence.date_debut).toLocaleDateString('fr-FR');
     const dateFin = new Date(absence.date_fin).toLocaleDateString('fr-FR');
     const dateCliquee = new Date(dateISO).toLocaleDateString('fr-FR');
-    const duree = absence.duree_jours ? `${absence.duree_jours.toFixed(1)} jour(s)` : `${absence.duree_heures.toFixed(1)} heure(s)`;
+    const duree = absence.duree_jours ? `${absence.duree_jours.toFixed(2)} jour(s)` : `${absence.duree_heures.toFixed(2)} heure(s)`;
     
     const typeLabels = {
         'CP_N': 'CP N',
@@ -5202,12 +5634,17 @@ if (formAbsenceUser) {
             let dureeHeures = 0;
             
             if (typeAbsence === 'RECUP' && recupType === 'heures') {
+                if (parseFloat(recupHeures) > 2.5) {
+                    errorMsg.textContent = 'Au-delà de 2h30, posez une demi-journée au lieu d\'heures.';
+                    errorMsg.classList.add('show');
+                    return;
+                }
                 dureeHeures = parseFloat(recupHeures);
                 dureeJours = dureeHeures / 7;
             } else {
                 const result = await window.api.calculerDuree(dateDebut, dateFin, debutPeriode, finPeriode);
                 dureeJours = result.dureeJours;
-                dureeHeures = dureeJours * 7;
+                dureeHeures = result.dureeHeures;
             }
 
             // Mapper le type CP vers CP_N (la base n'accepte que CP_N ou CP_N1)
@@ -5217,13 +5654,14 @@ if (formAbsenceUser) {
             }
 
             // Préparer les données
+            const isRecupHoraire = typeAbsence === 'RECUP' && recupType === 'heures';
             const absenceData = {
                 salarie_id: user.id,
                 type: typeAbsenceFinal,
                 date_debut: dateDebut,
                 date_fin: dateFin,
-                duree_jours: dureeJours,
-                duree_heures: dureeHeures,
+                duree_jours: isRecupHoraire ? null : dureeJours,
+                duree_heures: typeAbsence === 'RECUP' ? dureeHeures : null,
                 commentaire: commentaire || null,
                 debut_periode: debutPeriode,
                 fin_periode: finPeriode,
@@ -5293,7 +5731,8 @@ if (formAbsenceUser) {
                 // Réinitialiser le formulaire
                 formAbsenceUser.reset();
                 document.getElementById('resumeAbsenceUser').style.display = 'none';
-                document.getElementById('recupFieldsUser').style.display = 'none';
+                const recupFieldsUserEl = document.getElementById('recupFieldsUser');
+                if (recupFieldsUserEl) recupFieldsUserEl.style.display = 'none';
                 
                 // Rafraîchir les données
                 await loadSoldesAdmin();
@@ -5324,14 +5763,96 @@ function initModalHeuresSupAdmin() {
     document.getElementById('heuresSupDateAdmin').value = new Date().toISOString().split('T')[0];
 
     const toggle = document.getElementById('hsupTypeToggleAdmin');
+    const headerHsup = document.getElementById('hsupModalHeaderAdmin');
+    const titreHsup = document.getElementById('hsupModalTitreAdmin');
+    function appliquerHabillageHsupAdmin(type) {
+        if (!headerHsup || !titreHsup) return;
+        const btnEnreg = document.getElementById('btnEnregistrerHeuresSupAdmin');
+        if (type === 'retrait') {
+            headerHsup.classList.add('hsup-retrait');
+            titreHsup.textContent = 'Déclarer une absence (en heures)';
+            if (btnEnreg) btnEnreg.classList.add('hsup-retrait');
+        } else {
+            headerHsup.classList.remove('hsup-retrait');
+            titreHsup.textContent = 'Déclarer des heures supp. faites';
+            if (btnEnreg) btnEnreg.classList.remove('hsup-retrait');
+        }
+        verifierLimiteHsupAdmin();
+    }
+    async function verifierLimiteHsupAdmin() {
+        const input = document.getElementById('heuresSupNbAdmin');
+        const dateInput = document.getElementById('heuresSupDateAdmin');
+        const msg = document.getElementById('heuresSupMsgAdmin');
+        const btnEnreg = document.getElementById('btnEnregistrerHeuresSupAdmin');
+        if (!input || !msg) return;
+        const type = (toggle && toggle.dataset.activeType) || 'credit';
+        const val = parseFloat(input.value);
+
+        if (type === 'retrait' && !isNaN(val) && val > 2.5) {
+            msg.textContent = "Au-delà de 2h30, posez une demi-journée (formulaire d'absence) au lieu d'heures.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+            if (btnEnreg) btnEnreg.disabled = true;
+            return;
+        }
+
+        if (type === 'retrait' && dateInput && dateInput.value) {
+            const [y, m, d] = dateInput.value.split('-').map(Number);
+            const dayOfWeek = new Date(y, m - 1, d).getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                msg.textContent = "Impossible de poser une absence un week-end.";
+                msg.className = 'form-error';
+                msg.style.display = 'block';
+                if (btnEnreg) btnEnreg.disabled = true;
+                return;
+            }
+            try {
+                const feries = await window.api.getJoursFeries(y);
+                const ferie = feries.find(f => f.date === dateInput.value);
+                if (ferie) {
+                    msg.textContent = `Impossible de poser une absence un jour férié (${ferie.libelle}).`;
+                    msg.className = 'form-error';
+                    msg.style.display = 'block';
+                    if (btnEnreg) btnEnreg.disabled = true;
+                    return;
+                }
+            } catch (e) { /* ignorer */ }
+            try {
+                const absencesUser = await window.api.getAbsences(user.id);
+                const d = dateInput.value;
+                const conflit = absencesUser.find(a => {
+                    if (d < a.date_debut || d > a.date_fin) return false;
+                    if (d > a.date_debut && d < a.date_fin) return true;
+                    if (d === a.date_debut && a.debut_periode === 'apres-midi') return false;
+                    if (d === a.date_fin && a.fin_periode === 'midi') return false;
+                    return true;
+                });
+                if (conflit) {
+                    msg.textContent = "Une absence couvre déjà toute la journée.";
+                    msg.className = 'form-error';
+                    msg.style.display = 'block';
+                    if (btnEnreg) btnEnreg.disabled = true;
+                    return;
+                }
+            } catch (e) { /* ignorer */ }
+        }
+
+        if (msg.classList.contains('form-error')) msg.style.display = 'none';
+        if (btnEnreg) btnEnreg.disabled = false;
+    }
     if (toggle) {
         toggle.querySelectorAll('.hsup-type-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 toggle.dataset.activeType = btn.dataset.type;
                 toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+                appliquerHabillageHsupAdmin(btn.dataset.type);
             });
         });
     }
+    const heuresInputAdmin = document.getElementById('heuresSupNbAdmin');
+    if (heuresInputAdmin) heuresInputAdmin.addEventListener('input', verifierLimiteHsupAdmin);
+    const dateHsupInputAdmin = document.getElementById('heuresSupDateAdmin');
+    if (dateHsupInputAdmin) dateHsupInputAdmin.addEventListener('change', verifierLimiteHsupAdmin);
 
     // Fonction réutilisable d'ouverture de la modale de saisie (toggle reset à crédit)
     function ouvrirSaisieHeuresSupAdmin() {
@@ -5340,6 +5861,7 @@ function initModalHeuresSupAdmin() {
             toggle.dataset.activeType = 'credit';
             toggle.querySelectorAll('.hsup-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'credit'));
         }
+        appliquerHabillageHsupAdmin('credit');
         modal.style.display = 'flex';
     }
 
@@ -5382,18 +5904,61 @@ function initModalHeuresSupAdmin() {
             return;
         }
 
+        if (type === 'retrait' && heuresAbs > 2.5) {
+            msg.textContent = "Au-delà de 2h30, posez une demi-journée (formulaire d'absence) au lieu d'heures.";
+            msg.className = 'form-error';
+            msg.style.display = 'block';
+            return;
+        }
+
+        if (type === 'retrait') {
+            const [y, m, d] = date.split('-').map(Number);
+            const dayOfWeek = new Date(y, m - 1, d).getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                msg.textContent = "Impossible de poser une absence un week-end.";
+                msg.className = 'form-error';
+                msg.style.display = 'block';
+                return;
+            }
+            try {
+                const feries = await window.api.getJoursFeries(y);
+                const ferie = feries.find(f => f.date === date);
+                if (ferie) {
+                    msg.textContent = `Impossible de poser une absence un jour férié (${ferie.libelle}).`;
+                    msg.className = 'form-error';
+                    msg.style.display = 'block';
+                    return;
+                }
+            } catch (e) { /* ignorer */ }
+            try {
+                const absencesUser = await window.api.getAbsences(user.id);
+                const conflit = absencesUser.find(a => {
+                    if (date < a.date_debut || date > a.date_fin) return false;
+                    if (date > a.date_debut && date < a.date_fin) return true;
+                    if (date === a.date_debut && a.debut_periode === 'apres-midi') return false;
+                    if (date === a.date_fin && a.fin_periode === 'midi') return false;
+                    return true;
+                });
+                if (conflit) {
+                    msg.textContent = "Une absence couvre déjà toute la journée.";
+                    msg.className = 'form-error';
+                    msg.style.display = 'block';
+                    return;
+                }
+            } catch (e) { /* ignorer */ }
+        }
+
         const heures = type === 'retrait' ? -heuresAbs : heuresAbs;
-        const commentaireDefaut = type === 'retrait'
-            ? `Récupération d'heures du ${date}`
-            : `Heures supplémentaires du ${date}`;
 
         try {
+            // L'admin valide pour soi-même → autoValide=true (court-circuite le workflow)
             await window.api.ajouterRecup({
                 salarie_id: user.id,
                 annee: new Date(date).getFullYear(),
                 heures,
                 date,
-                commentaire: commentaire || commentaireDefaut
+                commentaire: commentaire || null,
+                autoValide: true
             });
 
             msg.textContent = type === 'retrait'
@@ -5403,6 +5968,7 @@ function initModalHeuresSupAdmin() {
             msg.style.display = 'block';
 
             await loadSoldesAdmin();
+            await chargerCalendrierUser();
 
             setTimeout(() => {
                 modal.style.display = 'none';
