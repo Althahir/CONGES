@@ -675,10 +675,8 @@
 
             <!-- Section Paramètres (fusionnée avec Planning des traitements) -->
             <section id="parametres-section" class="content-section">
-                <h2><i class="fa-solid fa-gear"></i> Paramètres</h2>
-
-                <!-- Petite tuile version de l'application (alignée à droite) -->
-                <div class="param-version-wrapper">
+                <div class="parametres-header">
+                    <h2><i class="fa-solid fa-gear"></i> Paramètres</h2>
                     <div class="param-card-version">
                         <i class="fa-solid fa-circle-info"></i>
                         <span>Version :</span>
@@ -707,6 +705,10 @@
                         <div class="param-actions">
                             <button id="btnSaveParamTaux" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
                             <span id="paramTauxMsg" class="param-msg"></span>
+                        </div>
+
+                        <div class="config-historique" style="margin-top: 12px;">
+                            <strong>Dernier traitement CP mensuel :</strong> <span id="cpMensuelDernierTraitement">Chargement...</span>
                         </div>
                     </div>
 
@@ -1050,6 +1052,7 @@
 </div>
 
     <script src="../js/chart.umd.js"></script>
+    <script src="../js/toast-sound.js"></script>
     <script src="../js/dashboard-admin.js"></script>
 </body>
 </html>

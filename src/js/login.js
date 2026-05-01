@@ -140,6 +140,19 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
+// ========== ENTRÉE DÉCLENCHE LA CONNEXION ==========
+// Si le focus est dans un input/select/textarea/button du form, le navigateur gère
+// déjà Enter nativement. Sinon (focus sur body après pré-remplissage automatique
+// par exemple), on déclenche le submit manuellement.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const form = document.getElementById('loginForm');
+    const active = document.activeElement;
+    if (active && form.contains(active) && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(active.tagName)) return;
+    e.preventDefault();
+    form.requestSubmit();
+});
+
 // ========== AFFICHER/MASQUER MOT DE PASSE ==========
 
 const togglePassword = document.getElementById('togglePassword');

@@ -1237,6 +1237,9 @@ const _toastQueueUser = [];
 let _toastActifUser = false;
 
 function afficherToastUser(notif) {
+    // Le son ne joue qu'une fois par rafale : si un toast est déjà visible ou
+    // dans la file, ce push rejoint la rafale en silence.
+    notif._playSon = !_toastActifUser && _toastQueueUser.length === 0;
     _toastQueueUser.push(notif);
     _afficherProchainToastUser();
 }
@@ -1263,6 +1266,7 @@ function _afficherProchainToastUser() {
     `;
 
     document.body.appendChild(toast);
+    if (notif._playSon && typeof window.jouerSonToast === 'function') window.jouerSonToast();
 
     let dismissed = false;
     const dismiss = async () => {

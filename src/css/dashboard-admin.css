@@ -76,11 +76,18 @@ body {
     font-weight: 500;
 }
 
-/* Petite tuile version dans la section Paramètres (alignée à droite via wrapper flex) */
-.param-version-wrapper {
+/* Header de la section Paramètres : titre + badge version sur la même ligne */
+.parametres-header {
     display: flex;
-    justify-content: flex-end;
-    margin: 10px 0 14px 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.parametres-header h2 {
+    margin: 0;
 }
 
 .param-card-version {

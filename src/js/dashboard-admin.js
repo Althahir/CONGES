@@ -2034,6 +2034,22 @@ async function chargerHistoriqueTraitements() {
             if (derniere) dernierParType.push(derniere);
         });
 
+        // Dernier CP mensuel (type stocké sous forme `CP_MENSUEL_<mois>`)
+        const dernierCPMensuel = historique.find(h => typeof h.type === 'string' && h.type.startsWith('CP_MENSUEL_'));
+        const elCPMensuel = document.getElementById('cpMensuelDernierTraitement');
+        if (elCPMensuel) {
+            if (dernierCPMensuel) {
+                const dateStrM = dernierCPMensuel.date_execution.includes('Z') ? dernierCPMensuel.date_execution : dernierCPMensuel.date_execution + 'Z';
+                const dateM = new Date(dateStrM).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Paris' });
+                const moisNum = parseInt(dernierCPMensuel.type.replace('CP_MENSUEL_', ''), 10);
+                const moisNoms = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+                const moisLabel = moisNoms[moisNum] ? `${moisNoms[moisNum]} ${dernierCPMensuel.annee}` : `mois ${moisNum} ${dernierCPMensuel.annee}`;
+                elCPMensuel.innerHTML = `${dateM} (${moisLabel}) - ${dernierCPMensuel.nb_salaries_traites} salarié(s) - <span class="statut-badge statut-${dernierCPMensuel.statut}">${dernierCPMensuel.statut}</span>`;
+            } else {
+                elCPMensuel.textContent = 'Jamais effectué';
+            }
+        }
+
         if (dernierParType.length === 0) {
             historiqueContainer.style.display = 'none';
             document.getElementById('cpDernierTraitement').textContent = 'Jamais effectué';
@@ -2146,18 +2162,21 @@ const _toastQueue = [];
 let _toastActif = false;
 
 function afficherNotificationPersistante(type, titre, message, autoDismissMs) {
-    _toastQueue.push({ type, titre, message, autoDismissMs });
+    // Le son ne joue qu'une fois par rafale : si un toast est déjà visible ou
+    // dans la file, ce push rejoint la rafale en silence.
+    const playSon = !_toastActif && _toastQueue.length === 0;
+    _toastQueue.push({ type, titre, message, autoDismissMs, playSon });
     _afficherProchainToast();
 }
 
 function _afficherProchainToast() {
     if (_toastActif || _toastQueue.length === 0) return;
     _toastActif = true;
-    const { type, titre, message, autoDismissMs } = _toastQueue.shift();
-    _rendreToast(type, titre, message, autoDismissMs);
+    const { type, titre, message, autoDismissMs, playSon } = _toastQueue.shift();
+    _rendreToast(type, titre, message, autoDismissMs, playSon);
 }
 
-function _rendreToast(type, titre, message, autoDismissMs) {
+function _rendreToast(type, titre, message, autoDismissMs, playSon) {
     const toast = document.createElement('div');
     toast.className = `notification-persistante ${type}`;
 
@@ -2172,6 +2191,7 @@ function _rendreToast(type, titre, message, autoDismissMs) {
     `;
 
     document.body.appendChild(toast);
+    if (playSon && typeof window.jouerSonToast === 'function') window.jouerSonToast();
 
     let dismissed = false;
     const dismiss = () => {
@@ -3956,6 +3976,46 @@ async function chargerNotificationsNonLues() {
     }
 }
 
+// Au démarrage du dashboard, affiche un toast par notification non lue.
+// Pour les notifications de traitement (type 'traitement'), on dédupli­que par catégorie
+// pour ne pas spammer l'admin qui ne s'est pas connecté pendant plusieurs mois :
+// une seule entrée garde la plus récente de chaque groupe (CP mensuel / CP annuel / RTT annuel).
+function afficherToastsAuDemarrage(notifications) {
+    if (!notifications || notifications.length === 0) return;
+
+    // notifications est déjà triée par date_creation DESC côté handler
+    const groupesVus = new Set();
+    const aAfficher = [];
+
+    for (const notif of notifications) {
+        const titre = notif.titre || '';
+        let groupe = null;
+        if (notif.type === 'traitement') {
+            if (/^Traitement CP mensuel/i.test(titre)) groupe = 'cp_mensuel';
+            else if (/^Basculement CP/i.test(titre)) groupe = 'cp_annuel';
+            else if (/RTT Annuel|Traitement RTT/i.test(titre)) groupe = 'rtt_annuel';
+        }
+
+        if (groupe) {
+            if (groupesVus.has(groupe)) continue; // une plus récente est déjà gardée
+            groupesVus.add(groupe);
+        }
+        aAfficher.push(notif);
+    }
+
+    // Réafficher dans l'ordre chronologique (plus ancien en premier, plus récent en dernier
+    // pour que la dernière notif vue par l'admin soit la plus récente).
+    aAfficher.reverse();
+
+    for (const notif of aAfficher) {
+        const statut = notif.statut === 'error' ? 'error'
+                     : notif.statut === 'partial' ? 'partial'
+                     : notif.statut === 'info' ? 'partial'
+                     : 'success';
+        afficherNotificationPersistante(statut, notif.titre, notif.message);
+    }
+}
+
 function mettreAJourBadge(count) {
     const badge = document.getElementById('notifBadge');
     if (!badge) return;
@@ -4144,6 +4204,7 @@ async function init() {
 
     // Charger les notifications non lues
     await chargerNotificationsNonLues();
+    afficherToastsAuDemarrage(window._notificationsEnAttente || []);
 
     // Polling toutes les 30s pour détecter les changements depuis d'autres postes
     let _dernierNbNotifs = (window._notificationsEnAttente || []).length;
