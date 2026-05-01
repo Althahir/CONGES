@@ -53,7 +53,12 @@ src/
 
 DOCS/
 ├── TODO.md              # Tâches en cours et roadmap (gitignore)
-└── DEVELOPPEURS.md      # Guide développeur complet
+├── DEVELOPPEURS.md      # Guide développeur complet
+└── conges.db            # DB locale SQLite pour le dev (gitignored, copie de Turso)
+
+scripts/
+├── build-install-guide.py        # Génère le DOCX d'installation
+└── dump-turso-to-local.js        # Copie Turso → DOCS/conges.db (pour dev)
 ```
 
 ---
@@ -164,7 +169,7 @@ db_version            (version) -- actuellement v7
 **PDF** (`pdf.js`) : `genererPDF`, `exporterRecapPDF`, `exporterStatsPDF`
 **Navigation** (`navigation.js`) : `navigateTo`
 **DB Admin** (`db-admin.js`) : `db-list-tables`, `db-get-table`, `db-update-cell`, `db-delete-row`, `db-insert-row`, `db-exec-raw` (easter egg `Ctrl+DEBUG`, accès admin sans sécurité applicative)
-**App / Mises à jour** (dans `main.js` directement) : `getAppVersion`, `applyUpdate` (déclenche `autoUpdater.quitAndInstall`)
+**App / Mises à jour** (dans `main.js` directement) : `getAppVersion`, `getIsDev` (true si `app.isPackaged === false`), `applyUpdate` (déclenche `autoUpdater.quitAndInstall`)
 **Utilitaires** (`utils-cp.js`) : `calculerCPMensuel`, `getTauxGlobaux`, `getJoursFeriesAnnee` (non IPC, utilisé par traitements.js et salaries.js)
 
 ---
@@ -203,7 +208,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (26/04/2026 — v1.0.4 en préparation)
+## État actuel du projet (01/05/2026 — v1.0.7 en cours, v1.0.6 buildée et pushée, GitHub Release à publier)
 
 **Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
 
@@ -225,7 +230,58 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 **Import Excel — onglets RECUP** (depuis 26/04/2026 — v1.0.4) : `Ctrl+L+O+A+D` lit en plus tous les onglets dont le nom commence par `RECUP `. Chaque ligne `H.SUP` est importée comme crédit positif, chaque ligne `RECUP` horaire (genre RDV médical) comme retrait négatif. Les `RECUP` marquées « 1 journée(s) » sont **automatiquement ignorées** car elles correspondent à des absences déjà importées via l'onglet `Archives` (sinon double comptage). Détection de doublons par `(salarie_id, date, heures, commentaire)`. Salariés inconnus listés dans le rapport. Robustesse dates : conversion via `XLSX.SSF.parse_date_code()` sur les serials Excel pour éviter les bugs DST de `cellDates: true`, parser FR/US automatique pour les cellules texte.
 
-**Migration v7** (depuis 26/04/2026) : ajout colonne `source` à `heures_supplementaires` ('manuel' / 'import_excel') pour tracer l'origine de chaque saisie et afficher le badge correspondant dans la modale.
+**Migration v7** (depuis 26/04/2026) : ajout colonne `source` à `heures_supplementaires` ('manuel' / 'import_excel') pour tracer l'origine de chaque saisie et afficher le badge correspondant dans la modale. **Pas de migration v8 dans la 1.0.6** — schéma DB inchangé.
+
+**v1.0.6 (27/04/2026) — PDF OneDrive auto + modale Heures sup unifiée + bascule dev/prod** :
+- **PDF de validation/annulation** (`genererPDF`) refondu avec 3 modes :
+  - `'auto'` (validation user par admin + suppression avec checkbox cochée) → enregistrement automatique dans `%OneDriveCommercial%\LA CIOTAT ENTREPRENDRE - DONNEES\17 DOSSIERS SALARIES\CONGES\PDF\`. Fallback `showSaveDialog`. Mention « Validé par : Prénom NOM, Secrétaire Général le JJ MMM AAAA » remplace le bloc signature.
+  - `'print'` (pose admin pour soi-même) → impression directe sur l'imprimante par défaut Windows via `BrowserWindow` cachée + `webContents.print({silent:true})`. Fallback `showSaveDialog` si pas d'imprimante.
+  - `'dialog'` (autres exports) → `showSaveDialog` simple.
+- **PDF d'annulation** : titre rouge « ANNULATION DE CONGÉS », mention « Annulé par : ... », option déclenchée par checkbox dans la modale de suppression d'absence.
+- **Convention de nommage** : `NOM_Prenom_TYPE_Du_dateDebut_Au_dateFin.pdf` (préfixe `ANNULATION_` pour les annulations). Type toujours `CP` (jamais `CP_N`/`CP_N1`).
+- **Date du jour** ajoutée à l'en-tête : « La Ciotat Entreprendre · Le JJ Mmmmmm AAAA ».
+- **Fonction « Secrétaire Général »** hardcodée (pas de migration v8). Les autres exports `exporterRecapPDF` et `exporterStatsPDF` ne sont **pas** sur OneDrive auto — juste `showSaveDialog`.
+
+**Modale « Heures sup » unifiée** (v1.0.6) :
+- **User et admin (section Mes Congés)** : un seul bouton « Heures sup » (icône horloge) → ouvre une modale de choix bleue avec 2 tuiles : « Mes saisies » / « Nouvelle saisie ».
+- **Section Validation admin** : bouton « Heures de récup » (du salarié sélectionné) inchangé — autre rôle.
+- **Édition/suppression côté user** : crayon ✏️ et poubelle 🗑️ activés uniquement pour les saisies manuelles positives. Imports Excel et lignes négatives (poses) → boutons grisés avec tooltip « non modifiable ». Édition inline + `confirm()` natif pour la suppression. Refresh tableau + `loadSoldes()` après chaque modif.
+- **Modale historique côté user** : tableau scrollable (`max-height: 85vh`), header bleu, max-width 900px, filtres année/mois contextuels.
+- **Côté admin (depuis Mes Congés)** : la fonction `ouvrirHistoriqueRecupAdminSelf()` réutilise la modale existante en sauvegardant/restaurant `salarieHistoriqueSelectionne` au close (contexte temporaire = `user.id`).
+
+**Bascule dev/prod** (v1.0.6) :
+- `getTursoConfig` détecte `app.isPackaged` :
+  - **Dev** (`npm start`) → `file:DOCS/conges.db` via `@libsql/client` (pas de token)
+  - **Prod** (installeur Squirrel) → Turso cloud via `config.json` (comportement inchangé)
+- Script `scripts/dump-turso-to-local.js` : copie Turso → `DOCS/conges.db` avec backup auto, désactivation FK pendant l'import (Turso ne vérifie pas les FK, SQLite local oui), vérification d'intégrité finale via `PRAGMA foreign_key_check`.
+- ⚠️ **`DOCS/conges.db` est dans le `.gitignore`** (ainsi que `*.db.bak`, `*.db-journal`) — JAMAIS la commiter, contient les vraies données prod copiées.
+- Badge **DEV** rouge dans le header (3 pages) visible uniquement quand `app.isPackaged === false`. Handler IPC `getIsDev` exposé via `window.api.getIsDev()`.
+
+**v1.0.7 (01/05/2026) — Correctifs au 1er traitement CP mensuel automatique** :
+
+- **Bug solde arrêt maladie** détecté en dev lors du traitement d'avril 2026 : Emilie REDOUTE, marquée `en_arret_maladie = 1` depuis 2025-08-26, a reçu 2.08333 (taux normal) au lieu de 1.66333 (taux arrêt). Cause : `historique_taux` est vide pour elle — `calculerCPMensuel` ne lit que cette table, jamais la fiche `salaries`. Probable contournement du handler `updateSalarie` (DB Browser SQL libre, ou état pré-migration v2 jamais backfillé).
+  - **Fix code** dans `utils-cp.js` (`calculerCPMensuel`) : filet de sécurité — si aucune entrée `historique_taux` avant le mois traité ET fiche `en_arret_maladie = 1` avec `date_arret_maladie` antérieure au début du mois, on démarre le mois au taux arrêt. L'historique reste prioritaire s'il a au moins une entrée. Couvre les imports / bascules manuelles qui auraient sauté l'INSERT historique.
+  - **Correctif data prod Turso** à appliquer manuellement (voir 🚨 PRIORITÉ dans `DOCS/TODO.md`) : backfill `historique_taux` pour tous les salariés en arrêt sans entrée + rectification `cp_n` d'Emilie pour avril (-0.42 = 2.08333 - 1.66333).
+  - **Règle pour le futur** : ne JAMAIS modifier `salaries.en_arret_maladie` directement en DB sans ajouter manuellement la ligne `historique_taux` correspondante. Toujours passer par la fiche UI (qui le fait automatiquement via `updateSalarie`).
+
+- **Notifications de traitement automatique** : avant cette version, les versions `*Auto` (CP mensuel, CP annuel, RTT) envoyaient l'event `traitement-automatique` au front mais n'inséraient **pas** de notif persistante en DB. Conséquence : admin connecté à l'instant T voyait le toast live, admin reconnecté plus tard ne voyait ni toast ni badge cloche.
+  - Helper `notifierAdminsTraitement(titre, message, statut)` ajouté dans `traitements.js` : insère une notif **ciblée par admin actif** (`user_id = admin.id`), pas de notif globale.
+  - 6 fonctions de traitement (3 manuelles + 3 auto) refactorisées pour utiliser le helper.
+  - Libellés CP mensuel : « Traitement CP mensuel (avril 2026) effectué » via constante `MOIS_NOMS` partagée (au lieu de `(mois 4)`).
+
+- **Toast unique au démarrage admin** (`afficherToastsAuDemarrage` dans `dashboard-admin.js`, appelée dans `init()` après `chargerNotificationsNonLues`) : pour les notifs `type === 'traitement'`, déduplication par groupe via préfixe de titre (`^Traitement CP mensuel`, `^Basculement CP`, `RTT Annuel|Traitement RTT`). Une seule notif gardée par groupe (la plus récente). Les autres notifs (workflow `demande_*`, alertes RTT manquant, etc.) restent toutes affichées. Cas d'usage : admin qui ne s'est pas connecté pendant 5 mois → 1 seul toast CP mensuel (le plus récent) + tous les toasts de demandes en attente. Les 4 plus anciennes notifs CP mensuel restent dans la cloche pour consultation.
+
+- **Tuile « Taux d'acquisition CP »** (Paramètres) : ajout d'un bandeau `.config-historique` en bas avec span `#cpMensuelDernierTraitement`. `chargerHistoriqueTraitements` cherche le dernier `historique_traitements` dont `type LIKE 'CP_MENSUEL_%'` et affiche `JJ/MM/AAAA (mois YYYY) - X salarié(s) - <badge statut>`. Format identique aux 2 autres tuiles « Basculement annuel CP » et « Traitement annuel RTT ».
+
+- **Login — Entrée déclenche la connexion** : listener `keydown` global dans `login.js`. Si focus hors form/input/select/button, déclenche `form.requestSubmit()`. Couvre le cas du pré-remplissage automatique (email mémorisé + mot de passe via `saveCredential`) où le focus reste sur `<body>`.
+
+- **Toast — refonte visuelle** : fond blanc (`#fff` clair / `--bg-surface` dark) + bordure 1.5px colorée transparente (rgba 0.45) + accent gauche 4px plein + **« boudin »** via `box-shadow: 0 0 0 10px rgba(...)` (opacité 0.35 light / 0.40 dark) qui crée un halo coloré autour du toast. Trois variants : `.success` (vert #28a745), `.error` (rouge #dc3545), `.partial` (orange `var(--orange)`, nouveau — utilisé pour `statut === 'partial'` ou `'info'`). Le mapping côté `afficherToastsAuDemarrage` distingue `error` / `partial` / `info` / défaut `success`.
+
+- **Toast — son zen** (`src/js/toast-sound.js`, nouveau) : exposé via `window.jouerSonToast()`. Génération à la volée par Web Audio API, pas d'asset à embarquer. **2 sinusoïdes** (Ré 6 = 1175 Hz + La 6 = 1760 Hz décalée 200 ms) → motif mélodique de quinte juste, ambiance « clochette tibétaine ». **Filtre lowpass à 800 Hz** (Q = 0.7) pour effet feutré « derrière un oreiller » qui adoucit fortement les aigus. Durée totale 1s, attaques douces 60-80 ms, fade-out exponentiel. Volumes 0.035 / 0.025. Inclus via `<script>` dans `dashboard-admin.html` et `dashboard-user.html`, appelé dans `_rendreToast` (admin) et `_afficherProchainToastUser` (user). Try/catch silencieux si autoplay bloqué.
+
+- **Toast — un son par rafale** : flag `playSon` calculé au moment du push (`!_toastActif && _toastQueue.length === 0`) et propagé via la file d'attente vers le rendu. Conséquence : si `afficherToastsAuDemarrage` enchaîne 3 toasts pour un admin qui se reconnecte, un seul « ding » est joué (le 1er) ; les rendus suivants sont silencieux. La règle s'applique aussi au polling 30s et aux events live qui arriveraient pendant qu'un toast est encore visible.
+
+- **Section Paramètres — header flex** : titre `<h2>` et badge version `.param-card-version` regroupés dans un `<div class="parametres-header">` (flex `space-between`, `align-items: center`, `flex-wrap: wrap`). Suppression de `.param-version-wrapper` (n'a plus d'utilité). Le badge est désormais aligné à droite **sur la même ligne** que le titre.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
