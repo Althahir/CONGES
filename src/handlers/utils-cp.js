@@ -56,10 +56,23 @@ function calculerCPMensuel(salarie, annee, mois, taux, historique, joursFeries) 
 
     // Déterminer le taux initial au début du mois
     const moisISO = `${annee}-${String(mois).padStart(2, '0')}`;
+    const debutMoisISO = `${moisISO}-01`;
     let tauxInitial = 'normal';
+    let historiqueAVuAvantMois = false;
     for (const h of historique) {
-        if (h.date_effet < `${moisISO}-01`) {
+        if (h.date_effet < debutMoisISO) {
             tauxInitial = h.nouveau_taux;
+            historiqueAVuAvantMois = true;
+        }
+    }
+    // Filet de sécurité : si l'historique est silencieux avant le mois mais que
+    // le salarié est actuellement marqué en arrêt avec une date d'effet antérieure
+    // au début du mois, on considère qu'il démarre le mois au taux arrêt.
+    // Couvre les cas où historique_taux n'a pas été alimenté (import, bascule manuelle).
+    if (!historiqueAVuAvantMois && salarie.en_arret_maladie && salarie.date_arret_maladie) {
+        const dateArret = String(salarie.date_arret_maladie).slice(0, 10);
+        if (dateArret <= debutMoisISO) {
+            tauxInitial = 'arret';
         }
     }
 

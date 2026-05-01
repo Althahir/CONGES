@@ -2,8 +2,26 @@ const { calculerCPMensuel, getTauxGlobaux: getTauxGlobauxUtil, getJoursFeriesAnn
 
 module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
+    const MOIS_NOMS = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
     function getTauxGlobaux() {
         return getTauxGlobauxUtil(ctx.db);
+    }
+
+    // Crée une notification ciblée pour chaque admin actif (cloche + toast).
+    async function notifierAdminsTraitement(titre, message, statut) {
+        try {
+            const adminsResult = await ctx.db.execute({
+                sql: "SELECT id FROM salaries WHERE role = 'admin' AND actif = 1",
+                args: []
+            });
+            for (const admin of adminsResult.rows) {
+                await ctx.db.execute({
+                    sql: "INSERT INTO notifications (user_id, type, titre, message, statut) VALUES (?, 'traitement', ?, ?, ?)",
+                    args: [admin.id, titre, message, statut]
+                });
+            }
+        } catch (e) { console.error('Erreur création notifs admins:', e); }
     }
 
     // ========== CONFIGURATION ==========
@@ -105,14 +123,10 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
             });
         } catch (e) { console.error('Erreur enregistrement historique:', e); }
 
-        const notifTitre = statut === 'success' ? `Traitement CP mensuel (mois ${mois}) effectué` : `Traitement CP mensuel (mois ${mois}) — erreurs`;
+        const moisLabel = MOIS_NOMS[mois] ? `${MOIS_NOMS[mois]} ${annee}` : `mois ${mois} ${annee}`;
+        const notifTitre = statut === 'success' ? `Traitement CP mensuel (${moisLabel}) effectué` : `Traitement CP mensuel (${moisLabel}) — erreurs`;
         const notifMessage = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s)` : (erreurs.join(', ') || 'Aucun salarié traité');
-        try {
-            await ctx.db.execute({
-                sql: `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
-                args: [notifTitre, notifMessage, statut]
-            });
-        } catch (e) { console.error('Erreur notification:', e); }
+        await notifierAdminsTraitement(notifTitre, notifMessage, statut);
 
         return { success: statut !== 'error', statut, nbMisAJour, details, erreurs };
     });
@@ -170,12 +184,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
         const notifTitreCP = statut === 'success' ? 'Basculement CP annuel effectué' : (statut === 'partial' ? 'Basculement CP annuel partiel' : 'Erreur basculement CP annuel');
         const notifMessageCP = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) — CP N transférés en CP N-1` : (erreurs.join(', ') || 'Aucun salarié traité');
-        try {
-            await ctx.db.execute({
-                sql: `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
-                args: [notifTitreCP, notifMessageCP, statut]
-            });
-        } catch (e) { console.error('Erreur notification:', e); }
+        await notifierAdminsTraitement(notifTitreCP, notifMessageCP, statut);
 
         return { success: statut !== 'error', statut, nbMisAJour, details, erreurs };
     });
@@ -261,12 +270,7 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
         const notifTitreRTT = statut === 'success' ? 'Traitement RTT Annuel effectué' : (statut === 'partial' ? 'Traitement RTT Annuel partiel' : 'Erreur traitement RTT Annuel');
         const notifMessageRTT = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) avec succès` : (erreurs.join(', ') || 'Aucun salarié traité');
-        try {
-            await ctx.db.execute({
-                sql: `INSERT INTO notifications (type, titre, message, statut) VALUES ('traitement', ?, ?, ?)`,
-                args: [notifTitreRTT, notifMessageRTT, statut]
-            });
-        } catch (e) { console.error('Erreur notification:', e); }
+        await notifierAdminsTraitement(notifTitreRTT, notifMessageRTT, statut);
 
         return { success: statut !== 'error', statut, nbMisAJour, details, erreurs };
     });
@@ -449,6 +453,11 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
             });
         } catch (e) { console.error('Erreur enregistrement historique:', e); }
 
+        const moisLabelM = MOIS_NOMS[mois] ? `${MOIS_NOMS[mois]} ${annee}` : `mois ${mois} ${annee}`;
+        const notifTitreM = statut === 'success' ? `Traitement CP mensuel (${moisLabelM}) effectué` : `Traitement CP mensuel (${moisLabelM}) — erreurs`;
+        const notifMessageM = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s)` : (erreurs.join(', ') || 'Aucun salarié traité');
+        await notifierAdminsTraitement(notifTitreM, notifMessageM, statut);
+
         if (ctx.mainWindow && ctx.mainWindow.webContents) {
             ctx.mainWindow.webContents.send('traitement-automatique', {
                 type: `CP_MENSUEL_${mois}`,
@@ -512,6 +521,10 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 args: ['CP_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null]
             });
         } catch (e) { console.error('Erreur enregistrement historique:', e); }
+
+        const notifTitreA = statut === 'success' ? 'Basculement CP annuel effectué' : (statut === 'partial' ? 'Basculement CP annuel partiel' : 'Erreur basculement CP annuel');
+        const notifMessageA = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) — CP N transférés en CP N-1` : (erreurs.join(', ') || 'Aucun salarié traité');
+        await notifierAdminsTraitement(notifTitreA, notifMessageA, statut);
 
         if (ctx.mainWindow && ctx.mainWindow.webContents) {
             ctx.mainWindow.webContents.send('traitement-automatique', {
@@ -616,6 +629,10 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                 args: ['RTT_ANNUEL', annee, nbMisAJour, JSON.stringify(details), statut, erreurs.join('; ') || null]
             });
         } catch (e) { console.error('Erreur enregistrement historique:', e); }
+
+        const notifTitreRA = statut === 'success' ? 'Traitement RTT Annuel effectué' : (statut === 'partial' ? 'Traitement RTT Annuel partiel' : 'Erreur traitement RTT Annuel');
+        const notifMessageRA = nbMisAJour > 0 ? `${nbMisAJour} salarié(s) traité(s) avec succès` : (erreurs.join(', ') || 'Aucun salarié traité');
+        await notifierAdminsTraitement(notifTitreRA, notifMessageRA, statut);
 
         if (ctx.mainWindow && ctx.mainWindow.webContents) {
             ctx.mainWindow.webContents.send('traitement-automatique', {
