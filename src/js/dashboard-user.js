@@ -1320,6 +1320,7 @@ function afficherToastMaj(version) {
         </button>
     `;
     document.body.appendChild(toast);
+    if (typeof window.jouerSonMaj === 'function') window.jouerSonMaj();
     toast.querySelector('.btn-restart-update').addEventListener('click', () => {
         window.api.applyUpdate();
     });

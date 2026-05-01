@@ -1,6 +1,8 @@
-// Son zen mélodieux généré à la volée via Web Audio API.
-// Deux notes (fondamentale + quinte) avec entrée décalée et fade-out long sur 3s.
+// Sons zen générés à la volée via Web Audio API.
+// jouerSonToast : 2 notes (Ré 6 + La 6) — toasts classiques.
+// jouerSonMaj   : 3 notes ascendantes (Ré → Fa# → La) — toast de mise à jour.
 // Aucun fichier asset nécessaire.
+
 window.jouerSonToast = function () {
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -47,5 +49,49 @@ window.jouerSonToast = function () {
         setTimeout(() => { try { ctx.close(); } catch (_) {} }, (duree + 0.4) * 1000);
     } catch (_) {
         // Audio bloqué (politique autoplay ou API indisponible) — ignoré.
+    }
+};
+
+// Variante pour le toast « Mise à jour disponible ».
+// Motif ascendant Ré → Fa# → La (accord parfait majeur) — sonne « positif, nouveauté ».
+window.jouerSonMaj = function () {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        const duree = 1.6;
+
+        const lowpass = ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 800;
+        lowpass.Q.value = 0.7;
+        lowpass.connect(ctx.destination);
+
+        // Trois notes ascendantes : Ré 6, Fa# 6, La 6 (accord parfait majeur)
+        const notes = [
+            { freq: 1175, debut: 0,    volume: 0.04  },
+            { freq: 1480, debut: 0.18, volume: 0.035 },
+            { freq: 1760, debut: 0.36, volume: 0.03  },
+        ];
+
+        for (const n of notes) {
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(0, now + n.debut);
+            gain.gain.linearRampToValueAtTime(n.volume, now + n.debut + 0.06);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duree);
+            gain.connect(lowpass);
+
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = n.freq;
+            osc.connect(gain);
+            osc.start(now + n.debut);
+            osc.stop(now + duree);
+        }
+
+        setTimeout(() => { try { ctx.close(); } catch (_) {} }, (duree + 0.4) * 1000);
+    } catch (_) {
+        // Audio bloqué — ignoré.
     }
 };

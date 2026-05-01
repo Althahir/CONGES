@@ -1073,23 +1073,44 @@ body {
     z-index: 10002; /* au-dessus du DB Browser */
 }
 .btn-restart-update {
-    background: var(--bleu);
+    background: linear-gradient(135deg, #28a745 0%, #34c759 100%);
     color: white;
     border: none;
-    padding: 8px 14px;
-    border-radius: 4px;
+    padding: 10px 20px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 0.85em;
+    font-size: 0.9em;
     font-weight: 600;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin-right: 4px;
+    box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+    transition: all 0.2s ease;
 }
-.btn-restart-update:hover { background: #005770; }
-[data-theme="dark"] .btn-restart-update { background: #5cbdd5; color: #1a1a1a; }
-[data-theme="dark"] .btn-restart-update:hover { background: #7dcfe2; }
+.btn-restart-update:hover {
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.5);
+    transform: translateY(-1px);
+}
+.btn-restart-update:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+.btn-restart-update i {
+    transition: transform 0.4s ease;
+}
+.btn-restart-update:hover i {
+    transform: rotate(180deg);
+}
+[data-theme="dark"] .btn-restart-update {
+    background: linear-gradient(135deg, #5cbf7a 0%, #7dd595 100%);
+    color: #1a1a1a;
+    box-shadow: 0 2px 6px rgba(92, 191, 122, 0.4);
+}
+[data-theme="dark"] .btn-restart-update:hover {
+    box-shadow: 0 4px 12px rgba(92, 191, 122, 0.6);
+}
 
 /* Notification persistante (toast) — partagé admin + user */
 .notification-persistante {

@@ -283,6 +283,10 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 - **Section Paramètres — header flex** : titre `<h2>` et badge version `.param-card-version` regroupés dans un `<div class="parametres-header">` (flex `space-between`, `align-items: center`, `flex-wrap: wrap`). Suppression de `.param-version-wrapper` (n'a plus d'utilité). Le badge est désormais aligné à droite **sur la même ligne** que le titre.
 
+- **Toast « Mise à jour disponible » — refonte** : bouton « Redémarrer » repensé avec dégradé **vert** (#28a745 → #34c759, en cohérence avec les notifs success), padding plus généreux (10/20), border-radius 8px, ombre portée qui se renforce au hover, **lift** `translateY(-1px)` et **icône qui tourne à 180°** (rotation 0.4s) au survol pour suggérer l'action de redémarrer. Effet d'enfoncement à l'`active`. Dark mode adapté avec dégradé vert clair (#5cbf7a → #7dd595). Le toast lui-même garde sa classe `.update-toast` qui surcharge `.notification-persistante.success` (z-index 10002, width 540px).
+
+- **Toast Mise à jour — son d'annonce** : seconde fonction `window.jouerSonMaj()` ajoutée dans `toast-sound.js`. Variante du son zen avec **3 notes ascendantes** (Ré 6 → Fa# 6 → La 6 = accord parfait majeur, décalages 0 / 180 / 360 ms) pour annoncer une nouveauté de manière positive. Même filtre lowpass 800 Hz et même fade-out exponentiel que les notifs classiques, durée 1.6s (un peu plus longue pour signaler l'importance). Volumes décroissants 0.04 / 0.035 / 0.03. Appelée dans `afficherToastMaj` côté admin et user.
+
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
 ---
