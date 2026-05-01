@@ -627,12 +627,12 @@ async function calculerDureeAbsence() {
 
             resumeDecompteEl.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>CP N-1</strong></td><td>${decompteCP_N1.toFixed(1)}j</td><td>${nouveauCP_N1.toFixed(1)}j</td></tr>
-                <tr><td><strong>CP N</strong></td><td>${decompteCP_N.toFixed(1)}j</td><td style="color:${nouveauCP_N < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauCP_N.toFixed(1)}j</td></tr>
+                <tr><td><strong>CP N-1</strong></td><td>${decompteCP_N1.toFixed(2)}j</td><td>${nouveauCP_N1.toFixed(2)}j</td></tr>
+                <tr><td><strong>CP N</strong></td><td>${decompteCP_N.toFixed(2)}j</td><td style="color:${nouveauCP_N < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauCP_N.toFixed(2)}j</td></tr>
             </table>`;
 
             if (nouveauCP_N < 0) {
-                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauCP_N).toFixed(1)}j`;
+                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauCP_N).toFixed(2)}j`;
                 alerteSolde.classList.add('show', 'alert-warning');
             } else {
                 alerteSolde.textContent = '✓ Solde suffisant';
@@ -642,11 +642,11 @@ async function calculerDureeAbsence() {
             const nouveauRTT = soldes.rtt - dureeJours;
             resumeDecompteEl.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>RTT</strong></td><td>${dureeJours.toFixed(1)}j</td><td style="color:${nouveauRTT < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRTT.toFixed(1)}j</td></tr>
+                <tr><td><strong>RTT</strong></td><td>${dureeJours.toFixed(2)}j</td><td style="color:${nouveauRTT < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRTT.toFixed(2)}j</td></tr>
             </table>`;
 
             if (nouveauRTT < 0) {
-                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRTT).toFixed(1)}j`;
+                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRTT).toFixed(2)}j`;
                 alerteSolde.classList.add('show', 'alert-warning');
             } else {
                 alerteSolde.textContent = '✓ Solde suffisant';
@@ -656,11 +656,11 @@ async function calculerDureeAbsence() {
             const nouveauRecup = soldes.recup_heures - dureeHeures;
             resumeDecompteEl.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>Récup</strong></td><td>${dureeHeures.toFixed(1)}h</td><td style="color:${nouveauRecup < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRecup.toFixed(1)}h</td></tr>
+                <tr><td><strong>Récup</strong></td><td>${dureeHeures.toFixed(2)}h</td><td style="color:${nouveauRecup < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRecup.toFixed(2)}h</td></tr>
             </table>`;
 
             if (nouveauRecup < 0) {
-                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRecup).toFixed(1)}h`;
+                alerteSolde.textContent = `⚠️ Solde négatif de ${Math.abs(nouveauRecup).toFixed(2)}h`;
                 alerteSolde.classList.add('show', 'alert-warning');
             } else {
                 alerteSolde.textContent = '✓ Solde suffisant';

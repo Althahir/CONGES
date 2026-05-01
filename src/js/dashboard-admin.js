@@ -1871,8 +1871,8 @@ async function calculerDureeAbsenceAdmin() {
 
             resumeDecompte.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>CP N-1</strong></td><td>${cpN1Utilise.toFixed(1)}j</td><td>${nouveauCPN1.toFixed(1)}j</td></tr>
-                <tr><td><strong>CP N</strong></td><td>${cpNUtilise.toFixed(1)}j</td><td style="color:${nouveauCPN < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauCPN.toFixed(1)}j</td></tr>
+                <tr><td><strong>CP N-1</strong></td><td>${cpN1Utilise.toFixed(2)}j</td><td>${nouveauCPN1.toFixed(2)}j</td></tr>
+                <tr><td><strong>CP N</strong></td><td>${cpNUtilise.toFixed(2)}j</td><td style="color:${nouveauCPN < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauCPN.toFixed(2)}j</td></tr>
             </table>`;
 
         } else if (typeAbsence === 'RTT') {
@@ -1880,7 +1880,7 @@ async function calculerDureeAbsenceAdmin() {
             if (nouveauRTT < 0) soldeNegatif = true;
             resumeDecompte.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>RTT</strong></td><td>${dureeJours.toFixed(1)}j</td><td style="color:${nouveauRTT < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRTT.toFixed(1)}j</td></tr>
+                <tr><td><strong>RTT</strong></td><td>${dureeJours.toFixed(2)}j</td><td style="color:${nouveauRTT < 0 ? 'var(--rouge)' : 'inherit'}">${nouveauRTT.toFixed(2)}j</td></tr>
             </table>`;
 
         } else if (typeAbsence === 'RECUP') {
@@ -1888,7 +1888,7 @@ async function calculerDureeAbsenceAdmin() {
             if (nouvelleRecup < 0) soldeNegatif = true;
             resumeDecompte.innerHTML = `<table>
                 <tr><th></th><th>Posé</th><th>Reste</th></tr>
-                <tr><td><strong>Récup</strong></td><td>${dureeHeures.toFixed(1)}h</td><td style="color:${nouvelleRecup < 0 ? 'var(--rouge)' : 'inherit'}">${nouvelleRecup.toFixed(1)}h</td></tr>
+                <tr><td><strong>Récup</strong></td><td>${dureeHeures.toFixed(2)}h</td><td style="color:${nouvelleRecup < 0 ? 'var(--rouge)' : 'inherit'}">${nouvelleRecup.toFixed(2)}h</td></tr>
             </table>`;
 
         } else if (typeAbsence === 'MALADIE') {

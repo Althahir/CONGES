@@ -427,7 +427,7 @@ body {
     width: 100%;
     font-size: 0.85em;
     padding: 8px 10px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 1.5px solid rgba(0, 108, 137, 0.3);
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.95);
     color: #333;
@@ -439,9 +439,9 @@ body {
 #mes-conges-section .form-group-compact select:focus,
 #mes-conges-section .form-group-compact textarea:focus {
     outline: none;
-    border-color: #666;
+    border-color: var(--bleu);
     background: white;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 0 3px rgba(0, 108, 137, 0.15);
 }
 
 #mes-conges-section .form-group-compact select {
