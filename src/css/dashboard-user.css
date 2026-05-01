@@ -287,7 +287,6 @@ body {
     height: 20px;
     min-width: 80px;
     position: relative;
-    overflow: hidden;
 }
 
 .jour-cell {
@@ -320,10 +319,32 @@ body {
     height: 100%;
     background: transparent;
     border-radius: 0;
+    position: relative;
 }
 
 .indicateur-colonne.actif {
     opacity: 1;
+}
+
+/* Chiffre des heures de récup posées (dépasse de la colonne pour rester lisible) */
+.indicateur-heures {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 2px;
+    padding: 0 2px;
+    z-index: 2;
+}
+.indicateur-heures.badge-centre { top: 50%; transform: translate(-50%, -50%); }
+.indicateur-heures.badge-haut   { top: 1px; }
+.indicateur-heures.badge-bas    { bottom: 1px; }
+[data-theme="dark"] .indicateur-heures {
+    background: rgba(0, 0, 0, 0.7);
 }
 
 .calendrier-table .jour-ferie {
@@ -538,6 +559,10 @@ body {
 #modalChoixHeuresSup .modal-header {
     background: var(--bleu);
 }
+#modalChoixHeuresSup .modal-header h3,
+#modalChoixHeuresSup .modal-header h2 {
+    color: #fff;
+}
 .choix-heures-sup-question {
     text-align: center;
     margin-bottom: 16px;
@@ -606,6 +631,25 @@ body {
 }
 #modalHistoriqueRecupUser .modal-header {
     background: var(--bleu);
+}
+#modalHistoriqueRecupUser .modal-header h3,
+#modalHistoriqueRecupUser .modal-header h2 {
+    color: #fff;
+}
+
+#modalHeuresSup .modal-header {
+    background: var(--bleu);
+    color: #fff;
+    transition: background 0.2s;
+}
+#modalHeuresSup .modal-header.hsup-retrait {
+    background: var(--rouge);
+}
+#modalHeuresSup .modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
 }
 
 .filtre-recup-row {

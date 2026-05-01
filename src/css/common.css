@@ -84,6 +84,159 @@ body {
     background: var(--rouge);
 }
 
+/* Variante "retrait" pour le bouton Enregistrer de la modale Heures sup */
+.btn-primary.hsup-retrait {
+    background: var(--rouge);
+}
+.btn-primary.hsup-retrait:hover {
+    background: var(--orange);
+}
+.btn-primary.hsup-retrait:disabled {
+    background: #aaa;
+}
+
+/* ========== MODALE (structure de base, partagée user/admin) ========== */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: var(--bleu);
+}
+.modal-header h3 {
+    margin: 0;
+    color: var(--bleu);
+    font-size: 1.05rem;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.close-modal {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s, background-color 0.15s;
+}
+.close-modal:hover {
+    color: var(--rouge);
+    background: rgba(0, 0, 0, 0.04);
+}
+[data-theme="dark"] .close-modal:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Messages des modales de confirmation (refus, validation, suppression) */
+.info-refus-demande {
+    background: rgba(237, 113, 17, 0.1);
+    border-left: 4px solid var(--orange);
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin: 0 0 16px 0;
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: var(--bleu);
+}
+.texte-refus-demande {
+    margin: 0;
+    color: var(--bleu);
+    font-size: 0.95em;
+}
+[data-theme="dark"] .info-refus-demande {
+    background: rgba(240, 160, 80, 0.12);
+    border-left-color: #f0a050;
+    color: var(--text-primary);
+}
+[data-theme="dark"] .texte-refus-demande {
+    color: var(--text-secondary);
+}
+
+/* Bouton de confirmation pour les actions positives (validation, etc.) */
+.btn-success {
+    padding: 12px 24px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.15s, box-shadow 0.15s;
+}
+.btn-success:hover {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.btn-success:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Messages de feedback dans les formulaires (utilisés côté user et admin) */
+.form-error {
+    color: var(--rouge);
+    font-size: 0.875rem;
+    padding: 8px 12px;
+    background: rgba(181, 22, 63, 0.08);
+    border-radius: 6px;
+    border-left: 3px solid var(--rouge);
+    margin-top: 8px;
+}
+
+.form-success {
+    color: #2e7d32;
+    font-size: 0.875rem;
+    padding: 8px 12px;
+    background: rgba(46, 125, 50, 0.08);
+    border-radius: 6px;
+    border-left: 3px solid #2e7d32;
+    margin-top: 8px;
+}
+
 .btn-secondary {
     padding: 10px 20px;
     background: #6c757d;
@@ -186,7 +339,7 @@ body {
     flex: 1;
     min-height: 0;
     padding: 15px;
-    overflow: hidden;
+    overflow: visible;
     box-sizing: border-box;
 }
 
@@ -205,7 +358,7 @@ body {
     background: white;
     border-radius: 12px;
     padding: 15px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
@@ -341,9 +494,10 @@ body {
 }
 
 /* Sous-texte "en attente" affiché sous la valeur du solde (étape 3 workflow validation) */
-#mes-conges-section .solde-pending {
+#mes-conges-section .solde-pending,
+#soldesHistorique .solde-pending {
     display: none;
-    font-size: 0.6em;
+    font-size: 0.65em;
     font-weight: 600;
     font-style: italic;
     opacity: 0.8;
@@ -352,7 +506,8 @@ body {
     line-height: 1.1;
 }
 
-#mes-conges-section .solde-pending.has-pending {
+#mes-conges-section .solde-pending.has-pending,
+#soldesHistorique .solde-pending.has-pending {
     display: block;
 }
 
@@ -432,7 +587,7 @@ body {
     background: rgba(255, 255, 255, 0.95);
     color: #333;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
 }
 
 #mes-conges-section .form-group-compact input:focus,
@@ -789,6 +944,157 @@ body {
 #mes-conges-section .jour.recup { background: var(--rouge); color: white; font-weight: bold; }
 #mes-conges-section .jour.maladie { background: var(--orange); color: white; font-weight: bold; }
 
+/* Couleur de référence par type d'absence (sert aux demi-journées) */
+.jour.cp, .jour-historique.cp, #mes-conges-section .jour.cp { --couleur-jour: var(--bleu); --couleur-jour-pending: rgba(0, 108, 137, 0.22); }
+.jour.rtt, .jour-historique.rtt, #mes-conges-section .jour.rtt { --couleur-jour: var(--mauve); --couleur-jour-pending: rgba(116, 43, 135, 0.22); }
+.jour.recup, .jour-historique.recup, #mes-conges-section .jour.recup { --couleur-jour: var(--rouge); --couleur-jour-pending: rgba(181, 22, 63, 0.22); }
+.jour.maladie, .jour-historique.maladie, #mes-conges-section .jour.maladie { --couleur-jour: var(--orange); --couleur-jour-pending: rgba(237, 113, 17, 0.22); }
+
+/* Demi-journées : dégradé horizontal — coloré gauche = matin, droite = après-midi */
+.jour.demi-am,
+.jour-historique.demi-am,
+#mes-conges-section .jour.demi-am {
+    background: linear-gradient(to right, var(--couleur-jour) 50%, transparent 50%) !important;
+    font-weight: bold;
+}
+.jour.demi-pm,
+.jour-historique.demi-pm,
+#mes-conges-section .jour.demi-pm {
+    background: linear-gradient(to left, var(--couleur-jour) 50%, transparent 50%) !important;
+    font-weight: bold;
+}
+
+/* Demi-journées validées : chiffre du jour en sombre pour rester lisible sur la moitié transparente.
+   S'applique aux 3 calendriers individuels (user + admin Mes Congés + admin Historique).
+   En attente : la couleur de type prend le dessus (cohérent avec le visuel atténué).
+   En mode dark : on garde le chiffre clair (override plus bas). */
+.jour.demi-am:not(.en-attente),
+.jour.demi-pm:not(.en-attente),
+.jour-historique.demi-am:not(.en-attente),
+.jour-historique.demi-pm:not(.en-attente),
+#mes-conges-section .jour.demi-am:not(.en-attente),
+#mes-conges-section .jour.demi-pm:not(.en-attente) {
+    color: #333 !important;
+}
+[data-theme="dark"] .jour.demi-am:not(.en-attente),
+[data-theme="dark"] .jour.demi-pm:not(.en-attente),
+[data-theme="dark"] .jour-historique.demi-am:not(.en-attente),
+[data-theme="dark"] .jour-historique.demi-pm:not(.en-attente),
+[data-theme="dark"] #mes-conges-section .jour.demi-am:not(.en-attente),
+[data-theme="dark"] #mes-conges-section .jour.demi-pm:not(.en-attente) {
+    color: #fff !important;
+}
+
+/* Heures de récup posées : bordure rouge hachurée + petit coin rouge en haut à gauche + badge en bas à droite.
+   Le chiffre du jour garde sa couleur par défaut. Le fond reste celui d'une éventuelle demi-journée d'absence
+   (superposition possible : ex. CP matin + 1h RDV l'après-midi). */
+.jour.hsup-pose,
+.jour-historique.hsup-pose,
+#mes-conges-section .jour.hsup-pose {
+    position: relative;
+    border: 1.5px dashed var(--rouge);
+    box-sizing: border-box;
+}
+.hsup-coin {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 10px 10px 0 0;
+    border-color: var(--rouge) transparent transparent transparent;
+    pointer-events: none;
+}
+.jour.hsup-pose.en-attente .hsup-coin,
+.jour-historique.hsup-pose.en-attente .hsup-coin,
+#mes-conges-section .jour.hsup-pose.en-attente .hsup-coin {
+    border-top-color: rgba(181, 22, 63, 0.4);
+}
+.jour.hsup-pose.en-attente,
+.jour-historique.hsup-pose.en-attente,
+#mes-conges-section .jour.hsup-pose.en-attente {
+    outline: none;
+}
+
+/* Cas superposé : demi-journée d'absence + heures de récup → on garde le dégradé de l'absence,
+   on retire la bordure dashed et le coin (juste le badge en bas à droite reste visible). */
+.jour.hsup-pose.demi-am,
+.jour.hsup-pose.demi-pm,
+.jour-historique.hsup-pose.demi-am,
+.jour-historique.hsup-pose.demi-pm,
+#mes-conges-section .jour.hsup-pose.demi-am,
+#mes-conges-section .jour.hsup-pose.demi-pm {
+    border: none;
+}
+.jour.hsup-pose.demi-am .hsup-coin,
+.jour.hsup-pose.demi-pm .hsup-coin,
+.jour-historique.hsup-pose.demi-am .hsup-coin,
+.jour-historique.hsup-pose.demi-pm .hsup-coin,
+#mes-conges-section .jour.hsup-pose.demi-am .hsup-coin,
+#mes-conges-section .jour.hsup-pose.demi-pm .hsup-coin {
+    display: none;
+}
+.hsup-badge {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    background: var(--rouge);
+    color: #fff;
+    font-size: 0.65em;
+    font-weight: 700;
+    padding: 0 4px;
+    border-radius: 3px;
+    line-height: 1.4;
+    pointer-events: none;
+}
+/* Badge atténué (fond rouge transparent + texte rouge) pour les heures en attente de validation */
+.jour.hsup-pose.en-attente .hsup-badge,
+.jour-historique.hsup-pose.en-attente .hsup-badge,
+#mes-conges-section .jour.hsup-pose.en-attente .hsup-badge {
+    background: rgba(181, 22, 63, 0.22);
+    color: var(--rouge);
+}
+/* Dark mode : même couleur claire que les jours RECUP en attente (#e86880) */
+[data-theme="dark"] .jour.hsup-pose.en-attente .hsup-badge,
+[data-theme="dark"] .jour-historique.hsup-pose.en-attente .hsup-badge,
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose.en-attente .hsup-badge {
+    background: rgba(232, 104, 128, 0.22);
+    color: #e86880;
+}
+/* Dark mode : heures de récup validées → couleur des jours RECUP validés (var(--rouge), inchangé en dark)
+              heures de récup en attente → couleur claire #e86880 (cohérent avec les jours en attente) */
+
+/* Validées : bordure + coin + badge plein en var(--rouge) */
+[data-theme="dark"] .jour.hsup-pose:not(.en-attente),
+[data-theme="dark"] .jour-historique.hsup-pose:not(.en-attente),
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose:not(.en-attente) {
+    border-color: var(--rouge);
+}
+[data-theme="dark"] .jour.hsup-pose:not(.en-attente) .hsup-coin,
+[data-theme="dark"] .jour-historique.hsup-pose:not(.en-attente) .hsup-coin,
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose:not(.en-attente) .hsup-coin {
+    border-top-color: var(--rouge);
+}
+[data-theme="dark"] .jour.hsup-pose:not(.en-attente) .hsup-badge,
+[data-theme="dark"] .jour-historique.hsup-pose:not(.en-attente) .hsup-badge,
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose:not(.en-attente) .hsup-badge {
+    background: var(--rouge);
+    color: #fff;
+}
+
+/* En attente : bordure + coin atténués en #e86880 */
+[data-theme="dark"] .jour.hsup-pose.en-attente,
+[data-theme="dark"] .jour-historique.hsup-pose.en-attente,
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose.en-attente {
+    border-color: #e86880;
+}
+[data-theme="dark"] .jour.hsup-pose.en-attente .hsup-coin,
+[data-theme="dark"] .jour-historique.hsup-pose.en-attente .hsup-coin,
+[data-theme="dark"] #mes-conges-section .jour.hsup-pose.en-attente .hsup-coin {
+    border-top-color: rgba(232, 104, 128, 0.4);
+}
+
 /* Absence en attente de validation (workflow) — fond atténué + contour pointillé (pas d'opacity, sinon le tooltip en hérite) */
 .jour.cp.en-attente,
 .jour-historique.cp.en-attente {
@@ -819,41 +1125,135 @@ body {
     outline-offset: -3px;
 }
 
-/* Calendrier global admin : indicateur colonne en attente — voile blanc inset (pas d'opacity) */
+/* Demi-journées en attente de validation : dégradé avec couleur atténuée + contour pointillé */
+.jour.demi-am.en-attente,
+.jour-historique.demi-am.en-attente,
+#mes-conges-section .jour.demi-am.en-attente {
+    background: linear-gradient(to right, var(--couleur-jour-pending) 50%, transparent 50%) !important;
+    color: var(--couleur-jour) !important;
+    outline: 2px dashed var(--couleur-jour);
+    outline-offset: -3px;
+}
+.jour.demi-pm.en-attente,
+.jour-historique.demi-pm.en-attente,
+#mes-conges-section .jour.demi-pm.en-attente {
+    background: linear-gradient(to left, var(--couleur-jour-pending) 50%, transparent 50%) !important;
+    color: var(--couleur-jour) !important;
+    outline: 2px dashed var(--couleur-jour);
+    outline-offset: -3px;
+}
+
+/* Calendrier global admin : indicateur colonne en attente — opacité réduite */
 .indicateur-colonne.actif.en-attente {
-    box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.45);
-    outline: 1px dashed rgba(0, 0, 0, 0.5);
-    outline-offset: -2px;
+    opacity: 0.4;
+}
+
+/* Quand on survole un indicateur, cacher le tooltip de la cellule td (sinon double tooltip) */
+.calendrier-table td[data-tooltip]:has(.indicateur-colonne[data-tooltip]:hover)::after,
+.calendrier-table td[data-tooltip]:has(.indicateur-colonne[data-tooltip]:hover)::before,
+.calendrier-table td[data-tooltip]:has(.indicateur-degrade[data-tooltip]:hover)::after,
+.calendrier-table td[data-tooltip]:has(.indicateur-degrade[data-tooltip]:hover)::before {
+    display: none;
+}
+
+/* Tooltip pour les indicateurs du calendrier global (admin et user) */
+.indicateur-colonne[data-tooltip],
+.indicateur-degrade[data-tooltip] {
+    position: relative;
+}
+.indicateur-colonne[data-tooltip],
+.indicateur-degrade[data-tooltip] {
+    cursor: help;
+}
+.indicateur-colonne[data-tooltip]:hover,
+.indicateur-degrade[data-tooltip]:hover {
+    z-index: 9000;
+    opacity: 1; /* override l'atténuation des en_attente quand on survole */
+}
+.indicateur-colonne[data-tooltip]:hover::after,
+.indicateur-degrade[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(40, 40, 40, 0.85);
+    color: #fff;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 9001;
+    pointer-events: none;
+}
+.indicateur-colonne[data-tooltip]:hover::before,
+.indicateur-degrade[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 3px solid transparent;
+    border-top-color: rgba(40, 40, 40, 0.85);
+    z-index: 9000;
+    pointer-events: none;
 }
 
 /* Dark mode : fond plus lumineux, texte en couleur claire du thème */
-[data-theme="dark"] .jour.cp.en-attente,
-[data-theme="dark"] .jour-historique.cp.en-attente {
+[data-theme="dark"] .jour.cp.en-attente:not(.demi-am):not(.demi-pm),
+[data-theme="dark"] .jour-historique.cp.en-attente:not(.demi-am):not(.demi-pm) {
     background: rgba(92, 189, 213, 0.22) !important;
     color: #5cbdd5 !important;
     outline-color: #5cbdd5;
 }
-[data-theme="dark"] .jour.rtt.en-attente,
-[data-theme="dark"] .jour-historique.rtt.en-attente {
+[data-theme="dark"] .jour.rtt.en-attente:not(.demi-am):not(.demi-pm),
+[data-theme="dark"] .jour-historique.rtt.en-attente:not(.demi-am):not(.demi-pm) {
     background: rgba(201, 142, 219, 0.22) !important;
     color: #c98edb !important;
     outline-color: #c98edb;
 }
-[data-theme="dark"] .jour.recup.en-attente,
-[data-theme="dark"] .jour-historique.recup.en-attente {
+[data-theme="dark"] .jour.recup.en-attente:not(.demi-am):not(.demi-pm),
+[data-theme="dark"] .jour-historique.recup.en-attente:not(.demi-am):not(.demi-pm) {
     background: rgba(232, 104, 128, 0.22) !important;
     color: #e86880 !important;
     outline-color: #e86880;
 }
-[data-theme="dark"] .jour.maladie.en-attente,
-[data-theme="dark"] .jour-historique.maladie.en-attente {
+[data-theme="dark"] .jour.maladie.en-attente:not(.demi-am):not(.demi-pm),
+[data-theme="dark"] .jour-historique.maladie.en-attente:not(.demi-am):not(.demi-pm) {
     background: rgba(240, 160, 80, 0.22) !important;
     color: #f0a050 !important;
     outline-color: #f0a050;
 }
+
+/* Dark mode : variables claires pour les demi-journées en attente
+   (le linear-gradient et la couleur de texte des demi-journées les utilisent) */
+[data-theme="dark"] .jour.cp.en-attente,
+[data-theme="dark"] .jour-historique.cp.en-attente,
+[data-theme="dark"] #mes-conges-section .jour.cp.en-attente {
+    --couleur-jour: #5cbdd5;
+    --couleur-jour-pending: rgba(92, 189, 213, 0.22);
+}
+[data-theme="dark"] .jour.rtt.en-attente,
+[data-theme="dark"] .jour-historique.rtt.en-attente,
+[data-theme="dark"] #mes-conges-section .jour.rtt.en-attente {
+    --couleur-jour: #c98edb;
+    --couleur-jour-pending: rgba(201, 142, 219, 0.22);
+}
+[data-theme="dark"] .jour.recup.en-attente,
+[data-theme="dark"] .jour-historique.recup.en-attente,
+[data-theme="dark"] #mes-conges-section .jour.recup.en-attente {
+    --couleur-jour: #e86880;
+    --couleur-jour-pending: rgba(232, 104, 128, 0.22);
+}
+[data-theme="dark"] .jour.maladie.en-attente,
+[data-theme="dark"] .jour-historique.maladie.en-attente,
+[data-theme="dark"] #mes-conges-section .jour.maladie.en-attente {
+    --couleur-jour: #f0a050;
+    --couleur-jour-pending: rgba(240, 160, 80, 0.22);
+}
 [data-theme="dark"] .indicateur-colonne.actif.en-attente {
-    box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.55);
-    outline-color: rgba(255, 255, 255, 0.55);
+    opacity: 0.4;
 }
 
 /* ========== WORKFLOW VALIDATION — Bandeau demandes en attente (admin) ========== */
@@ -948,12 +1348,23 @@ body {
 .demande-card.type-RTT { border-left-color: var(--mauve); }
 .demande-card.type-RECUP { border-left-color: var(--rouge); }
 
+/* Highlight temporaire quand on remonte sur une card depuis le calendrier */
+@keyframes demandeCardPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(237, 113, 17, 0.6); transform: scale(1); }
+    50%  { box-shadow: 0 0 0 10px rgba(237, 113, 17, 0); transform: scale(1.02); }
+    100% { box-shadow: 0 0 0 0 rgba(237, 113, 17, 0); transform: scale(1); }
+}
+.demande-card.demande-card-highlight {
+    animation: demandeCardPulse 1s ease-out 2;
+    background: rgba(237, 113, 17, 0.08);
+}
+
 .demande-card-info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
 }
 .demande-card-salarie {
     font-weight: 700;
@@ -968,7 +1379,7 @@ body {
     font-size: 0.75em;
     color: var(--text-muted, #95a5a6);
     font-style: italic;
-    margin-top: 2px;
+    margin: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1031,13 +1442,16 @@ body {
 .mes-demande-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     padding: 6px 9px;
     background: rgba(237, 113, 17, 0.08);
     border-left: 3px solid var(--orange);
     border-radius: 5px;
     font-size: 0.78em;
+}
+.mes-demande-item > div:first-child {
+    flex: 1;
+    min-width: 0;
 }
 .mes-demande-item-type {
     font-weight: 700;
@@ -1064,6 +1478,32 @@ body {
     border-left-color: #f0a050;
 }
 [data-theme="dark"] .mes-demande-item-badge { background: #f0a050; }
+
+/* Highlight temporaire quand on remonte sur un item depuis le calendrier user */
+@keyframes mesDemandeItemPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(237, 113, 17, 0.6); transform: scale(1); }
+    50%  { box-shadow: 0 0 0 10px rgba(237, 113, 17, 0); transform: scale(1.02); }
+    100% { box-shadow: 0 0 0 0 rgba(237, 113, 17, 0); transform: scale(1); }
+}
+.mes-demande-item.mes-demande-item-highlight {
+    animation: mesDemandeItemPulse 1s ease-out 2;
+    background: rgba(237, 113, 17, 0.18);
+}
+
+.mes-demande-item-delete {
+    background: transparent;
+    border: none;
+    color: var(--rouge);
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 1em;
+    transition: background-color 0.15s;
+    flex-shrink: 0;
+}
+.mes-demande-item-delete:hover {
+    background: rgba(181, 22, 63, 0.12);
+}
 
 /* Toast spécifique mise à jour : un peu plus large pour accommoder le bouton Redémarrer */
 .notification-persistante.update-toast {
@@ -1141,6 +1581,22 @@ body {
         transform: translateX(0);
         opacity: 1;
     }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(480px);
+        opacity: 0;
+    }
+}
+
+.notification-persistante.dismissing {
+    animation: slideOutRight 0.3s ease-in forwards;
+    pointer-events: none;
 }
 
 .notification-persistante.success {
@@ -1277,7 +1733,7 @@ body {
 
 /* Hover : remonter le jour au-dessus pour que le tooltip ne soit pas masqué par les voisins */
 #mes-conges-section .jour[data-tooltip]:hover {
-    z-index: 1000;
+    z-index: 9000;
     position: relative;
 }
 
@@ -1292,8 +1748,10 @@ body {
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 0.75em;
-    white-space: nowrap;
-    z-index: 1001;
+    font-weight: bold;
+    white-space: pre;
+    text-align: center;
+    z-index: 9001;
     pointer-events: none;
     margin-bottom: 5px;
 }
@@ -1306,7 +1764,7 @@ body {
     transform: translateX(-50%);
     border: 5px solid transparent;
     border-top-color: rgba(0, 0, 0, 0.9);
-    z-index: 1000;
+    z-index: 9000;
     pointer-events: none;
 }
 
