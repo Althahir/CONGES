@@ -208,7 +208,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (01/05/2026 — v1.0.7 en cours, v1.0.6 buildée et pushée, GitHub Release à publier)
+## État actuel du projet (XX/05/2026 — v1.1.0 en cours, v1.0.6 buildée mais pas publiée)
 
 **Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
 
@@ -230,7 +230,9 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 **Import Excel — onglets RECUP** (depuis 26/04/2026 — v1.0.4) : `Ctrl+L+O+A+D` lit en plus tous les onglets dont le nom commence par `RECUP `. Chaque ligne `H.SUP` est importée comme crédit positif, chaque ligne `RECUP` horaire (genre RDV médical) comme retrait négatif. Les `RECUP` marquées « 1 journée(s) » sont **automatiquement ignorées** car elles correspondent à des absences déjà importées via l'onglet `Archives` (sinon double comptage). Détection de doublons par `(salarie_id, date, heures, commentaire)`. Salariés inconnus listés dans le rapport. Robustesse dates : conversion via `XLSX.SSF.parse_date_code()` sur les serials Excel pour éviter les bugs DST de `cellDates: true`, parser FR/US automatique pour les cellules texte.
 
-**Migration v7** (depuis 26/04/2026) : ajout colonne `source` à `heures_supplementaires` ('manuel' / 'import_excel') pour tracer l'origine de chaque saisie et afficher le badge correspondant dans la modale. **Pas de migration v8 dans la 1.0.6** — schéma DB inchangé.
+**Migration v7** (depuis 26/04/2026) : ajout colonne `source` à `heures_supplementaires` ('manuel' / 'import_excel') pour tracer l'origine de chaque saisie et afficher le badge correspondant dans la modale.
+
+**Migration v8** (v1.1.0) : ajout colonnes `statut` (`'valide' | 'en_attente' | 'refuse'`, default 'valide'), `date_validation`, `validee_par` à `heures_supplementaires`. Backfill `statut = 'valide'` pour les saisies existantes. Index `idx_heures_sup_statut`.
 
 **v1.0.6 (27/04/2026) — PDF OneDrive auto + modale Heures sup unifiée + bascule dev/prod** :
 - **PDF de validation/annulation** (`genererPDF`) refondu avec 3 modes :
@@ -286,6 +288,51 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 - **Toast « Mise à jour disponible » — refonte** : bouton « Redémarrer » repensé avec dégradé **vert** (#28a745 → #34c759, en cohérence avec les notifs success), padding plus généreux (10/20), border-radius 8px, ombre portée qui se renforce au hover, **lift** `translateY(-1px)` et **icône qui tourne à 180°** (rotation 0.4s) au survol pour suggérer l'action de redémarrer. Effet d'enfoncement à l'`active`. Dark mode adapté avec dégradé vert clair (#5cbf7a → #7dd595). Le toast lui-même garde sa classe `.update-toast` qui surcharge `.notification-persistante.success` (z-index 10002, width 540px).
 
 - **Toast Mise à jour — son d'annonce** : seconde fonction `window.jouerSonMaj()` ajoutée dans `toast-sound.js`. Variante du son zen avec **3 notes ascendantes** (Ré 6 → Fa# 6 → La 6 = accord parfait majeur, décalages 0 / 180 / 360 ms) pour annoncer une nouveauté de manière positive. Même filtre lowpass 800 Hz et même fade-out exponentiel que les notifs classiques, durée 1.6s (un peu plus longue pour signaler l'importance). Volumes décroissants 0.04 / 0.035 / 0.03. Appelée dans `afficherToastMaj` côté admin et user.
+
+**v1.1.0 (en cours, mai 2026) — Workflow validation heures de récup + nouvelles règles métier + refonte UX** :
+
+- **Workflow de validation pour les heures de récup** (aligné sur celui des congés). Les **retraits manuels** (récup posée par le user via la modale Heures sup) passent en `en_attente` ; les **crédits** (heures sup faites) sont validés immédiatement comme avant. Les imports Excel et l'`autoValide=true` (admin pour soi) court-circuitent. Solde n'est ajusté qu'à la validation. Optimistic locking via `UPDATE ... WHERE statut='en_attente'` (si rowsAffected = 0, abort sans débiter — résout la race condition admin valide / user supprime). DELETE atomique avec `RETURNING *` pour récupérer le statut au moment exact de la suppression.
+  - Nouveaux handlers : `validerHeureSup` / `refuserHeureSup` / `getHeuresSupEnAttente` (heures-sup.js, exposés dans preload).
+  - Bandeau Validation admin (section Historique) regroupe absences ET demandes de récup. Modale jolie `confirmModal` réutilisable au lieu de `confirm()` natif.
+  - Panel "Mes demandes en cours" côté user inclut les heures sup en attente avec bouton corbeille pour annuler (notif live `demande_supprimee` envoyée aux admins).
+  - Notif globale admins à la création (event live), notif ciblée user à validation/refus avec ID inclus dans l'event (permet marquage-comme-lu à la fermeture du toast).
+
+- **Règles métier nouvelles** :
+  - Plafond **2h30** sur les retraits via la modale Heures sup (live + submit + handler `ajouter-recup`).
+  - Demi-journée **matin = 3h, après-midi = 4h** (au lieu de 3h30 chacune). `calcul.js` retourne `dureeHeures = joursOuvres × 7 − 3 (si début après-midi) − 4 (si fin midi)`. Multi-jours cohérent.
+  - Formulaire de demande d'absence : option « En heures » retirée pour les RECUP. Les RECUP via formulaire d'absence sont uniquement journées et demi-journées. Pour des heures, l'utilisateur passe par la modale Heures sup.
+  - Blocages sur les retraits Heures sup : week-end, jour férié, jour entièrement couvert par une absence (les demi-journées laissent place aux heures).
+  - Bug `getEnAttenteParSalarie` : ne plus double-compter `duree_heures + duree_jours × 7` (faisait afficher 27h au lieu de 13h dans les soldes en attente).
+
+- **Visuel des calendriers** :
+  - **Demi-journées** sur les calendriers individuels : dégradé horizontal (matin = gauche, après-midi = droite). Variables CSS `--couleur-jour` et `--couleur-jour-pending` par type. Demi-journées validées : chiffre noir lisible sur la moitié transparente. Demi-journées en attente : couleur atténuée + outline dashed + couleurs claires en dark mode (`#5cbdd5`/`#c98edb`/`#e86880`/`#f0a050`).
+  - **Heures de récup posées** sur les calendriers individuels : bordure dashed rouge + petit triangle rouge en haut-gauche (`.hsup-coin`) + badge `Xh` en bas à droite (`.hsup-badge`). En attente : couleurs atténuées. Si superposé à une demi-journée d'absence : on garde le dégradé d'absence + ajoute uniquement le badge (pas de bordure ni coin pour ne pas surcharger).
+  - **Calendrier global** (admin + user) : indicateurs colonnes en dégradé vertical pour les demi-journées (matin = haut, après-midi = bas). Indicateurs en attente à `opacity: 0.4`. Tooltip discrète au survol (gris foncé semi-transparent, `font-size: 0.7em`).
+  - **Calendrier Historique** (page Validation) : couleurs RECUP/MALADIE alignées sur le standard du projet (étaient inversées avant). Hover scale 1.2 étendu aux `.hsup-pose.en-attente`.
+  - Tooltips concaténés au lieu d'écrasés quand absence + heures de récup le même jour. `\n` rendus en retours à la ligne (`white-space: pre`). Z-index 9000+ pour passer au-dessus du calendrier. `overflow: hidden` retiré des `td` pour permettre au tooltip de déborder.
+
+- **Navigation et interactions** :
+  - **Calendrier global** admin : clic sur indicateur en attente → bascule sur Validation + ouvre le calendrier individuel du salarié + scroll vers la card (param `skipScroll` pour garder le focus sur la card).
+  - Calendriers individuels : clic sur jour avec demande en attente → scroll vers la card correspondante avec flash orange (pulsation 2s).
+  - Toggles AM/PM du formulaire d'absence : reset auto à matin/après-midi à chaque changement de date (input ou drag-to-select).
+  - Tooltip de cellule td filtrée pour ne pas lister les demandes en_attente (info redondante avec l'indicateur).
+
+- **Modales et toasts** :
+  - **`confirmModal()`** : nouvelle fonction réutilisable côté admin et user (style commun dans `common.css`). Crée à la volée une modale jolie avec titre + info + message + boutons. Remplace `confirm()` natif partout (validation/refus admin, annulation user, suppression saisie de récup user).
+  - Modale Heures sup : titre + couleur du header s'adaptent au mode (crédit bleu / retrait rouge). Bouton Enregistrer reprend la couleur (`btn-primary` / `btn-primary.hsup-retrait`).
+  - **Toast cliquable au démarrage admin** : « X demandes de validation en attente — Cliquez ici pour y accéder ». Tag `'demandes-pending'` permet de le fermer programmatiquement quand l'admin navigue manuellement vers la section Validation.
+  - **Animation slide-out** sur fermeture des toasts (0.3s ease-in + classe `.dismissing`). Synchronisée avec le marquage en lu de la notif DB.
+  - **Toasts admin** : son désactivé pour les actions admin contextuelles (validation/refus absence + récup) via le 7e param `silencieux`.
+  - **Toasts user** : regroupement via debounce 500ms — si plusieurs validations/refus arrivent en rafale, un seul toast groupé apparaît avec tous les IDs. Marquage en lot des notifs DB à la fermeture.
+  - `afficherNotificationPersistante` (admin) étendue : 8 paramètres dont `notificationId` (marque DB lue à la fermeture) et `tag` (fermeture programmatique).
+
+- **Refresh automatique** des calendriers (user + admin) après chaque action heures sup (ajout / édition / suppression). Plus besoin de F5.
+
+- **Notif DB ciblée** : pas créée si l'acteur de l'action est aussi le salarié concerné (param `actorId` dans `updateHeureSup`/`deleteHeureSup`). Évite les doublons toast direct + badge cloche.
+
+- **Audit détaillé du traitement CP mensuel** (`utils-cp.js` + `traitements.js`) : nouvelle fonction `calculerCPMensuelDetail` qui retourne en plus du total les segments de calcul, jours ouvrés, taux utilisés, état du salarié. Le `details` JSON dans `historique_traitements` contient maintenant pour chaque salarié : `ancien_cp_n`, `cp_ajoutes` (number, pas string), `nouveau_cp_n`, et un objet `audit` complet. Permet de reconstituer ligne à ligne le calcul a posteriori (`Ctrl+DEBUG` → `historique_traitements` → filtrer `type LIKE 'CP_MENSUEL_%'`). Activé automatiquement à partir du 1er traitement post-déploiement (pas de migration nécessaire). Outil de diagnostic pour le sujet métier en cours : écart 22.88 dans l'app vs 22.92 sur le bulletin de paie.
+
+- **Cosmétique** : tous les `.toFixed(1)` → `.toFixed(2)`, astérisques `*` retirés des labels obligatoires (15 labels dans les deux dashboards), placeholder « Ex: 1.5 » sur les inputs heures sup, croix de fermeture des modales avec style générique, page de connexion élargie à 420px, login Enter, etc.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
