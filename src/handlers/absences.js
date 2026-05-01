@@ -87,8 +87,12 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
     safeHandle('getEnAttenteParSalarie', async (event, salarieId, annee) => {
         const anneeDebut = `${annee}-01-01`;
         const anneeFin = `${annee}-12-31`;
+        // duree_heures est désormais autoritatif pour les RECUP (3h matin / 4h après-midi / 7h jour).
+        // Fallback duree_jours×7 pour les saisies legacy où duree_heures n'était pas rempli.
         const result = await ctx.db.execute({
-            sql: `SELECT type, SUM(duree_jours) AS jours, SUM(duree_heures) AS heures
+            sql: `SELECT type,
+                         SUM(duree_jours) AS jours,
+                         SUM(COALESCE(NULLIF(duree_heures, 0), duree_jours * 7, 0)) AS heures
                   FROM absences
                   WHERE salarie_id = ? AND statut = 'en_attente'
                     AND date_debut <= ? AND date_fin >= ?
@@ -103,9 +107,22 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             } else if (row.type === 'RTT') {
                 engagement.rtt += row.jours || 0;
             } else if (row.type === 'RECUP') {
-                engagement.recup_heures += (row.heures || 0) + ((row.jours || 0) * 7);
+                engagement.recup_heures += row.heures || 0;
             }
         }
+
+        // Ajouter les retraits d'heures de récup en attente (table heures_supplementaires)
+        // Les crédits (heures > 0) sont validés immédiatement donc pas concernés.
+        const hsupRes = await ctx.db.execute({
+            sql: `SELECT SUM(ABS(heures)) AS heures FROM heures_supplementaires
+                  WHERE salarie_id = ? AND statut = 'en_attente' AND heures < 0
+                    AND date BETWEEN ? AND ?`,
+            args: [salarieId, anneeDebut, anneeFin]
+        });
+        if (hsupRes.rows[0] && hsupRes.rows[0].heures) {
+            engagement.recup_heures += Number(hsupRes.rows[0].heures);
+        }
+
         return engagement;
     });
 
@@ -152,13 +169,13 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
                 if (soldes && type !== 'MALADIE') {
                     if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
                         const restant = (soldes.cp_n1 + soldes.cp_n) - (duree_jours || 0);
-                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(2)}j`;
                     } else if (type === 'RTT') {
                         const restant = soldes.rtt - (duree_jours || 0);
-                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}j`;
+                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(2)}j`;
                     } else if (type === 'RECUP') {
                         const restant = soldes.recup_heures - (duree_heures || 0);
-                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(1)}h`;
+                        soldeStr = ` · Solde restant : ${restant % 1 === 0 ? restant : restant.toFixed(2)}h`;
                     }
                 }
                 const titre = `Absence posée — ${salarie.prenom} ${salarie.nom}`;
@@ -176,21 +193,27 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
     });
 
     safeHandle('validerAbsence', async (event, absenceId, adminId) => {
+        // UPDATE conditionnel : on ne valide que si la demande est encore en_attente.
+        // Si quelqu'un d'autre l'a déjà traitée (ou si le user l'a supprimée entre-temps),
+        // rowsAffected = 0 et on abort sans débiter le solde (pas de race condition).
+        const upd = await ctx.db.execute({
+            sql: `UPDATE absences SET statut = 'valide', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ? AND statut = 'en_attente'`,
+            args: [adminId, absenceId]
+        });
+        if (Number(upd.rowsAffected) === 0) {
+            throw new Error('Demande introuvable ou déjà traitée (probablement retirée par le salarié).');
+        }
+
+        // Maintenant la ligne est en 'valide'. On la relit pour avoir les infos pour le débit + notif.
         const absResult = await ctx.db.execute({
             sql: 'SELECT * FROM absences WHERE id = ?',
             args: [absenceId]
         });
         const absence = absResult.rows[0];
-        if (!absence) throw new Error('Absence introuvable');
-        if (absence.statut !== 'en_attente') throw new Error(`Absence déjà traitée (statut : ${absence.statut})`);
+        if (!absence) throw new Error('Absence introuvable après validation');
 
         const annee = new Date(absence.date_debut).getFullYear();
         await debiterSoldes(absence.salarie_id, annee, absence.type, absence.duree_jours, absence.duree_heures, absenceId);
-
-        await ctx.db.execute({
-            sql: `UPDATE absences SET statut = 'valide', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ?`,
-            args: [adminId, absenceId]
-        });
 
         // Notif ciblée salarié
         try {
@@ -198,12 +221,13 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             const periode = `du ${formatDate(absence.date_debut)} au ${formatDate(absence.date_fin)}`;
             const titre = `Demande validée ✓`;
             const message = `Votre demande ${typeLabel} ${periode} a été validée.`;
-            await ctx.db.execute({
+            const insRes = await ctx.db.execute({
                 sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_validee', ?, ?, 'success', ?)`,
                 args: [titre, message, absence.salarie_id]
             });
+            const notifId = Number(insRes.lastInsertRowid);
             if (ctx.mainWindow && ctx.mainWindow.webContents) {
-                ctx.mainWindow.webContents.send('traitement-automatique', { type: 'demande_validee', titre, message, statut: 'success', user_id: absence.salarie_id });
+                ctx.mainWindow.webContents.send('traitement-automatique', { id: notifId, type: 'demande_validee', titre, message, statut: 'success', user_id: absence.salarie_id });
             }
         } catch (errNotif) {
             console.error('Erreur notification validerAbsence:', errNotif);
@@ -213,30 +237,34 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
     });
 
     safeHandle('refuserAbsence', async (event, absenceId, adminId) => {
+        // UPDATE conditionnel — abort si déjà traitée ou supprimée
+        const upd = await ctx.db.execute({
+            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ? AND statut = 'en_attente'`,
+            args: [adminId, absenceId]
+        });
+        if (Number(upd.rowsAffected) === 0) {
+            throw new Error('Demande introuvable ou déjà traitée (probablement retirée par le salarié).');
+        }
+
         const absResult = await ctx.db.execute({
             sql: 'SELECT * FROM absences WHERE id = ?',
             args: [absenceId]
         });
         const absence = absResult.rows[0];
-        if (!absence) throw new Error('Absence introuvable');
-        if (absence.statut !== 'en_attente') throw new Error(`Absence déjà traitée (statut : ${absence.statut})`);
-
-        await ctx.db.execute({
-            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ?`,
-            args: [adminId, absenceId]
-        });
+        if (!absence) throw new Error('Absence introuvable après refus');
 
         try {
             const typeLabel = LABELS_TYPE[absence.type] || absence.type;
             const periode = `du ${formatDate(absence.date_debut)} au ${formatDate(absence.date_fin)}`;
             const titre = `Demande refusée ✕`;
             const message = `Votre demande ${typeLabel} ${periode} a été refusée.`;
-            await ctx.db.execute({
+            const insRes = await ctx.db.execute({
                 sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_refusee', ?, ?, 'error', ?)`,
                 args: [titre, message, absence.salarie_id]
             });
+            const notifId = Number(insRes.lastInsertRowid);
             if (ctx.mainWindow && ctx.mainWindow.webContents) {
-                ctx.mainWindow.webContents.send('traitement-automatique', { type: 'demande_refusee', titre, message, statut: 'error', user_id: absence.salarie_id });
+                ctx.mainWindow.webContents.send('traitement-automatique', { id: notifId, type: 'demande_refusee', titre, message, statut: 'error', user_id: absence.salarie_id });
             }
         } catch (errNotif) {
             console.error('Erreur notification refuserAbsence:', errNotif);
@@ -246,11 +274,14 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
     });
 
     safeHandle('deleteAbsence', async (event, absenceId) => {
-        const absResult = await ctx.db.execute({
-            sql: 'SELECT * FROM absences WHERE id = ?',
+        // DELETE atomique avec RETURNING : on récupère la ligne avec son statut au
+        // moment exact de la suppression. Cela évite la race condition entre un
+        // SELECT initial et le DELETE (admin pourrait valider entre les deux).
+        const delResult = await ctx.db.execute({
+            sql: 'DELETE FROM absences WHERE id = ? RETURNING *',
             args: [absenceId]
         });
-        const absence = absResult.rows[0];
+        const absence = delResult.rows[0];
 
         if (!absence) throw new Error('Absence introuvable');
 
@@ -260,11 +291,6 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         const dureeJours = absence.duree_jours || 0;
         const dureeHeures = absence.duree_heures || 0;
         const annee = new Date(absence.date_debut).getFullYear();
-
-        await ctx.db.execute({
-            sql: 'DELETE FROM absences WHERE id = ?',
-            args: [absenceId]
-        });
 
         // Rollback solde UNIQUEMENT si l'absence était validée (en_attente et refuse n'ont jamais débité)
         if (statut === 'valide' && type !== 'MALADIE') {
@@ -302,6 +328,16 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             await ctx.db.execute({
                 sql: `UPDATE soldes SET cp_n1 = ?, cp_n = ?, rtt = ?, recup_heures = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
                 args: [nouveauCPN1, nouveauCPN, nouveauRTT, nouvelleRecup, salarieId, annee]
+            });
+        }
+
+        // Si l'absence était en attente, prévenir les admins pour rafraîchir le bandeau Validation
+        if (statut === 'en_attente' && ctx.mainWindow && ctx.mainWindow.webContents) {
+            ctx.mainWindow.webContents.send('traitement-automatique', {
+                type: 'demande_supprimee',
+                titre: 'Demande retirée',
+                message: 'Une demande en attente a été retirée par le salarié.',
+                statut: 'info'
             });
         }
 

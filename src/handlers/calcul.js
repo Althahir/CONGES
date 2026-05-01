@@ -59,9 +59,17 @@ module.exports = function registerCalculHandlers(ctx, safeHandle) {
         }
         if (dureeJours < 0) dureeJours = 0;
 
+        // Calcul des heures : journée complète = 7h, matin = 3h, après-midi = 4h
+        // Formule : joursOuvres × 7 − 3 si on démarre l'après-midi (pas de matin) − 4 si on s'arrête midi (pas d'après-midi)
+        let dureeHeures = joursOuvres * 7;
+        if (debutPeriode === 'apres-midi') dureeHeures -= 3;
+        if (finPeriode === 'midi') dureeHeures -= 4;
+        if (dureeHeures < 0) dureeHeures = 0;
+
         return {
             joursOuvres: joursOuvres,
             dureeJours: dureeJours,
+            dureeHeures: dureeHeures,
             joursFeries: joursFeries.length
         };
     });

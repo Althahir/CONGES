@@ -216,12 +216,20 @@ contextBridge.exposeInMainWorld('api', {
     ajouterRecup: (data) => ipcRenderer.invoke('ajouter-recup', data),
     /** @param {number} salarieId @returns {Promise<HeureSup[]>} */
     getHeuresSup: (salarieId) => ipcRenderer.invoke('getHeuresSup', salarieId),
+    /** @returns {Promise<HeureSup[]>} Toutes les saisies hsup (calendrier global) */
+    getAllHeuresSup: () => ipcRenderer.invoke('getAllHeuresSup'),
     /** @param {number} salarieId @returns {Promise<Array>} Liste fusionnée heures_supplementaires + absences RECUP (lecture seule) */
     getHistoriqueRecupComplet: (salarieId) => ipcRenderer.invoke('getHistoriqueRecupComplet', salarieId),
-    /** @param {{id: number, date: string, heures: number, commentaire?: string}} payload @returns {Promise<SuccessResult>} */
+    /** @param {{id: number, date: string, heures: number, commentaire?: string, actorId?: number}} payload @returns {Promise<SuccessResult>} */
     updateHeureSup: (payload) => ipcRenderer.invoke('updateHeureSup', payload),
-    /** @param {number} id @returns {Promise<SuccessResult>} */
-    deleteHeureSup: (id) => ipcRenderer.invoke('deleteHeureSup', id),
+    /** @param {number|{id: number, actorId?: number}} idOrPayload @returns {Promise<SuccessResult>} */
+    deleteHeureSup: (idOrPayload) => ipcRenderer.invoke('deleteHeureSup', idOrPayload),
+    /** @returns {Promise<Array>} Liste des demandes de récup en attente (admin) */
+    getHeuresSupEnAttente: () => ipcRenderer.invoke('getHeuresSupEnAttente'),
+    /** @param {{id: number, adminId: number}} payload @returns {Promise<SuccessResult>} */
+    validerHeureSup: (payload) => ipcRenderer.invoke('validerHeureSup', payload),
+    /** @param {{id: number, adminId: number}} payload @returns {Promise<SuccessResult>} */
+    refuserHeureSup: (payload) => ipcRenderer.invoke('refuserHeureSup', payload),
 
     // Gestion des absences
 

@@ -163,15 +163,15 @@
                 <!-- Modal Heures Supplémentaires -->
                 <div id="modalHeuresSup" class="modal" style="display: none;">
                     <div class="modal-content">
-                        <div class="modal-header">
-                            <h3><i class="fa-solid fa-clock"></i> Ajouter des heures supplémentaires</h3>
+                        <div class="modal-header" id="hsupModalHeader">
+                            <h3><i class="fa-solid fa-clock"></i> <span id="hsupModalTitre">Déclarer des heures supp. faites</span></h3>
                             <button id="closeModalHeuresSup" class="close-modal">
                                 <i class="fa-solid fa-times"></i>
                             </button>
                         </div>
                         <div class="modal-body">
                             <div class="form-group-compact">
-                                <label>Type de saisie *</label>
+                                <label>Type de saisie</label>
                                 <div id="hsupTypeToggle" class="hsup-type-toggle" data-active-type="credit">
                                     <button type="button" class="hsup-type-btn active" data-type="credit">
                                         <i class="fa-solid fa-plus-circle"></i>
@@ -184,11 +184,11 @@
                                 </div>
                             </div>
                             <div class="form-group-compact">
-                                <label for="heuresSupNb">Nombre d'heures *</label>
-                                <input type="number" id="heuresSupNb" min="0.5" step="0.5" placeholder="Ex: 3.5">
+                                <label for="heuresSupNb">Nombre d'heures</label>
+                                <input type="number" id="heuresSupNb" min="0.5" step="0.5" placeholder="Ex: 1.5">
                             </div>
                             <div class="form-group-compact">
-                                <label for="heuresSupDate">Date *</label>
+                                <label for="heuresSupDate">Date</label>
                                 <input type="date" id="heuresSupDate">
                             </div>
                             <div class="form-group-compact">
@@ -209,7 +209,7 @@
                     <h2><i class="fa-solid fa-plus-circle"></i> Poser une absence</h2>
                     <form id="formAbsence">
                         <div class="form-group-compact">
-                            <!-- <label for="typeAbsence">Type *</label> -->
+                            <!-- <label for="typeAbsence">Type</label> -->
                             <select id="typeAbsence" name="typeAbsence" required>
                                 <option value="">-- Sélectionner --</option>
                                 <option value="CP">Congés payés (CP)</option>
@@ -218,7 +218,7 @@
 
                         <div class="form-row-compact">
                             <div class="form-group-compact">
-                                <label for="dateDebut">Du *</label>
+                                <label for="dateDebut">Du</label>
                                 <input type="date" id="dateDebut" name="dateDebut" required>
                                 <div class="period-toggle">
                                     <button type="button" class="period-btn active" data-target="debutAprem" data-value="am">Matin</button>
@@ -227,7 +227,7 @@
                                 <input type="hidden" id="debutAprem" value="am">
                             </div>
                             <div class="form-group-compact">
-                                <label for="dateFin">Au *</label>
+                                <label for="dateFin">Au</label>
                                 <input type="date" id="dateFin" name="dateFin" required>
                                 <div class="period-toggle">
                                     <button type="button" class="period-btn" data-target="finMidi" data-value="am">Matin</button>
@@ -237,20 +237,9 @@
                             </div>
                         </div>
 
-                        <!-- Champs Récup -->
-                        <div id="recupFields" style="display: none;">
-                            <div class="form-group-compact">
-                                <label for="recupType">Type *</label>
-                                <select id="recupType" name="recupType">
-                                    <option value="jours">En jours (7h/j)</option>
-                                    <option value="heures">En heures</option>
-                                </select>
-                            </div>
-                            <div class="form-group-compact" id="recupHeuresGroup" style="display: none;">
-                                <label for="recupHeures">Heures *</label>
-                                <input type="number" id="recupHeures" name="recupHeures" min="0.5" step="0.5">
-                            </div>
-                        </div>
+                        <!-- Champs Récup (toujours en jours / demi-journées : pour des heures ponctuelles, utiliser la modale Heures sup) -->
+                        <input type="hidden" id="recupType" name="recupType" value="jours">
+                        <input type="hidden" id="recupHeures" name="recupHeures" value="">
 
                         <div class="form-group-compact">
                             <label for="commentaire">Commentaire</label>

@@ -220,7 +220,7 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                 doc.font('Helvetica-Bold').text('Durée : ', margin + 12, yPeriode + 100, { continued: true })
                    .font('Helvetica');
                 if (absence.duree_jours) doc.text(`${absence.duree_jours.toFixed(2)} jour(s)`);
-                else if (absence.duree_heures) doc.text(`${absence.duree_heures.toFixed(1)} heure(s)`);
+                else if (absence.duree_heures) doc.text(`${absence.duree_heures.toFixed(2)} heure(s)`);
 
                 yPos += 150;
 
@@ -235,7 +235,7 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     ['CP N-1', `${soldes.cp_n1.toFixed(2)} jours`],
                     ['CP N', `${soldes.cp_n.toFixed(2)} jours`],
                     ['RTT', `${soldes.rtt.toFixed(2)} jours`],
-                    ['Récupération', `${soldes.recup_heures.toFixed(1)} heures`]
+                    ['Récupération', `${soldes.recup_heures.toFixed(2)} heures`]
                 ];
                 soldesData.forEach((row, i) => {
                     const y = tableTop + (i * rowHeight);
@@ -349,7 +349,7 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                     { label: 'CP N-1', value: soldes ? `${soldes.cp_n1.toFixed(2)} j` : '—' },
                     { label: 'CP N', value: soldes ? `${soldes.cp_n.toFixed(2)} j` : '—' },
                     { label: 'RTT', value: soldes ? `${soldes.rtt.toFixed(2)} j` : '—' },
-                    { label: 'Récup', value: soldes ? `${soldes.recup_heures.toFixed(1)} h` : '—' }
+                    { label: 'Récup', value: soldes ? `${soldes.recup_heures.toFixed(2)} h` : '—' }
                 ];
 
                 soldesItems.forEach((item, i) => {
@@ -403,7 +403,7 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
                         const dateD = new Date(abs.date_debut).toLocaleDateString('fr-FR');
                         const dateF = new Date(abs.date_fin).toLocaleDateString('fr-FR');
                         const duree = abs.duree_heures && !abs.duree_jours
-                            ? `${abs.duree_heures.toFixed(1)}h`
+                            ? `${abs.duree_heures.toFixed(2)}h`
                             : `${(abs.duree_jours || 0).toFixed(2)}j`;
                         const comment = (abs.commentaire || '').substring(0, 30);
 

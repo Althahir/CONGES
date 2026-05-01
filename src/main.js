@@ -383,6 +383,22 @@ const MIGRATIONS = [
             await db.execute("ALTER TABLE heures_supplementaires ADD COLUMN source TEXT DEFAULT 'manuel'");
         } catch (e) { /* colonne existe déjà */ }
     },
+
+    // v8 : workflow de validation pour les retraits d'heures de récup
+    //      (les crédits restent immédiats, seuls les retraits passent en en_attente)
+    async function v8(db) {
+        const alterCols = [
+            "ALTER TABLE heures_supplementaires ADD COLUMN statut TEXT DEFAULT 'valide'",
+            "ALTER TABLE heures_supplementaires ADD COLUMN date_validation TEXT",
+            "ALTER TABLE heures_supplementaires ADD COLUMN validee_par INTEGER",
+        ];
+        for (const sql of alterCols) {
+            try { await db.execute(sql); } catch (e) { /* colonne existe déjà */ }
+        }
+        // Backfill : toutes les saisies pré-existantes sont considérées validées
+        await db.execute(`UPDATE heures_supplementaires SET statut = 'valide' WHERE statut IS NULL OR statut = ''`);
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_heures_sup_statut ON heures_supplementaires(statut)');
+    },
 ];
 
 async function runMigrations() {

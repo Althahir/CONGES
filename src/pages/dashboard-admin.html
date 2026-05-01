@@ -93,27 +93,27 @@
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="nom">Nom *</label>
+                            <label for="nom">Nom</label>
                             <input type="text" id="nom" required>
                         </div>
                         <div class="form-group">
-                            <label for="prenom">Prénom *</label>
+                            <label for="prenom">Prénom</label>
                             <input type="text" id="prenom" required>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="email">Email *</label>
+                        <label for="email">Email</label>
                         <input type="email" id="email" required>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="date_embauche">Date d'embauche *</label>
+                            <label for="date_embauche">Date d'embauche</label>
                             <input type="date" id="date_embauche" required>
                         </div>
                         <div class="form-group">
-                            <label for="type_contrat">Type de contrat *</label>
+                            <label for="type_contrat">Type de contrat</label>
                             <select id="type_contrat" required>
                                 <option value="CDI">CDI</option>
                                 <option value="CDD">CDD</option>
@@ -146,7 +146,7 @@
                             </label>
                         </div>
                         <div class="form-group" id="dateArretGroup" style="display: none;">
-                            <label for="date_arret_maladie" id="labelDateArret">Date d'effet *</label>
+                            <label for="date_arret_maladie" id="labelDateArret">Date d'effet</label>
                             <input type="date" id="date_arret_maladie">
                         </div>
                     </div>
@@ -258,15 +258,15 @@
             <!-- Modal Heures Supplémentaires (admin) -->
             <div id="modalHeuresSupAdmin" class="modal" style="display: none;">
                 <div class="modal-content" style="max-width: 440px;">
-                    <div class="modal-header">
-                        <h3><i class="fa-solid fa-clock"></i> Ajouter des heures supplémentaires</h3>
+                    <div class="modal-header" id="hsupModalHeaderAdmin">
+                        <h3><i class="fa-solid fa-clock"></i> <span id="hsupModalTitreAdmin">Déclarer des heures supp. faites</span></h3>
                         <button id="closeModalHeuresSupAdmin" class="close-modal">
                             <i class="fa-solid fa-times"></i>
                         </button>
                     </div>
                     <div class="modal-body">
                         <div class="form-group-compact">
-                            <label>Type de saisie *</label>
+                            <label>Type de saisie</label>
                             <div id="hsupTypeToggleAdmin" class="hsup-type-toggle" data-active-type="credit">
                                 <button type="button" class="hsup-type-btn active" data-type="credit">
                                     <i class="fa-solid fa-plus-circle"></i>
@@ -279,11 +279,11 @@
                             </div>
                         </div>
                         <div class="form-group-compact">
-                            <label for="heuresSupNbAdmin">Nombre d'heures *</label>
-                            <input type="number" id="heuresSupNbAdmin" min="0.5" step="0.5" placeholder="Ex: 3.5">
+                            <label for="heuresSupNbAdmin">Nombre d'heures</label>
+                            <input type="number" id="heuresSupNbAdmin" min="0.5" step="0.5" placeholder="Ex: 1.5">
                         </div>
                         <div class="form-group-compact">
-                            <label for="heuresSupDateAdmin">Date *</label>
+                            <label for="heuresSupDateAdmin">Date</label>
                             <input type="date" id="heuresSupDateAdmin">
                         </div>
                         <div class="form-group-compact">
@@ -312,7 +312,7 @@
 
                     <div class="form-row-compact">
                         <div class="form-group-compact">
-                            <label for="dateDebutUser">Du *</label>
+                            <label for="dateDebutUser">Du</label>
                             <input type="date" id="dateDebutUser" name="dateDebut" required>
                             <div class="period-toggle">
                                 <button type="button" class="period-btn active" data-target="debutApremUser" data-value="am">Matin</button>
@@ -321,7 +321,7 @@
                             <input type="hidden" id="debutApremUser" value="am">
                         </div>
                         <div class="form-group-compact">
-                            <label for="dateFinUser">Au *</label>
+                            <label for="dateFinUser">Au</label>
                             <input type="date" id="dateFinUser" name="dateFin" required>
                             <div class="period-toggle">
                                 <button type="button" class="period-btn" data-target="finMidiUser" data-value="am">Matin</button>
@@ -332,19 +332,9 @@
                     </div>
 
                     <!-- Champs Récup -->
-                    <div id="recupFieldsUser" style="display: none;">
-                        <div class="form-group-compact">
-                            <label for="recupTypeUser">Type *</label>
-                            <select id="recupTypeUser" name="recupType">
-                                <option value="jours">En jours (7h/j)</option>
-                                <option value="heures">En heures</option>
-                            </select>
-                        </div>
-                        <div class="form-group-compact" id="recupHeuresGroupUser" style="display: none;">
-                            <label for="recupHeuresUser">Heures *</label>
-                            <input type="number" id="recupHeuresUser" name="recupHeures" min="0.5" step="0.5">
-                        </div>
-                    </div>
+                    <!-- Champs Récup (toujours en jours / demi-journées : pour des heures ponctuelles, utiliser la modale Heures sup) -->
+                    <input type="hidden" id="recupTypeUser" name="recupType" value="jours">
+                    <input type="hidden" id="recupHeuresUser" name="recupHeures" value="">
 
                     <div class="form-group-compact">
                         <label for="commentaireUser">Commentaire</label>
@@ -446,11 +436,11 @@
                 </div>
                 <form id="formFerie">
                     <div class="form-group">
-                        <label for="ferieDate">Date *</label>
+                        <label for="ferieDate">Date</label>
                         <input type="date" id="ferieDate" required>
                     </div>
                     <div class="form-group">
-                        <label for="ferieLibelle">Libellé *</label>
+                        <label for="ferieLibelle">Libellé</label>
                         <input type="text" id="ferieLibelle" placeholder="ex: 1er Mai" required>
                     </div>
                     <p id="ferieMsgErreur" class="form-error" style="display:none;"></p>
@@ -508,18 +498,22 @@
             <div class="solde-card sh-cp">
                 <div class="solde-label">CP N-1</div>
                 <div class="solde-value" id="soldeCPN1Historique">0j</div>
+                <div class="solde-pending" id="soldeCPN1HistoriquePending"></div>
             </div>
             <div class="solde-card sh-cp">
                 <div class="solde-label">CP N</div>
                 <div class="solde-value" id="soldeCPNHistorique">0j</div>
+                <div class="solde-pending" id="soldeCPNHistoriquePending"></div>
             </div>
             <div class="solde-card sh-rtt">
                 <div class="solde-label">RTT</div>
                 <div class="solde-value" id="soldeRTTHistorique">0j</div>
+                <div class="solde-pending" id="soldeRTTHistoriquePending"></div>
             </div>
             <div class="solde-card sh-recup">
                 <div class="solde-label">Récupération</div>
                 <div class="solde-value" id="soldeRecupHistorique">0h</div>
+                <div class="solde-pending" id="soldeRecupHistoriquePending"></div>
             </div>
         </div>
         <div id="btnAjouterMaladieWrapper" style="text-align: center; margin-top: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
