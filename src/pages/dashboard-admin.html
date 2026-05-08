@@ -36,6 +36,9 @@
                 </div>
             </div>
         </div>
+        <button id="btnAide" class="btn-aide" title="Aide">
+            <i class="fa-solid fa-circle-question"></i>
+        </button>
         <button id="btnThemeToggle" class="btn-theme-toggle" title="Changer de thème">
             <i class="fa-solid fa-moon"></i>
         </button>
@@ -384,6 +387,8 @@
         <div class="modal-body">
             <p id="infoRefusDemande" class="info-refus-demande"></p>
             <p class="texte-refus-demande">Confirmer le refus de cette demande&nbsp;?</p>
+            <label for="motifRefusDemande" class="label-motif-refus">Motif (facultatif)</label>
+            <textarea id="motifRefusDemande" class="textarea-motif-refus" rows="3" placeholder="Précise le motif du refus si tu le souhaites — sera communiqué au salarié."></textarea>
         </div>
         <div class="modal-footer">
             <button id="btnAnnulerRefusDemande" class="btn-secondary">Annuler</button>
@@ -556,16 +561,50 @@
                 <input type="checkbox" id="genererPdfAnnulation">
                 <span>Générer un PDF d'annulation (archivage OneDrive)</span>
             </label>
-
-            <div class="warning-suppression">
-                <i class="fa-solid fa-exclamation-triangle"></i>
-                <p>Les soldes seront automatiquement recalculés après la suppression.</p>
-            </div>
         </div>
-        
+
         <div class="modal-footer">
             <button id="btnAnnulerSuppression" class="btn-secondary">Annuler</button>
             <button id="btnConfirmerSuppression" class="btn-danger">Confirmer la suppression</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 2 : Réaffectation CP après suppression -->
+<div id="modalReaffectationCp" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-scale-balanced"></i> Répartition du recrédit</h3>
+        </div>
+        <div class="modal-body">
+            <p id="reaffectationInfoOrigine" class="reaffectation-info-origine"></p>
+            <p class="reaffectation-question">
+                Comment recréditer <strong id="reaffectationMontant"></strong> jour(s) ?
+            </p>
+            <div class="reaffectation-inputs">
+                <div class="reaffectation-input-row">
+                    <label for="reaffecterCpN1">Sur CP N-1</label>
+                    <input type="number" id="reaffecterCpN1" min="0" step="0.5" value="0">
+                    <span class="reaffectation-unit">jours</span>
+                </div>
+                <div class="reaffectation-input-row">
+                    <label for="reaffecterCpN">Sur CP N</label>
+                    <input type="number" id="reaffecterCpN" min="0" step="0.5" value="0">
+                    <span class="reaffectation-unit">jours</span>
+                </div>
+                <div class="reaffectation-total">
+                    Total : <strong id="reaffectationTotal">0.00</strong> / <span id="reaffectationCible">0.00</span> jours
+                    <span id="reaffectationCheck" class="reaffectation-check"></span>
+                </div>
+            </div>
+            <div id="reaffectationAide" class="reaffectation-aide">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Choisis la répartition selon la période actuelle. La somme doit valoir le total à recréditer.</span>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="btnAnnulerReaffectation" class="btn-secondary">Annuler</button>
+            <button id="btnConfirmerReaffectation" class="btn-primary" disabled>Confirmer le recrédit</button>
         </div>
     </div>
 </div>
@@ -1045,8 +1084,32 @@
     </div>
 </div>
 
+<!-- Modal Aide -->
+<div id="modalAide" class="modal" style="display: none;">
+    <div class="modal-content modal-aide">
+        <div class="modal-header">
+            <h2><i class="fa-solid fa-circle-question"></i> Aide</h2>
+            <button id="closeModalAide" class="close-modal" title="Fermer">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body modal-aide-body">
+            <aside class="aide-sidebar">
+                <ul id="aideList" class="aide-list"></ul>
+            </aside>
+            <section id="aideContent" class="aide-content">
+                <div class="aide-placeholder">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <p>Sélectionne une question dans la liste à gauche pour afficher la procédure.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
     <script src="../js/chart.umd.js"></script>
     <script src="../js/toast-sound.js"></script>
+    <script src="../js/aide-data.js"></script>
     <script src="../js/dashboard-admin.js"></script>
 </body>
 </html>

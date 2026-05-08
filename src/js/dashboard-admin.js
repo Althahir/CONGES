@@ -1151,10 +1151,68 @@ window.resetPassword = async (salarieId, nom, prenom) => {
 // Bouton "Ajouter" géré par la modale initialisée dans la section JOURS FÉRIÉS
 
 // Bouton déconnexion
-document.getElementById('logoutBtn').addEventListener('click', () => {
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    if (window._pollingIntervalId) {
+        clearInterval(window._pollingIntervalId);
+        window._pollingIntervalId = null;
+    }
     sessionStorage.removeItem('user');
-    window.location.href = 'login.html';
+    await window.api.navigateTo('login.html');
 });
+
+// ========== AIDE (modale "?" du header) ==========
+(function initAide() {
+    const btnAide = document.getElementById('btnAide');
+    const modal = document.getElementById('modalAide');
+    const closeBtn = document.getElementById('closeModalAide');
+    const listEl = document.getElementById('aideList');
+    const contentEl = document.getElementById('aideContent');
+    if (!btnAide || !modal || !window.AIDE_DATA) return;
+
+    let currentId = null;
+
+    function rendreListe() {
+        listEl.innerHTML = window.AIDE_DATA.map(fiche => `
+            <li>
+                <button class="aide-list-item${fiche.id === currentId ? ' active' : ''}" data-id="${fiche.id}">
+                    ${fiche.titre}
+                </button>
+            </li>
+        `).join('');
+        listEl.querySelectorAll('.aide-list-item').forEach(btn => {
+            btn.addEventListener('click', () => selectionnerFiche(btn.dataset.id));
+        });
+    }
+
+    function selectionnerFiche(id) {
+        const fiche = window.AIDE_DATA.find(f => f.id === id);
+        if (!fiche) return;
+        currentId = id;
+        contentEl.innerHTML = fiche.contenu;
+        contentEl.scrollTop = 0;
+        listEl.querySelectorAll('.aide-list-item').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.id === id);
+        });
+    }
+
+    function ouvrir() {
+        rendreListe();
+        if (!currentId && window.AIDE_DATA.length > 0) {
+            selectionnerFiche(window.AIDE_DATA[0].id);
+        }
+        modal.style.display = 'flex';
+    }
+
+    function fermer() {
+        modal.style.display = 'none';
+    }
+
+    btnAide.addEventListener('click', ouvrir);
+    closeBtn.addEventListener('click', fermer);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') fermer();
+    });
+})();
 
 // ========== SECTION MES CONGÉS (reprise du dashboard user) ==========
 let joursFeriesUser = [];
@@ -1571,6 +1629,9 @@ function refuserDemande(absenceId) {
     _refusDemandeEnCours = absenceId;
     const info = document.getElementById('infoRefusDemande');
     if (info) info.innerHTML = `<strong>${escapeHtml(salarie)}</strong><br>${escapeHtml(details)}`;
+    // Reset systématique de la textarea motif (évite de garder le motif d'un refus précédent)
+    const motifEl = document.getElementById('motifRefusDemande');
+    if (motifEl) motifEl.value = '';
     document.getElementById('modalRefusDemande').style.display = 'flex';
 }
 
@@ -1589,7 +1650,9 @@ async function confirmerRefusDemande() {
     btnAnnuler.disabled = true;
 
     try {
-        await window.api.refuserAbsence(absenceId, user.id);
+        const motifEl = document.getElementById('motifRefusDemande');
+        const motif = motifEl ? motifEl.value.trim() : '';
+        await window.api.refuserAbsence(absenceId, user.id, motif);
         fermerModalRefusDemande();
         afficherNotificationPersistante('success', 'Demande refusée', 'Le refus a bien été enregistré.', 3000, undefined, undefined, true);
         await loadDemandesEnAttente();
@@ -4021,6 +4084,13 @@ if (window.api.onTraitementAutomatique) {
             return;
         }
 
+        // Absence supprimée par un admin (notif ciblée user) → pas de toast côté admin :
+        // l'admin qui a fait l'action a déjà son toast custom dans flowSuppressionCp ;
+        // les autres admins (multi-poste) verront le changement au prochain refresh calendrier/polling 30s.
+        if (data.type === 'absence_supprimee') {
+            return;
+        }
+
         // Notifs du workflow de validation — toast direct + refresh bandeau/badge
         if (data.type === 'demande_conge' || data.type === 'demande_validee' || data.type === 'demande_refusee'
             || data.type === 'demande_recup' || data.type === 'recup_validee' || data.type === 'recup_refusee') {
@@ -4530,7 +4600,7 @@ async function init() {
 
     // Polling toutes les 30s pour détecter les changements depuis d'autres postes
     let _dernierNbNotifs = (window._notificationsEnAttente || []).length;
-    setInterval(async () => {
+    window._pollingIntervalId = setInterval(async () => {
         try {
             const anciennes = _dernierNbNotifs;
             const notifications = await window.api.getNotificationsNonLues(user.id);
@@ -5390,7 +5460,7 @@ function ouvrirModalSuppression(absence, dateISO) {
     } else {
         optionJour.style.display = 'flex';
     }
-    
+
     modal.style.display = 'flex';
 }
 
@@ -5407,6 +5477,24 @@ document.getElementById('btnAnnulerSuppression').addEventListener('click', () =>
 document.getElementById('btnConfirmerSuppression').addEventListener('click', async () => {
     const typeSuppression = document.querySelector('input[name="typeSuppression"]:checked').value;
     const genererPdf = document.getElementById('genererPdfAnnulation').checked;
+    const estCp = absenceCliquee.type === 'CP' || absenceCliquee.type === 'CP_N' || absenceCliquee.type === 'CP_N1';
+    const estValide = absenceCliquee.statut === 'valide';
+
+    // Pour les CP validés, on bascule sur le workflow modale 2 (DELETE skipRecredit + réaffectation manuelle).
+    if (estCp && estValide) {
+        try {
+            const result = await flowSuppressionCp(typeSuppression, genererPdf);
+            // Ne fermer la modale 1 que si la suppression a effectivement eu lieu.
+            // Si l'admin a annulé la modale 2, on revient sur la modale 1 (toujours ouverte).
+            if (!result || !result.cancelled) {
+                document.getElementById('modalSuppressionAbsence').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Erreur suppression CP:', error);
+            afficherNotificationPersistante('error', 'Erreur lors de la suppression', error.message, 6000, null, null, true);
+        }
+        return;
+    }
 
     try {
         if (typeSuppression === 'complete') {
@@ -5420,8 +5508,8 @@ document.getElementById('btnConfirmerSuppression').addEventListener('click', asy
                 }
             }
 
-            // Supprimer toute l'absence (recalcule les soldes en interne)
-            await window.api.deleteAbsence(absenceCliquee.id);
+            // Supprimer toute l'absence (recalcule les soldes en interne — recrédit auto à l'identique)
+            await window.api.deleteAbsence(absenceCliquee.id, { adminId: user.id });
 
             // Générer le PDF d'annulation après recalcul des soldes
             if (genererPdf && salarieInfo) {
@@ -5456,10 +5544,52 @@ document.getElementById('btnConfirmerSuppression').addEventListener('click', asy
                 }
             }
 
-            alert('✅ Absence supprimée avec succès !\nLes soldes ont été recalculés.');
+            afficherNotificationPersistante('success', 'Absence supprimée', 'Soldes mis à jour.', 4000, null, null, true);
         } else {
-            // Supprimer uniquement le jour cliqué (pas de PDF d'annulation dans ce cas)
+            // Suppression d'un jour seul. Capture salarié AVANT pour le PDF si demandé.
+            let salarieInfo = null;
+            if (genererPdf) {
+                try {
+                    salarieInfo = await window.api.getSalarie(absenceCliquee.salarie_id);
+                } catch (e) {
+                    console.error('Impossible de récupérer le salarié pour le PDF d\'annulation:', e);
+                }
+            }
+
             await supprimerUnJour(absenceCliquee, jourClique);
+
+            // PDF d'annulation du jour supprimé (1 journée)
+            if (genererPdf && salarieInfo) {
+                try {
+                    const annee = new Date(jourClique).getFullYear();
+                    const soldesApres = await window.api.getSoldes(absenceCliquee.salarie_id, annee);
+                    const pdfResult = await window.api.genererPDF({
+                        salarie: { nom: salarieInfo.nom, prenom: salarieInfo.prenom, role: salarieInfo.role || 'user' },
+                        absence: {
+                            type: absenceCliquee.type,
+                            date_debut: jourClique,
+                            date_fin: jourClique,
+                            duree_jours: 1,
+                            duree_heures: 7,
+                            commentaire: absenceCliquee.commentaire || null
+                        },
+                        soldes: {
+                            cp_n1: soldesApres ? soldesApres.cp_n1 : 0,
+                            cp_n: soldesApres ? soldesApres.cp_n : 0,
+                            rtt: soldesApres ? soldesApres.rtt : 0,
+                            recup_heures: soldesApres ? soldesApres.recup_heures : 0
+                        },
+                        valideur: { nom: user.nom, prenom: user.prenom },
+                        annulation: true,
+                        mode: 'auto'
+                    });
+                    if (pdfResult && pdfResult.savedPath) {
+                        afficherNotificationPersistante('success', 'PDF d\'annulation enregistré', pdfResult.fileName, 4000);
+                    }
+                } catch (pdfErr) {
+                    console.error('Erreur génération PDF d\'annulation (jour seul):', pdfErr);
+                }
+            }
         }
 
         // Fermer la modal et recharger
@@ -5468,9 +5598,285 @@ document.getElementById('btnConfirmerSuppression').addEventListener('click', asy
 
     } catch (error) {
         console.error('Erreur suppression:', error);
-        alert('❌ Erreur lors de la suppression : ' + error.message);
+        afficherNotificationPersistante('error', 'Erreur lors de la suppression', error.message, 6000, null, null, true);
     }
 });
+
+// ========== FLOW SUPPRESSION CP (avec modale 2 de réaffectation) ==========
+
+// Ajuste la décomposition (cp_n1, cp_n) après recrédit, en clampant les négatifs
+// et en transférant l'excédent sur l'autre compteur pour préserver la somme.
+function ajusterDecompositionApresRecredit(ancienN1, ancienN, recreditN1, recreditN) {
+    let n1 = ancienN1 - recreditN1;
+    let n = ancienN - recreditN;
+    if (n1 < 0) { n += n1; n1 = 0; }
+    if (n < 0)  { n1 += n; n = 0; }
+    // Sécurité finale : pas de négatif
+    return { debiteN1: Math.max(0, n1), debiteN: Math.max(0, n) };
+}
+
+async function flowSuppressionCp(typeSuppression, genererPdf) {
+    const absence = absenceCliquee;
+    const annee = new Date(absence.date_debut).getFullYear();
+    const ancienDebiteN1 = Number(absence.debite_cp_n1) || 0;
+    const ancienDebiteN = Number(absence.debite_cp_n) || 0;
+    const cible = (typeSuppression === 'complete') ? absence.duree_jours : 1;
+
+    // 1. Modale 2 : choix de la répartition. Aucune écriture en DB tant que pas confirmé.
+    const choix = await ouvrirModalReaffectationCp({
+        cible,
+        ancienDebiteN1,
+        ancienDebiteN,
+        messageOrigine: construireMessageOrigine(ancienDebiteN1, ancienDebiteN, absence.duree_jours)
+    });
+
+    // Si l'admin annule, on ne fait rien (DELETE pas encore exécuté).
+    // On retourne le flag pour que la modale 1 reste ouverte (l'admin reprend son choix).
+    if (choix.cancelled) return { cancelled: true };
+
+    // 2. Capturer les infos salarié si PDF demandé (avant DELETE pour éviter perdre la fiche)
+    let salarieInfo = null;
+    if (genererPdf) {
+        try {
+            salarieInfo = await window.api.getSalarie(absence.salarie_id);
+        } catch (e) {
+            console.error('Impossible de récupérer le salarié pour le PDF:', e);
+        }
+    }
+
+    // 3. DELETE skipRecredit + recrédit selon choix
+    await window.api.deleteAbsence(absence.id, { skipRecredit: true, adminId: user.id });
+    await window.api.appliquerRecreditCp(absence.salarie_id, annee, choix.recreditN1, choix.recreditN);
+
+    // Helper local pour générer le PDF d'annulation (même structure pour complete et jour seul)
+    async function genererPdfAnnulationLocal(absencePourPdf) {
+        if (!genererPdf || !salarieInfo) return;
+        try {
+            const soldesApres = await window.api.getSoldes(absence.salarie_id, annee);
+            const pdfResult = await window.api.genererPDF({
+                salarie: { nom: salarieInfo.nom, prenom: salarieInfo.prenom, role: salarieInfo.role || 'user' },
+                absence: absencePourPdf,
+                soldes: {
+                    cp_n1: soldesApres ? soldesApres.cp_n1 : 0,
+                    cp_n: soldesApres ? soldesApres.cp_n : 0,
+                    rtt: soldesApres ? soldesApres.rtt : 0,
+                    recup_heures: soldesApres ? soldesApres.recup_heures : 0
+                },
+                valideur: { nom: user.nom, prenom: user.prenom },
+                annulation: true,
+                mode: 'auto'
+            });
+            if (pdfResult && pdfResult.savedPath) {
+                afficherNotificationPersistante('success', 'PDF d\'annulation enregistré', pdfResult.fileName, 4000);
+            }
+        } catch (pdfErr) {
+            console.error('Erreur génération PDF d\'annulation:', pdfErr);
+        }
+    }
+
+    if (typeSuppression === 'complete') {
+        // 4a. PDF d'annulation pour la période complète
+        await genererPdfAnnulationLocal({
+            type: absence.type,
+            date_debut: absence.date_debut,
+            date_fin: absence.date_fin,
+            duree_jours: absence.duree_jours,
+            duree_heures: absence.duree_heures,
+            commentaire: absence.commentaire || null
+        });
+        afficherNotificationPersistante('success', 'Absence supprimée', 'Soldes mis à jour.', 4000, null, null, true);
+    } else {
+        // 4b. Suppression jour seul : recréer les sous-absences avec décomposition ajustée
+        const decomp = ajusterDecompositionApresRecredit(ancienDebiteN1, ancienDebiteN, choix.recreditN1, choix.recreditN);
+        await recreerSousAbsencesCp(absence, jourClique, decomp);
+        // PDF d'annulation pour le jour cliqué uniquement (1j)
+        await genererPdfAnnulationLocal({
+            type: absence.type,
+            date_debut: jourClique,
+            date_fin: jourClique,
+            duree_jours: 1,
+            duree_heures: 7,
+            commentaire: absence.commentaire || null
+        });
+        afficherNotificationPersistante('success', 'Jour supprimé', 'Solde mis à jour.', 4000, null, null, true);
+    }
+
+    await chargerCalendrierHistorique();
+}
+
+function construireMessageOrigine(debiteN1, debiteN, dureeJours) {
+    const total = debiteN1 + debiteN;
+    if (total > 0) {
+        if (debiteN1 > 0 && debiteN > 0) {
+            return `Cette période avait été décomptée sur les deux soldes : <strong>${debiteN1.toFixed(2)} jour(s) sur CP N-1</strong> et <strong>${debiteN.toFixed(2)} jour(s) sur CP N</strong>.`;
+        } else if (debiteN1 > 0) {
+            return `Cette période avait été décomptée intégralement sur <strong>CP N-1</strong> (${debiteN1.toFixed(2)} jour(s)).`;
+        } else {
+            return `Cette période avait été décomptée intégralement sur <strong>CP N</strong> (${debiteN.toFixed(2)} jour(s)).`;
+        }
+    } else {
+        return `Cette période faisait <strong>${dureeJours.toFixed(2)} jour(s)</strong>. <em>Décomposition d'origine non mémorisée.</em>`;
+    }
+}
+
+// Recrée la/les sous-absence(s) après suppression d'un jour seul, sans débiter le solde.
+async function recreerSousAbsencesCp(absence, dateISO, decompositionGlobale) {
+    const dateDebut = new Date(absence.date_debut);
+    const dateFin = new Date(absence.date_fin);
+    const dateASupprimer = new Date(dateISO);
+
+    // Cas 1 : premier jour supprimé
+    if (dateISO === absence.date_debut) {
+        const nouvelleDateDebut = new Date(dateASupprimer);
+        nouvelleDateDebut.setDate(nouvelleDateDebut.getDate() + 1);
+        const newAbs = await window.api.createAbsence({
+            salarie_id:   absence.salarie_id,
+            type:         absence.type,
+            date_debut:   formatDateISO(nouvelleDateDebut),
+            date_fin:     absence.date_fin,
+            duree_jours:  absence.duree_jours - 1,
+            duree_heures: absence.duree_heures - 7,
+            commentaire:  absence.commentaire,
+            autoValide:   true,
+            skipNotification: true
+        });
+        await window.api.setDecompositionAbsence(newAbs.id, decompositionGlobale.debiteN1, decompositionGlobale.debiteN);
+        return;
+    }
+
+    // Cas 2 : dernier jour supprimé
+    if (dateISO === absence.date_fin) {
+        const nouvelleDateFin = new Date(dateASupprimer);
+        nouvelleDateFin.setDate(nouvelleDateFin.getDate() - 1);
+        const newAbs = await window.api.createAbsence({
+            salarie_id:   absence.salarie_id,
+            type:         absence.type,
+            date_debut:   absence.date_debut,
+            date_fin:     formatDateISO(nouvelleDateFin),
+            duree_jours:  absence.duree_jours - 1,
+            duree_heures: absence.duree_heures - 7,
+            commentaire:  absence.commentaire,
+            autoValide:   true,
+            skipNotification: true
+        });
+        await window.api.setDecompositionAbsence(newAbs.id, decompositionGlobale.debiteN1, decompositionGlobale.debiteN);
+        return;
+    }
+
+    // Cas 3 : milieu (split en 2). On répartit la décomposition globale entre les 2 morceaux :
+    // CP_N-1 priority sur la 1re absence, le reste sur la 2e.
+    const jourAvant = new Date(dateASupprimer); jourAvant.setDate(jourAvant.getDate() - 1);
+    const jourApres = new Date(dateASupprimer); jourApres.setDate(jourApres.getDate() + 1);
+    const joursPartie1 = Math.ceil((jourAvant - dateDebut) / (1000 * 60 * 60 * 24)) + 1;
+    const joursPartie2 = absence.duree_jours - joursPartie1 - 1;
+
+    const newAbs1 = await window.api.createAbsence({
+        salarie_id:   absence.salarie_id,
+        type:         absence.type,
+        date_debut:   absence.date_debut,
+        date_fin:     formatDateISO(jourAvant),
+        duree_jours:  joursPartie1,
+        duree_heures: joursPartie1 * 7,
+        commentaire:  absence.commentaire,
+        autoValide:   true,
+        skipNotification: true
+    });
+    const newAbs2 = await window.api.createAbsence({
+        salarie_id:   absence.salarie_id,
+        type:         absence.type,
+        date_debut:   formatDateISO(jourApres),
+        date_fin:     absence.date_fin,
+        duree_jours:  joursPartie2,
+        duree_heures: joursPartie2 * 7,
+        commentaire:  absence.commentaire,
+        autoValide:   true,
+        skipNotification: true
+    });
+
+    // Répartition de la décomposition globale entre les 2 morceaux (CP_N-1 priority sur le 1er)
+    const totalN1 = decompositionGlobale.debiteN1;
+    const totalN = decompositionGlobale.debiteN;
+    const p1N1 = Math.min(totalN1, joursPartie1);
+    const p1N = joursPartie1 - p1N1;
+    const p2N1 = totalN1 - p1N1;
+    const p2N = totalN - p1N;
+    await window.api.setDecompositionAbsence(newAbs1.id, p1N1, p1N);
+    await window.api.setDecompositionAbsence(newAbs2.id, Math.max(0, p2N1), Math.max(0, p2N));
+}
+
+// ========== MODALE 2 : RÉAFFECTATION CP ==========
+// Retourne { recreditN1, recreditN } si confirme, ou { cancelled: true } si annule.
+function ouvrirModalReaffectationCp({ cible, ancienDebiteN1, ancienDebiteN, messageOrigine }) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modalReaffectationCp');
+        const infoEl = document.getElementById('reaffectationInfoOrigine');
+        const montantEl = document.getElementById('reaffectationMontant');
+        const cibleEl = document.getElementById('reaffectationCible');
+        const inputN1 = document.getElementById('reaffecterCpN1');
+        const inputN = document.getElementById('reaffecterCpN');
+        const totalEl = document.getElementById('reaffectationTotal');
+        const checkEl = document.getElementById('reaffectationCheck');
+        const btnConfirmer = document.getElementById('btnConfirmerReaffectation');
+        const btnAnnuler = document.getElementById('btnAnnulerReaffectation');
+
+        infoEl.innerHTML = messageOrigine;
+        montantEl.textContent = cible.toFixed(2);
+        cibleEl.textContent = cible.toFixed(2);
+
+        // Cacher l'aide « Choisis la répartition... » pour les suppressions d'un jour seul (cible = 1)
+        // — la phrase n'apporte rien quand il n'y a qu'un jour à placer.
+        const aideEl = document.getElementById('reaffectationAide');
+        if (aideEl) aideEl.style.display = (cible <= 1) ? 'none' : 'flex';
+
+        // Pré-remplissage : suit la décomposition d'origine, plafonné à la cible.
+        let preN1, preN;
+        const totalAncien = ancienDebiteN1 + ancienDebiteN;
+        if (totalAncien > 0) {
+            preN1 = Math.min(ancienDebiteN1, cible);
+            preN = cible - preN1;
+        } else {
+            preN1 = 0;
+            preN = cible;
+        }
+        inputN1.value = preN1.toFixed(2);
+        inputN.value = preN.toFixed(2);
+
+        function rafraichir() {
+            const v1 = parseFloat(inputN1.value) || 0;
+            const v = parseFloat(inputN.value) || 0;
+            const total = v1 + v;
+            totalEl.textContent = total.toFixed(2);
+            const ok = Math.abs(total - cible) < 0.001 && v1 >= 0 && v >= 0;
+            if (ok) {
+                checkEl.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                checkEl.className = 'reaffectation-check ok';
+                btnConfirmer.disabled = false;
+            } else {
+                checkEl.innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
+                checkEl.className = 'reaffectation-check ko';
+                btnConfirmer.disabled = true;
+            }
+        }
+
+        inputN1.oninput = rafraichir;
+        inputN.oninput = rafraichir;
+        rafraichir();
+
+        btnConfirmer.onclick = () => {
+            const recreditN1 = parseFloat(inputN1.value) || 0;
+            const recreditN = parseFloat(inputN.value) || 0;
+            modal.style.display = 'none';
+            resolve({ recreditN1, recreditN });
+        };
+
+        btnAnnuler.onclick = () => {
+            modal.style.display = 'none';
+            resolve({ cancelled: true });
+        };
+
+        modal.style.display = 'flex';
+    });
+}
 
 // Fonction pour supprimer un seul jour
 async function supprimerUnJour(absence, dateISO) {
@@ -5490,7 +5896,7 @@ async function supprimerUnJour(absence, dateISO) {
         const nouvelleDureeJours  = absence.duree_jours  - 1;
         const nouvelleDureeHeures = absence.duree_heures - 7;
 
-        await window.api.deleteAbsence(absence.id);
+        await window.api.deleteAbsence(absence.id, { adminId: user.id });
         const newAbs1 = await window.api.createAbsence({
             salarie_id:   absence.salarie_id,
             type:         absence.type,
@@ -5507,7 +5913,7 @@ async function supprimerUnJour(absence, dateISO) {
             nouvelleDureeJours, nouvelleDureeHeures, newAbs1.id
         );
 
-        alert('✅ Premier jour supprimé !\nLes soldes ont été recalculés.');
+        afficherNotificationPersistante('success', 'Premier jour supprimé', 'Soldes mis à jour.', 4000, null, null, true);
         return;
     }
 
@@ -5519,7 +5925,7 @@ async function supprimerUnJour(absence, dateISO) {
         const nouvelleDureeJours  = absence.duree_jours  - 1;
         const nouvelleDureeHeures = absence.duree_heures - 7;
 
-        await window.api.deleteAbsence(absence.id);
+        await window.api.deleteAbsence(absence.id, { adminId: user.id });
         const newAbs2 = await window.api.createAbsence({
             salarie_id:   absence.salarie_id,
             type:         absence.type,
@@ -5536,7 +5942,7 @@ async function supprimerUnJour(absence, dateISO) {
             nouvelleDureeJours, nouvelleDureeHeures, newAbs2.id
         );
 
-        alert('✅ Dernier jour supprimé !\nLes soldes ont été recalculés.');
+        afficherNotificationPersistante('success', 'Dernier jour supprimé', 'Soldes mis à jour.', 4000, null, null, true);
         return;
     }
 
@@ -5552,7 +5958,7 @@ async function supprimerUnJour(absence, dateISO) {
     const joursPartie1 = Math.ceil((jourAvant - dateDebut) / (1000 * 60 * 60 * 24)) + 1;
     const joursPartie2 = absence.duree_jours - joursPartie1 - 1;
 
-    await window.api.deleteAbsence(absence.id);
+    await window.api.deleteAbsence(absence.id, { adminId: user.id });
 
     // Partie 1
     const newAbsP1 = await window.api.createAbsence({
@@ -5586,7 +5992,7 @@ async function supprimerUnJour(absence, dateISO) {
         absence.salarie_id, anneeEnCours, absence.type, joursPartie2, joursPartie2 * 7, newAbsP2.id
     );
 
-    alert('✅ Jour supprimé !\nL\'absence a été coupée en 2 périodes.\nLes soldes ont été recalculés.');
+    afficherNotificationPersistante('success', 'Jour supprimé', 'Absence coupée en 2 périodes. Soldes mis à jour.', 4000, null, null, true);
 }
 
 function formatDateISO(date) {

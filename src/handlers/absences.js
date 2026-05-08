@@ -236,11 +236,12 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         return { success: true };
     });
 
-    safeHandle('refuserAbsence', async (event, absenceId, adminId) => {
+    safeHandle('refuserAbsence', async (event, absenceId, adminId, motif) => {
+        const motifTrim = (motif || '').trim();
         // UPDATE conditionnel — abort si déjà traitée ou supprimée
         const upd = await ctx.db.execute({
-            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ? WHERE id = ? AND statut = 'en_attente'`,
-            args: [adminId, absenceId]
+            sql: `UPDATE absences SET statut = 'refuse', date_validation = CURRENT_TIMESTAMP, validee_par = ?, motif_refus = ? WHERE id = ? AND statut = 'en_attente'`,
+            args: [adminId, motifTrim || null, absenceId]
         });
         if (Number(upd.rowsAffected) === 0) {
             throw new Error('Demande introuvable ou déjà traitée (probablement retirée par le salarié).');
@@ -257,7 +258,9 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             const typeLabel = LABELS_TYPE[absence.type] || absence.type;
             const periode = `du ${formatDate(absence.date_debut)} au ${formatDate(absence.date_fin)}`;
             const titre = `Demande refusée ✕`;
-            const message = `Votre demande ${typeLabel} ${periode} a été refusée.`;
+            // Le motif n'est PAS inclus dans le toast (trop court pour l'accueillir).
+            // Il reste stocké en DB dans absences.motif_refus pour audit / consultation ultérieure.
+            const message = `Demande ${typeLabel} ${periode} refusée.`;
             const insRes = await ctx.db.execute({
                 sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_refusee', ?, ?, 'error', ?)`,
                 args: [titre, message, absence.salarie_id]
@@ -273,7 +276,7 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         return { success: true };
     });
 
-    safeHandle('deleteAbsence', async (event, absenceId) => {
+    safeHandle('deleteAbsence', async (event, absenceId, options = {}) => {
         // DELETE atomique avec RETURNING : on récupère la ligne avec son statut au
         // moment exact de la suppression. Cela évite la race condition entre un
         // SELECT initial et le DELETE (admin pourrait valider entre les deux).
@@ -292,8 +295,12 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         const dureeHeures = absence.duree_heures || 0;
         const annee = new Date(absence.date_debut).getFullYear();
 
+        // Mode "skipRecredit" : DELETE seul, recrédit géré par le caller via appliquerRecreditCp.
+        // Utilisé pour le workflow CP avec choix admin (modale 2 de réaffectation).
+        const skipRecredit = options && options.skipRecredit === true;
+
         // Rollback solde UNIQUEMENT si l'absence était validée (en_attente et refuse n'ont jamais débité)
-        if (statut === 'valide' && type !== 'MALADIE') {
+        if (!skipRecredit && statut === 'valide' && type !== 'MALADIE') {
             const soldesResult = await ctx.db.execute({
                 sql: 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
                 args: [salarieId, annee]
@@ -308,14 +315,13 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             let nouvelleRecup = soldes.recup_heures;
 
             if (type === 'CP' || type === 'CP_N' || type === 'CP_N1') {
-                // Nouveau : si on a la décomposition, on recrédite chaque compte exactement
                 const debiteN1 = absence.debite_cp_n1 || 0;
                 const debiteN = absence.debite_cp_n || 0;
                 if (debiteN1 > 0 || debiteN > 0) {
                     nouveauCPN1 = soldes.cp_n1 + debiteN1;
                     nouveauCPN = soldes.cp_n + debiteN;
                 } else {
-                    // Fallback (anciennes absences pré-v6) : ancien comportement
+                    // Fallback (anciennes absences pré-v6 sans décomposition)
                     if (type === 'CP_N1') nouveauCPN1 = soldes.cp_n1 + dureeJours;
                     else nouveauCPN = soldes.cp_n + dureeJours;
                 }
@@ -341,6 +347,39 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             });
         }
 
+        // Notif au salarié quand un admin supprime son absence validée
+        // (skip si l'admin = salarié lui-même : auto-action)
+        const adminId = options && options.adminId;
+        if (statut === 'valide' && adminId && Number(adminId) !== Number(salarieId)) {
+            try {
+                const labelType = LABELS_TYPE[type] || type;
+                const dateDebutFr = formatDate(absence.date_debut);
+                const dateFinFr = formatDate(absence.date_fin);
+                const periode = (absence.date_debut === absence.date_fin)
+                    ? `du ${dateDebutFr}`
+                    : `du ${dateDebutFr} au ${dateFinFr}`;
+                const titre = `Absence supprimée — ${labelType}`;
+                const message = `Absence ${periode} supprimée par l'administrateur. Soldes mis à jour.`;
+                const insRes = await ctx.db.execute({
+                    sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('absence_supprimee', ?, ?, 'success', ?)`,
+                    args: [titre, message, salarieId]
+                });
+                const notifId = Number(insRes.lastInsertRowid);
+                if (ctx.mainWindow && ctx.mainWindow.webContents) {
+                    ctx.mainWindow.webContents.send('traitement-automatique', {
+                        id: notifId,
+                        type: 'absence_supprimee',
+                        titre,
+                        message,
+                        statut: 'success',
+                        user_id: salarieId
+                    });
+                }
+            } catch (errNotif) {
+                console.error('Erreur notification deleteAbsence:', errNotif);
+            }
+        }
+
         return { success: true, absence, message: 'Absence supprimée' };
     });
 
@@ -358,6 +397,35 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
         await ctx.db.execute({
             sql: `UPDATE absences SET ${fields.join(', ')} WHERE id = ?`,
             args: values
+        });
+        return { success: true };
+    });
+
+    // Recrédit CP après une suppression skipRecredit (modale 2 de réaffectation)
+    safeHandle('appliquerRecreditCp', async (event, salarieId, annee, recreditCpN1, recreditCpN) => {
+        const n1 = Number(recreditCpN1) || 0;
+        const n = Number(recreditCpN) || 0;
+        if (n1 < 0 || n < 0) throw new Error('Recrédit invalide : valeurs négatives non autorisées.');
+
+        const result = await ctx.db.execute({
+            sql: 'SELECT * FROM soldes WHERE salarie_id = ? AND annee = ?',
+            args: [salarieId, annee]
+        });
+        const soldes = result.rows[0];
+        if (!soldes) throw new Error(`Soldes introuvables pour l'année ${annee}`);
+
+        await ctx.db.execute({
+            sql: `UPDATE soldes SET cp_n1 = ?, cp_n = ?, derniere_maj = CURRENT_TIMESTAMP WHERE salarie_id = ? AND annee = ?`,
+            args: [soldes.cp_n1 + n1, soldes.cp_n + n, salarieId, annee]
+        });
+        return { success: true };
+    });
+
+    // Met à jour la décomposition CP_N-1 / CP_N d'une absence (utilisé après création d'une absence raccourcie)
+    safeHandle('setDecompositionAbsence', async (event, absenceId, debiteCpN1, debiteCpN) => {
+        await ctx.db.execute({
+            sql: 'UPDATE absences SET debite_cp_n1 = ?, debite_cp_n = ? WHERE id = ?',
+            args: [Number(debiteCpN1) || 0, Number(debiteCpN) || 0, absenceId]
         });
         return { success: true };
     });

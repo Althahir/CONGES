@@ -184,6 +184,31 @@ body {
     color: var(--bleu);
     font-size: 0.95em;
 }
+.label-motif-refus {
+    display: block;
+    margin: 14px 0 6px 0;
+    font-size: 0.88em;
+    color: #555;
+    font-weight: 500;
+}
+.textarea-motif-refus {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9em;
+    resize: vertical;
+    min-height: 60px;
+    background: white;
+    color: #333;
+    box-sizing: border-box;
+}
+.textarea-motif-refus:focus {
+    outline: none;
+    border-color: var(--bleu);
+    box-shadow: 0 0 0 2px rgba(0, 108, 137, 0.15);
+}
 [data-theme="dark"] .info-refus-demande {
     background: rgba(240, 160, 80, 0.12);
     border-left-color: #f0a050;
@@ -191,6 +216,14 @@ body {
 }
 [data-theme="dark"] .texte-refus-demande {
     color: var(--text-secondary);
+}
+[data-theme="dark"] .label-motif-refus {
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .textarea-motif-refus {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border-color: var(--border-color);
 }
 
 /* Bouton de confirmation pour les actions positives (validation, etc.) */

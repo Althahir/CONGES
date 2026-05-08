@@ -843,8 +843,53 @@ h2 {
     font-size: 0.9em;
 } */
 .drapeau-ferie {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
     font-size: 0.75em;
-    margin-left: auto;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Tooltip cellule jour férié (calendrier global admin) — aligné sur le style des tooltips d'indicateurs */
+.calendrier-table td[data-tooltip]:hover {
+    z-index: 9000;
+}
+.calendrier-table td[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(40, 40, 40, 0.85);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 9001;
+    pointer-events: none;
+}
+.calendrier-table td[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: rgba(40, 40, 40, 0.85);
+    z-index: 9000;
+    pointer-events: none;
+}
+/* Cacher le tooltip de cellule quand on survole un indicateur (évite double tooltip) */
+.calendrier-table td[data-tooltip]:has(.indicateur-colonne[data-tooltip]:hover)::after,
+.calendrier-table td[data-tooltip]:has(.indicateur-colonne[data-tooltip]:hover)::before,
+.calendrier-table td[data-tooltip]:has(.indicateur-degrade[data-tooltip]:hover)::after,
+.calendrier-table td[data-tooltip]:has(.indicateur-degrade[data-tooltip]:hover)::before {
+    display: none;
 }
 /* Multi-absences */
 /* Multi-absences avec indicateurs verticaux */
@@ -1897,6 +1942,159 @@ h2 {
 .option-checkbox-pdf input[type="checkbox"]:checked + span {
     font-weight: 600;
     color: var(--mauve);
+}
+
+/* ========== MODALE 2 — RÉAFFECTATION CP_N / CP_N-1 APRÈS SUPPRESSION ========== */
+#modalReaffectationCp .modal-header {
+    background: var(--bleu);
+    color: white;
+}
+#modalReaffectationCp .modal-header h3 {
+    color: white;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05em;
+}
+.reaffectation-info-origine {
+    margin: 0 0 12px 0;
+    padding: 12px 14px;
+    background: rgba(0, 108, 137, 0.06);
+    border-left: 3px solid var(--bleu);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.92em;
+    color: #444;
+    line-height: 1.45;
+}
+.reaffectation-info-origine em {
+    color: #888;
+    font-style: italic;
+}
+.reaffectation-question {
+    margin: 16px 0 10px 0;
+    font-size: 0.95em;
+    color: #333;
+    text-align: center;
+}
+.reaffectation-question strong {
+    color: var(--bleu);
+    font-size: 1.1em;
+}
+.reaffectation-inputs {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 14px 16px;
+}
+.reaffectation-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.reaffectation-input-row:last-of-type {
+    margin-bottom: 0;
+}
+.reaffectation-input-row label {
+    flex: 1;
+    font-size: 0.92em;
+    color: #444;
+    font-weight: 500;
+}
+.reaffectation-input-row input[type="number"] {
+    width: 90px;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95em;
+    text-align: right;
+}
+.reaffectation-input-row input[type="number"]:focus {
+    outline: none;
+    border-color: var(--bleu);
+    box-shadow: 0 0 0 2px rgba(0, 108, 137, 0.15);
+}
+.reaffectation-unit {
+    font-size: 0.85em;
+    color: #888;
+    min-width: 45px;
+}
+.reaffectation-total {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed #ddd;
+    font-size: 0.92em;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.reaffectation-total strong {
+    color: var(--bleu);
+    font-size: 1.1em;
+}
+.reaffectation-check {
+    margin-left: auto;
+    font-size: 1.2em;
+}
+.reaffectation-check.ok { color: #28a745; }
+.reaffectation-check.ko { color: #dc3545; }
+.reaffectation-aide {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: rgba(237, 113, 17, 0.08);
+    border-left: 3px solid var(--orange);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.85em;
+    color: #555;
+    display: flex;
+    align-items: start;
+    gap: 8px;
+}
+.reaffectation-aide i {
+    color: var(--orange);
+    margin-top: 2px;
+}
+
+/* Dark mode */
+[data-theme="dark"] .reaffectation-info-origine {
+    background: rgba(92, 189, 213, 0.1);
+    border-left-color: #5cbdd5;
+    color: var(--text-primary);
+}
+[data-theme="dark"] .reaffectation-question {
+    color: var(--text-primary);
+}
+[data-theme="dark"] .reaffectation-question strong {
+    color: #5cbdd5;
+}
+[data-theme="dark"] .reaffectation-inputs {
+    background: var(--bg-input);
+    border-color: var(--border-color);
+}
+[data-theme="dark"] .reaffectation-input-row label,
+[data-theme="dark"] .reaffectation-total {
+    color: var(--text-primary);
+}
+[data-theme="dark"] .reaffectation-input-row input[type="number"] {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+[data-theme="dark"] .reaffectation-total strong {
+    color: #5cbdd5;
+}
+[data-theme="dark"] .reaffectation-total {
+    border-top-color: var(--border-color);
+}
+[data-theme="dark"] .reaffectation-aide {
+    background: rgba(240, 160, 80, 0.12);
+    border-left-color: #f0a050;
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .reaffectation-aide i {
+    color: #f0a050;
 }
 
 .warning-suppression {
@@ -3552,6 +3750,225 @@ h2 {
     opacity: 0.8;
 }
 
+/* ========== BOUTON AIDE (?) ========== */
+.btn-aide {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
+}
+.btn-aide:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========== MODALE AIDE ========== */
+.modal-aide {
+    max-width: 1000px;
+    width: 92%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-aide .modal-header {
+    background: var(--bleu);
+    color: white;
+}
+.modal-aide .modal-header h2 {
+    color: white;
+    margin: 0;
+    font-size: 1.15rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.modal-aide .modal-header .close-modal {
+    color: white;
+}
+.modal-aide-body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 0;
+    padding: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.aide-sidebar {
+    border-right: 1px solid #e0e0e0;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.aide-list {
+    list-style: none;
+    margin: 0;
+    padding: 6px 0;
+    overflow-y: auto;
+    flex: 1;
+}
+.aide-list-item {
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.85em;
+    color: #444;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.35;
+}
+.aide-list-item:hover {
+    background: rgba(0, 108, 137, 0.07);
+}
+.aide-list-item.active {
+    background: rgba(0, 108, 137, 0.12);
+    color: var(--bleu);
+    border-left-color: var(--bleu);
+    font-weight: 600;
+}
+.aide-content {
+    padding: 24px 28px;
+    overflow-y: auto;
+    line-height: 1.55;
+    font-size: 0.92em;
+    color: #333;
+}
+.aide-content h3 {
+    margin: 0 0 12px 0;
+    color: var(--bleu);
+    font-size: 1.2em;
+    border-bottom: 2px solid rgba(0, 108, 137, 0.15);
+    padding-bottom: 8px;
+}
+.aide-content h4 {
+    margin: 18px 0 8px 0;
+    color: var(--mauve);
+    font-size: 0.98em;
+}
+.aide-content p {
+    margin: 8px 0;
+}
+.aide-content ul,
+.aide-content ol {
+    margin: 8px 0;
+    padding-left: 22px;
+}
+.aide-content li {
+    margin: 4px 0;
+}
+.aide-content code {
+    background: #f0f0f0;
+    color: #c7254e;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.88em;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+.aide-content kbd {
+    background: #fafafa;
+    border: 1px solid #ccc;
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.85em;
+    font-family: 'Consolas', 'Courier New', monospace;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+}
+.aide-content strong {
+    color: #222;
+}
+.aide-tip {
+    background: rgba(0, 108, 137, 0.07);
+    border-left: 3px solid var(--bleu);
+    padding: 10px 12px;
+    margin: 14px 0 4px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 0.92em;
+}
+.aide-tip i {
+    color: var(--bleu);
+    margin-right: 6px;
+}
+.aide-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    text-align: center;
+    gap: 12px;
+}
+.aide-placeholder i {
+    font-size: 3em;
+    opacity: 0.4;
+}
+.aide-placeholder p {
+    margin: 0;
+    font-size: 0.95em;
+}
+
+/* Dark mode — modale aide */
+[data-theme="dark"] .modal-aide .modal-header {
+    background: var(--bleu);
+}
+[data-theme="dark"] .aide-sidebar {
+    background: var(--bg-surface-alt);
+    border-right-color: var(--border-color);
+}
+[data-theme="dark"] .aide-list-item {
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .aide-list-item:hover {
+    background: rgba(92, 189, 213, 0.1);
+}
+[data-theme="dark"] .aide-list-item.active {
+    background: rgba(92, 189, 213, 0.18);
+    color: #5cbdd5;
+    border-left-color: #5cbdd5;
+}
+[data-theme="dark"] .aide-content {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+[data-theme="dark"] .aide-content h3 {
+    color: #5cbdd5;
+    border-bottom-color: rgba(92, 189, 213, 0.25);
+}
+[data-theme="dark"] .aide-content h4 {
+    color: #c98edb;
+}
+[data-theme="dark"] .aide-content code {
+    background: #2a2a2a;
+    color: #f48fb1;
+}
+[data-theme="dark"] .aide-content kbd {
+    background: #2a2a2a;
+    border-color: #555;
+    color: var(--text-primary);
+}
+[data-theme="dark"] .aide-content strong {
+    color: #fff;
+}
+[data-theme="dark"] .aide-tip {
+    background: rgba(92, 189, 213, 0.1);
+    border-left-color: #5cbdd5;
+}
+[data-theme="dark"] .aide-tip i {
+    color: #5cbdd5;
+}
+
 .notif-badge {
     position: absolute;
     top: -4px;
@@ -4048,6 +4465,15 @@ h2 {
 
 [data-theme="dark"] .indicateur-colonne[data-tooltip]:hover::before,
 [data-theme="dark"] .indicateur-degrade[data-tooltip]:hover::before {
+    border-top-color: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .calendrier-table td[data-tooltip]:hover::after {
+    background: var(--bg-surface-alt);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .calendrier-table td[data-tooltip]:hover::before {
     border-top-color: var(--bg-surface-alt);
 }
 

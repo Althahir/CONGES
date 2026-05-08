@@ -93,6 +93,8 @@ window.api.getSoldes()  →   ipcRenderer.invoke()    →   ipcMain.handle('getS
 }
 ```
 
+**Sentry** (suivi erreurs prod) : DSN **hardcodé** dans `main.js` (constante `SENTRY_DSN_DEFAULT`). Un DSN Sentry n'est pas un secret (cf. doc Sentry). Le mettre dans le code évite de devoir éditer chaque `config.json` poste par poste — la maj se déploie via `update-electron-app`. Surcharge possible via `config.json` (champ optionnel `sentryDsn`) si besoin de switcher de projet sans rebuild. Sentry désactivé en dev (`!app.isPackaged`). Init avec `release = app.getVersion()`, scrubber strict (emails, JWT, URLs DB filtrés), `sampleRate: 0.5`, `maxBreadcrumbs: 30`.
+
 **Attention SQL** : Turso respecte le standard SQL — utiliser des guillemets simples `'valeur'` pour les chaînes (pas des guillemets doubles `"valeur"` qui sont interprétés comme des identifiants de colonne).
 
 ```sql
@@ -240,7 +242,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
   - `'print'` (pose admin pour soi-même) → impression directe sur l'imprimante par défaut Windows via `BrowserWindow` cachée + `webContents.print({silent:true})`. Fallback `showSaveDialog` si pas d'imprimante.
   - `'dialog'` (autres exports) → `showSaveDialog` simple.
 - **PDF d'annulation** : titre rouge « ANNULATION DE CONGÉS », mention « Annulé par : ... », option déclenchée par checkbox dans la modale de suppression d'absence.
-- **Convention de nommage** : `NOM_Prenom_TYPE_Du_dateDebut_Au_dateFin.pdf` (préfixe `ANNULATION_` pour les annulations). Type toujours `CP` (jamais `CP_N`/`CP_N1`).
+- **Convention de nommage** : `AAAAMMJJ-TYPE-NOM-Prenom.pdf` (suffixe `-ANNULATION` pour les annulations). Date = `date_debut` de l'absence au format AAAAMMJJ pour tri chronologique. Type toujours `CP` (jamais `CP_N`/`CP_N1`).
 - **Date du jour** ajoutée à l'en-tête : « La Ciotat Entreprendre · Le JJ Mmmmmm AAAA ».
 - **Fonction « Secrétaire Général »** hardcodée (pas de migration v8). Les autres exports `exporterRecapPDF` et `exporterStatsPDF` ne sont **pas** sur OneDrive auto — juste `showSaveDialog`.
 
@@ -348,6 +350,19 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 - `bcrypt` : 10 rounds pour le hachage des mots de passe
 - Fenêtre Electron : démarrage en `maximize()`, `minWidth: 900`, `minHeight: 600`
 - Migrations DB versionnées : tableau `MIGRATIONS[]` dans `main.js`, table `db_version`
+
+## ⚠️ Aide admin (FAQ) — toujours à jour
+
+Le bouton `?` du header admin ouvre une modale d'aide pilotée par `src/js/aide-data.js` (9 fiches HTML : suppression congé, réaffectation soldes, validation, traitements, arrêt maladie, heures sup, pose, import/export, jours fériés).
+
+**Règle** : à chaque modification de code qui change un flow admin user-facing (ajout d'option dans une modale, nouveau workflow, changement d'emplacement d'un bouton, nouvelle règle métier...), **mettre à jour la fiche concernée dans `aide-data.js` dans le même commit**. La FAQ est la source de vérité visible par l'utilisateur — toute divergence crée du support inutile.
+
+Exemples de changements qui DOIVENT déclencher une mise à jour FAQ :
+- Modif du flow de suppression d'un congé (ex. réaffectation manuelle CP_N/CP_N-1)
+- Nouveau bouton dans une modale ou la nav admin
+- Changement de raccourci (Ctrl+...)
+- Nouvelle règle métier (plafond, valeur par défaut, etc.)
+- Changement de placement d'une fonctionnalité (ex. déplacer "Heures de récup" d'une section à une autre)
 
 ---
 

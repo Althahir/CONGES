@@ -34,7 +34,22 @@
       "Bash(cp /tmp/conges-backup/main.js src/main.js)",
       "Bash(cp /tmp/conges-backup/CLAUDE.md CLAUDE.md)",
       "Bash(cp /tmp/conges-backup/dashboard-admin.html src/pages/dashboard-admin.html)",
-      "Bash(cp /tmp/conges-backup/dashboard-admin.css src/css/dashboard-admin.css)"
+      "Bash(cp /tmp/conges-backup/dashboard-admin.css src/css/dashboard-admin.css)",
+      "Bash(command -v pandoc)",
+      "Bash(pandoc --version)",
+      "Bash(command -v python)",
+      "Bash(command -v python3)",
+      "Bash(unzip -l \"DOCS/Guide_Utilisateur_Conges_LCE.docx\")",
+      "Bash(/c/Users/dwell/AppData/Local/Programs/Python/Python313/python -m pip install python-docx)",
+      "Bash(unzip -o \"DOCS/Guide_Utilisateur_Conges_LCE.docx\" -d /tmp/docx-extract)",
+      "Bash(/c/Users/dwell/AppData/Local/Programs/Python/Python313/python *)",
+      "Bash(gh repo *)",
+      "PowerShell(Test-NetConnection *)",
+      "mcp__sentry__whoami",
+      "mcp__sentry__find_projects",
+      "mcp__sentry__search_issues",
+      "mcp__sentry__search_events",
+      "mcp__sentry__get_sentry_resource"
     ]
   }
 }

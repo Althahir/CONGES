@@ -1,5 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// ========== SENTRY (renderer) ==========
+// Init du SDK renderer. Le bridge IPC vers main est créé automatiquement.
+// Nécessite sandbox: false côté webPreferences (sinon require de packages npm bloqué).
+let _Sentry = null;
+try {
+    _Sentry = require('@sentry/electron/renderer');
+    _Sentry.init({});
+    console.log('[Sentry] renderer init OK');
+} catch (e) {
+    console.error('[Sentry] renderer init failed:', e && (e.stack || e.message || e));
+}
+
 // ========== TYPES JSDoc ==========
 
 /**
@@ -246,11 +258,15 @@ contextBridge.exposeInMainWorld('api', {
     /** @param {number} absenceId @param {number} adminId @returns {Promise<SuccessResult>} */
     validerAbsence: (absenceId, adminId) => ipcRenderer.invoke('validerAbsence', absenceId, adminId),
     /** @param {number} absenceId @param {number} adminId @returns {Promise<SuccessResult>} */
-    refuserAbsence: (absenceId, adminId) => ipcRenderer.invoke('refuserAbsence', absenceId, adminId),
-    /** @param {number} absenceId @returns {Promise<SuccessResult>} */
-    deleteAbsence: (absenceId) => ipcRenderer.invoke('deleteAbsence', absenceId),
+    refuserAbsence: (absenceId, adminId, motif) => ipcRenderer.invoke('refuserAbsence', absenceId, adminId, motif),
+    /** @param {number} absenceId @param {Object} [options] @param {boolean} [options.skipRecredit] @param {number} [options.adminId] @returns {Promise<SuccessResult>} */
+    deleteAbsence: (absenceId, options) => ipcRenderer.invoke('deleteAbsence', absenceId, options),
     /** @param {number} absenceId @param {Object} updates @returns {Promise<SuccessResult>} */
     updateAbsence: (absenceId, updates) => ipcRenderer.invoke('updateAbsence', absenceId, updates),
+    /** Recrédit CP après deleteAbsence skipRecredit (modale 2 de réaffectation) */
+    appliquerRecreditCp: (salarieId, annee, recreditCpN1, recreditCpN) => ipcRenderer.invoke('appliquerRecreditCp', salarieId, annee, recreditCpN1, recreditCpN),
+    /** Met à jour la décomposition CP_N-1 / CP_N d'une absence existante */
+    setDecompositionAbsence: (absenceId, debiteCpN1, debiteCpN) => ipcRenderer.invoke('setDecompositionAbsence', absenceId, debiteCpN1, debiteCpN),
 
     // Jours feries
 

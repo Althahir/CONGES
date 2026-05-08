@@ -924,9 +924,13 @@ document.getElementById('recupHeures').addEventListener('input', () => { calcule
 
 
 // Bouton déconnexion
-document.getElementById('logoutBtn').addEventListener('click', () => {
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    if (window._pollingIntervalId) {
+        clearInterval(window._pollingIntervalId);
+        window._pollingIntervalId = null;
+    }
     sessionStorage.removeItem('user');
-    window.location.href = 'login.html';
+    await window.api.navigateTo('login.html');
 });
 // ========== VALIDATION ET ENREGISTREMENT DE L'ABSENCE ==========
 
@@ -1566,7 +1570,7 @@ async function init() {
                 _bufferValidees.push(notif);
             } else if (notif.type === 'demande_refusee' || notif.type === 'recup_refusee') {
                 _bufferRefusees.push(notif);
-            } else if (notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee') {
+            } else if (notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee' || notif.type === 'absence_supprimee') {
                 afficherToastUser(notif);
             }
         }
@@ -1575,7 +1579,7 @@ async function init() {
 
     // Polling toutes les 30s pour détecter les changements depuis d'autres postes
     // (validation/refus admin, autres poses, traitements auto)
-    setInterval(async () => {
+    window._pollingIntervalId = setInterval(async () => {
         try {
             await loadSoldes();
             await chargerAbsences();
@@ -1596,7 +1600,7 @@ async function init() {
                     _bufferValidees.push(notif);
                 } else if (notif.type === 'demande_refusee' || notif.type === 'recup_refusee') {
                     _bufferRefusees.push(notif);
-                } else if (notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee') {
+                } else if (notif.type === 'recup_modifiee' || notif.type === 'recup_supprimee' || notif.type === 'absence_supprimee') {
                     afficherToastUser(notif);
                 }
             }
@@ -1712,6 +1716,16 @@ if (window.api.onTraitementAutomatique) {
                     genererCalendrier();
                 } catch (e) { /* ignorer */ }
             }, 500);
+        }
+
+        // Suppression d'absence par l'admin → toast direct (pas de regroupement, événement rare)
+        if (data.type === 'absence_supprimee' && data.user_id === user.id) {
+            afficherToastUser(data);
+            try {
+                await loadSoldes();
+                await chargerAbsences();
+                genererCalendrier();
+            } catch (e) { /* ignorer */ }
         }
     });
 }

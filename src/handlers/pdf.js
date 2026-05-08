@@ -35,10 +35,12 @@ module.exports = function registerPDFHandlers(ctx, safeHandle) {
 
     function buildFileName(salarie, absence, annulation = false) {
         const type = TYPE_LABELS_FILE[absence.type] || absence.type;
-        const prefix = annulation ? 'ANNULATION_' : '';
         const nom = sanitizeForFilename(salarie.nom.toUpperCase());
         const prenom = sanitizeForFilename(salarie.prenom);
-        return `${nom}_${prenom}_${prefix}${type}_Du_${absence.date_debut}_Au_${absence.date_fin}.pdf`;
+        // Date au format AAAAMMJJ (sans tirets) — basée sur date_debut de l'absence pour tri chronologique
+        const dateAaaammjj = String(absence.date_debut || '').replace(/-/g, '');
+        const suffix = annulation ? '-ANNULATION' : '';
+        return `${dateAaaammjj}-${type}-${nom}-${prenom}${suffix}.pdf`;
     }
 
     const MOIS_COURTS = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
