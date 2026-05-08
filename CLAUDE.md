@@ -210,7 +210,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (XX/05/2026 — v1.1.0 en cours, v1.0.6 buildée mais pas publiée)
+## État actuel du projet (08/05/2026 — v1.1.1 buildée, à publier sur GitHub)
 
 **Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
 
@@ -335,6 +335,33 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 - **Audit détaillé du traitement CP mensuel** (`utils-cp.js` + `traitements.js`) : nouvelle fonction `calculerCPMensuelDetail` qui retourne en plus du total les segments de calcul, jours ouvrés, taux utilisés, état du salarié. Le `details` JSON dans `historique_traitements` contient maintenant pour chaque salarié : `ancien_cp_n`, `cp_ajoutes` (number, pas string), `nouveau_cp_n`, et un objet `audit` complet. Permet de reconstituer ligne à ligne le calcul a posteriori (`Ctrl+DEBUG` → `historique_traitements` → filtrer `type LIKE 'CP_MENSUEL_%'`). Activé automatiquement à partir du 1er traitement post-déploiement (pas de migration nécessaire). Outil de diagnostic pour le sujet métier en cours : écart 22.88 dans l'app vs 22.92 sur le bulletin de paie.
 
 - **Cosmétique** : tous les `.toFixed(1)` → `.toFixed(2)`, astérisques `*` retirés des labels obligatoires (15 labels dans les deux dashboards), placeholder « Ex: 1.5 » sur les inputs heures sup, croix de fermeture des modales avec style générique, page de connexion élargie à 420px, login Enter, etc.
+
+**v1.1.1 (08/05/2026) — Sentry + suppression CP en 2 étapes + FAQ admin + UX** :
+
+- **Suppression CP en 2 étapes** (refonte du flow de suppression) : la modale 1 reste inchangée (choix période complète/jour seul + checkbox PDF d'annulation). Pour les **CP validés**, après confirmation, la modale 2 (`#modalReaffectationCp`) s'ouvre et demande la **répartition du recrédit** (CP N-1 / CP N) via 2 inputs avec validation live de la somme. Bouton **Annuler** revient sur la modale 1 sans rien modifier (aucune écriture DB tant que pas confirmé). Pré-rempli avec la décomposition d'origine plafonnée à la cible. Cas typique d'usage : basculement annuel mai → juin (les jours posés en mai venaient de CP N-1, mais après le 31 mai CP N-1 a été remis à zéro → l'admin choisit de remettre les jours sur CP N). RTT/RECUP/MALADIE : pas de modale 2, recrédit auto à l'identique comme avant.
+  - Backend : option `skipRecredit` sur `deleteAbsence` + nouveaux handlers `appliquerRecreditCp(salarieId, annee, recreditN1, recreditN)` et `setDecompositionAbsence(absenceId, n1, n)`.
+  - Suppression jour seul : recréation des sous-absences (premier/dernier/milieu) avec décomposition ajustée (clamp + redistribution pour préserver la somme). PDF d'annulation maintenant aussi disponible pour la suppression d'un jour seul (PDF du jour cliqué uniquement).
+  - Toasts admin custom (via `afficherNotificationPersistante`) à la place des `alert()` Electron.
+
+- **Notification au salarié à la suppression** d'une absence validée : nouveau type DB `absence_supprimee`, ciblé user. Skip si auto-action (admin = salarié). Message neutre et professionnel : « Absence du JJ/MM au JJ/MM supprimée par l'administrateur. Soldes mis à jour. ». Live event + persistance DB. Listener côté `dashboard-user.js` (init, polling, live). Filtre côté admin pour ne pas tomber dans le fallback générique du listener `traitement-automatique` (qui produisait « undefined salarié(s) traité(s) »).
+
+- **Motif de refus optionnel** : textarea facultative dans la modale de refus admin. Si saisi, stocké en DB (`absences.motif_refus`) pour audit a posteriori (consultable via Ctrl+DEBUG). Pas inclus dans le toast user (trop court pour l'accueillir).
+
+- **Format de nom des PDF** : `AAAAMMJJ-TYPE-NOM-Prenom.pdf` (suffixe `-ANNULATION` pour les annulations). Date_debut comme préfixe pour tri chronologique côté Explorateur.
+
+- **Aide admin** (FAQ bouton `?` du header) : nouvelle modale `#modalAide` (2 colonnes : sidebar liste + zone contenu). 2 fiches HTML pour l'instant (« Supprimer un congé » + « Remettre les soldes à jour après une erreur de calcul »). Données dans `src/js/aide-data.js` (`window.AIDE_DATA`) — ajouter une fiche = ajouter un objet dans le tableau. **Règle projet** posée dans `CLAUDE.md` (section dédiée) : à chaque modification de code qui change un flow admin user-facing, mettre à jour la fiche concernée dans `aide-data.js` dans le même commit.
+
+- **Sentry** (suivi des erreurs prod) : `@sentry/electron@^7.13.0` ajouté, init main process dans `main.js` (DSN hardcodé, scrubber strict via `beforeSend` qui retire emails/JWT/URLs DB des messages/exceptions/breadcrumbs, suppression `event.user` et `event.request.data`), init renderer dans `preload.js` (bridge IPC auto). Skip en dev (`!app.isPackaged`). `sampleRate: 0.5` + `maxBreadcrumbs: 30` (filets contre les boucles). `release: app.getVersion()`. `environment` auto : `production` si packaged, `development` sinon. Région EU/Allemagne (RGPD). Surcharge possible du DSN via `config.json` (champ `sentryDsn` optionnel) si besoin de switcher de projet sans rebuild. **`webPreferences.sandbox: false`** ajouté pour permettre `require()` de packages npm dans le preload (nécessaire pour le SDK renderer) — `contextIsolation: true` + `nodeIntegration: false` maintiennent l'isolation principale.
+
+- **Bug login bloqué après déconnexion** (corrigé) : la déconnexion utilisait `window.location.href = 'login.html'` qui pouvait laisser le polling 30s en cours d'exécution pendant la transition (et throw quand `window.api` change de contexte). Refonte : `clearInterval(window._pollingIntervalId)` puis `await window.api.navigateTo('login.html')` (passe par `loadFile()` côté main process, identique au démarrage initial). Bug CSS double `}` ligne 122 de `login.css` corrigé.
+
+- **Calendrier global user** (corrigé) : alignement layout sur le admin (suppression du `max-height: calc(100vh - 250px)` et `overflow-y: auto` sur `.calendrier-lineaire`, ajout de `flex: 1`, `width: 100%` + `table-layout: fixed` sur `.calendrier-table`, `td` height 20px → 15px, suppression `min-width: 80px`). Plus de scroll vertical/horizontal nécessaire sur viewports normales.
+
+- **Tooltip jour férié sur calendrier global** (admin) : ajout du CSS manquant pour `.calendrier-table td[data-tooltip]:hover::after/::before` (le `data-tooltip` était déjà posé en JS, juste pas stylé). Visuellement aligné sur les tooltips d'indicateurs déjà visibles sur la page (rgba(40, 40, 40, 0.85), font 0.8em). Dark mode inclus.
+
+- **Drapeau jour férié calendrier global** (corrigé) : passé de `margin-left: auto` (dans le flow flex de `.jour-cell`) à `position: absolute; right: 2px` par rapport au `td` (déjà `position: relative`). Avant, sur viewports étroites, l'emoji débordait sur la colonne suivante car la table avait du contenu fixe (~124px) > largeur de colonne disponible (~100px).
+
+- **Correctif solde Emilie REDOUTE** (08/05/2026) : solde rectifié sur Turso prod. Filet de sécurité dans `utils-cp.js` (déployé avec v1.1.0) garantit que les futurs traitements mensuels utilisent le bon taux pour les salariés en arrêt maladie sans entrée `historique_taux`.
 
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
