@@ -10,6 +10,70 @@ if (require('electron-squirrel-startup')) {
 // Forcer le dossier userData à "conges-lce" quel que soit le productName
 app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 
+// ========== SENTRY (suivi des erreurs prod) ==========
+// Init AVANT l'ouverture de la fenêtre pour capturer les erreurs précoces.
+// Skip en dev (npm start) — on ne pollue pas le quota Sentry pendant le dev.
+//
+// DSN hardcodé : un DSN Sentry n'est PAS un secret (cf. doc Sentry — il ne permet que
+// d'ingérer des events, pas de lire ou modifier quoi que ce soit). Le mettre dans le code
+// évite de devoir éditer config.json sur chaque poste prod. Surcharge possible via
+// config.json (champ `sentryDsn`) si besoin de switcher de projet sans rebuild.
+const SENTRY_DSN_DEFAULT = 'https://9971861dcef5da1acd0b1e8c07ff2324@o4511349559066624.ingest.de.sentry.io/4511354115981392'; // ← Coller ici le DSN du projet Sentry "conges-lce"
+
+if (app.isPackaged) {
+    try {
+        const Sentry = require('@sentry/electron/main');
+
+        // Surcharge possible via config.json (sinon valeur hardcodée)
+        const _configPath = path.join(app.getPath('userData'), 'config.json');
+        let _sentryDsn = SENTRY_DSN_DEFAULT;
+        try {
+            if (fs.existsSync(_configPath)) {
+                const _conf = JSON.parse(fs.readFileSync(_configPath, 'utf8'));
+                if (_conf.sentryDsn) _sentryDsn = _conf.sentryDsn;
+            }
+        } catch (_) { /* on garde le DSN par défaut */ }
+
+        if (_sentryDsn) {
+            // Scrubber strict : retire emails, JWT (tokens Turso), URLs DB des messages, traces et breadcrumbs.
+            const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+            const JWT_RE = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+            const DB_URL_RE = /libsql:\/\/[^\s'"]+/g;
+            const scrub = (s) => typeof s === 'string'
+                ? s.replace(EMAIL_RE, '[EMAIL]').replace(JWT_RE, '[JWT]').replace(DB_URL_RE, '[DB_URL]')
+                : s;
+
+            Sentry.init({
+                dsn: _sentryDsn,
+                release: app.getVersion(),
+                environment: app.isPackaged ? 'production' : 'development',
+                sampleRate: 0.5,             // n'envoie que 50% des erreurs (filet contre les boucles)
+                maxBreadcrumbs: 30,
+                beforeSend: (event) => {
+                    if (event.message) event.message = scrub(event.message);
+                    if (event.exception && event.exception.values) {
+                        event.exception.values.forEach(ex => { if (ex.value) ex.value = scrub(ex.value); });
+                    }
+                    if (event.breadcrumbs) {
+                        event.breadcrumbs.forEach(b => {
+                            if (b.message) b.message = scrub(b.message);
+                            if (b.data) Object.keys(b.data).forEach(k => {
+                                if (typeof b.data[k] === 'string') b.data[k] = scrub(b.data[k]);
+                            });
+                        });
+                    }
+                    delete event.user;                          // jamais d'identité
+                    if (event.request) delete event.request.data; // pas de payload IPC
+                    return event;
+                },
+            });
+            console.log('[Sentry] init OK — release', app.getVersion());
+        }
+    } catch (e) {
+        console.error('[Sentry] init failed (non bloquant) :', e.message);
+    }
+}
+
 // Mises à jour automatiques via update.electronjs.org (no-op en dev, skip si pas de Squirrel)
 // Check toutes les heures, télécharge en background, le renderer affiche un toast custom
 // quand une maj est téléchargée (pas de dialog Electron par défaut)
@@ -439,7 +503,9 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            sandbox: false  // Permet require() de packages npm dans le preload (utilisé par @sentry/electron/renderer).
+                            // contextIsolation+nodeIntegration:false maintiennent l'isolation côté renderer.
         }
     });
 
