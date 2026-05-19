@@ -6022,8 +6022,8 @@ if (formAbsenceUser) {
         const typeAbsence = document.getElementById('typeAbsenceUser').value;
         const dateDebut = document.getElementById('dateDebutUser').value;
         const dateFin = document.getElementById('dateFinUser').value;
-        const debutPeriode = document.getElementById('debutApremUser').checked ? 'apres-midi' : 'matin';
-        const finPeriode = document.getElementById('finMidiUser').checked ? 'midi' : 'fin-journee';
+        const debutPeriode = document.getElementById('debutApremUser').value === 'pm' ? 'apres-midi' : 'matin';
+        const finPeriode = document.getElementById('finMidiUser').value === 'am' ? 'midi' : 'fin-journee';
         const commentaire = document.getElementById('commentaireUser').value;
         const recupType = document.getElementById('recupTypeUser')?.value;
         const recupHeures = document.getElementById('recupHeuresUser')?.value;
