@@ -221,13 +221,14 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             const periode = `du ${formatDate(absence.date_debut)} au ${formatDate(absence.date_fin)}`;
             const titre = `Demande validée ✓`;
             const message = `Votre demande ${typeLabel} ${periode} a été validée.`;
+            const details = JSON.stringify({ absence_id: absenceId });
             const insRes = await ctx.db.execute({
-                sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_validee', ?, ?, 'success', ?)`,
-                args: [titre, message, absence.salarie_id]
+                sql: `INSERT INTO notifications (type, titre, message, details, statut, user_id) VALUES ('demande_validee', ?, ?, ?, 'success', ?)`,
+                args: [titre, message, details, absence.salarie_id]
             });
             const notifId = Number(insRes.lastInsertRowid);
             if (ctx.mainWindow && ctx.mainWindow.webContents) {
-                ctx.mainWindow.webContents.send('traitement-automatique', { id: notifId, type: 'demande_validee', titre, message, statut: 'success', user_id: absence.salarie_id });
+                ctx.mainWindow.webContents.send('traitement-automatique', { id: notifId, type: 'demande_validee', titre, message, statut: 'success', user_id: absence.salarie_id, absence_id: absenceId });
             }
         } catch (errNotif) {
             console.error('Erreur notification validerAbsence:', errNotif);
@@ -261,13 +262,39 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
             // Le motif n'est PAS inclus dans le toast (trop court pour l'accueillir).
             // Il reste stocké en DB dans absences.motif_refus pour audit / consultation ultérieure.
             const message = `Demande ${typeLabel} ${periode} refusée.`;
+            // Snapshot embarqué : depuis v1.2 le user a reçu l'ICS dès la pose,
+            // l'event est donc présent dans son calendrier malgré le refus.
+            // Le snapshot permet au toast côté user de proposer un bouton
+            // « Retirer de mon calendrier » qui génère un ICS CANCEL.
+            const snapshot = {
+                absence_id: absenceId,
+                absence_snapshot: {
+                    salarie_id: absence.salarie_id,
+                    type: absence.type,
+                    date_debut: absence.date_debut,
+                    date_fin: absence.date_fin,
+                    debut_periode: absence.debut_periode,
+                    fin_periode: absence.fin_periode,
+                    commentaire: absence.commentaire || null
+                }
+            };
+            const detailsJson = JSON.stringify(snapshot);
             const insRes = await ctx.db.execute({
-                sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('demande_refusee', ?, ?, 'error', ?)`,
-                args: [titre, message, absence.salarie_id]
+                sql: `INSERT INTO notifications (type, titre, message, details, statut, user_id) VALUES ('demande_refusee', ?, ?, ?, 'error', ?)`,
+                args: [titre, message, detailsJson, absence.salarie_id]
             });
             const notifId = Number(insRes.lastInsertRowid);
             if (ctx.mainWindow && ctx.mainWindow.webContents) {
-                ctx.mainWindow.webContents.send('traitement-automatique', { id: notifId, type: 'demande_refusee', titre, message, statut: 'error', user_id: absence.salarie_id });
+                ctx.mainWindow.webContents.send('traitement-automatique', {
+                    id: notifId,
+                    type: 'demande_refusee',
+                    titre,
+                    message,
+                    statut: 'error',
+                    user_id: absence.salarie_id,
+                    absence_id: snapshot.absence_id,
+                    absence_snapshot: snapshot.absence_snapshot
+                });
             }
         } catch (errNotif) {
             console.error('Erreur notification refuserAbsence:', errNotif);
@@ -360,9 +387,25 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
                     : `du ${dateDebutFr} au ${dateFinFr}`;
                 const titre = `Absence supprimée — ${labelType}`;
                 const message = `Absence ${periode} supprimée par l'administrateur. Soldes mis à jour.`;
+                // Snapshot embarqué dans la notif : permet au user de générer un
+                // ICS CANCEL pour retirer l'event de son calendrier, alors même
+                // que l'absence n'existe plus en DB.
+                const snapshot = {
+                    absence_id: absenceId,
+                    absence_snapshot: {
+                        salarie_id: salarieId,
+                        type,
+                        date_debut: absence.date_debut,
+                        date_fin: absence.date_fin,
+                        debut_periode: absence.debut_periode,
+                        fin_periode: absence.fin_periode,
+                        commentaire: absence.commentaire || null
+                    }
+                };
+                const detailsJson = JSON.stringify(snapshot);
                 const insRes = await ctx.db.execute({
-                    sql: `INSERT INTO notifications (type, titre, message, statut, user_id) VALUES ('absence_supprimee', ?, ?, 'success', ?)`,
-                    args: [titre, message, salarieId]
+                    sql: `INSERT INTO notifications (type, titre, message, details, statut, user_id) VALUES ('absence_supprimee', ?, ?, ?, 'success', ?)`,
+                    args: [titre, message, detailsJson, salarieId]
                 });
                 const notifId = Number(insRes.lastInsertRowid);
                 if (ctx.mainWindow && ctx.mainWindow.webContents) {
@@ -372,7 +415,9 @@ module.exports = function registerAbsencesHandlers(ctx, safeHandle) {
                         titre,
                         message,
                         statut: 'success',
-                        user_id: salarieId
+                        user_id: salarieId,
+                        absence_id: snapshot.absence_id,
+                        absence_snapshot: snapshot.absence_snapshot
                     });
                 }
             } catch (errNotif) {

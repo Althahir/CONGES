@@ -561,6 +561,11 @@
                 <input type="checkbox" id="genererPdfAnnulation">
                 <span>Générer un PDF d'annulation (archivage OneDrive)</span>
             </label>
+
+            <label class="option-checkbox-pdf" id="optionSupprimerCalendrierWrapper" style="display: none;">
+                <input type="checkbox" id="supprimerCalendrierOutlook">
+                <span>Retirer également de mon calendrier Outlook</span>
+            </label>
         </div>
 
         <div class="modal-footer">
@@ -753,6 +758,23 @@
                             <li>Si un salarié passe en arrêt maladie en cours de mois, le taux normal s'applique jusqu'à la date d'effet et le taux arrêt pour le reste du mois.</li>
                             <li>Le <strong>basculement annuel</strong> (CP N → CP N-1) est déclenché à la date configurée ci-dessous.</li>
                         </ul>
+                    </div>
+
+                    <div class="param-card">
+                        <h3><i class="fa-solid fa-calendar-plus"></i> Synchronisation calendrier Outlook</h3>
+                        <p class="param-description">Quand vous validez une demande ou posez un congé, un fichier .ics s'ouvre automatiquement pour ajouter l'événement à votre calendrier Outlook (vue équipe avec nom du salarié).</p>
+
+                        <div class="param-row">
+                            <label class="param-toggle-label">
+                                <input type="checkbox" id="syncOutlookAdmin" value="1">
+                                <span>Recevoir les .ics sur mon poste lors des poses et validations</span>
+                            </label>
+                            <span id="syncOutlookAdminMsg" class="param-msg"></span>
+                        </div>
+                        <p class="param-description" style="margin-top: 12px;">
+                            <i class="fa-solid fa-info-circle"></i>
+                            Pour permettre à chaque salarié d'ajouter ses propres congés à son Outlook, activer l'option dans sa fiche.
+                        </p>
                     </div>
                 </div>
 

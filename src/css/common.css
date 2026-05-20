@@ -1712,6 +1712,31 @@ body {
     color: #333;
 }
 
+.notification-action-ics {
+    margin-top: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--bleu);
+    background: var(--bleu);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.notification-action-ics:hover:not(:disabled) {
+    background: rgb(0, 90, 115);
+    transform: translateY(-1px);
+}
+
+.notification-action-ics:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
 [data-theme="dark"] .notification-persistante {
     background-color: var(--bg-surface);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);

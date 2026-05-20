@@ -297,6 +297,10 @@ contextBridge.exposeInMainWorld('api', {
     exporterRecapPDF: (data) => ipcRenderer.invoke('exporterRecapPDF', data),
     exporterStatsPDF: (data) => ipcRenderer.invoke('exporterStatsPDF', data),
 
+    // Calendrier Outlook (.ics)
+    /** @param {number} absenceId @param {{method?: 'PUBLISH'|'CANCEL', includeName?: boolean, sequence?: number}} [options] @returns {Promise<{success: boolean, filePath?: string, error?: string}>} */
+    genererIcsAbsence: (absenceId, options) => ipcRenderer.invoke('genererIcsAbsence', absenceId, options),
+
     // Gestion des traitements automatiques
 
     /** @returns {Promise<ConfigTraitement[]>} */

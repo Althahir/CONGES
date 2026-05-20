@@ -10,7 +10,7 @@ window.AIDE_DATA = [
     {
         id: 'suppression',
         titre: "Supprimer un congé déjà validé",
-        motsCles: ['suppression', 'supprimer', 'annuler', 'congé', 'pdf', 'annulation', 'rollback', 'recréditer', 'corbeille', 'réaffectation', 'réaffecter', 'cp_n', 'cp_n1', 'répartition'],
+        motsCles: ['suppression', 'supprimer', 'annuler', 'congé', 'pdf', 'annulation', 'rollback', 'recréditer', 'corbeille', 'réaffectation', 'réaffecter', 'cp_n', 'cp_n1', 'répartition', 'outlook', 'calendrier', 'ics'],
         contenu: `
 <h3>Supprimer un congé déjà validé</h3>
 
@@ -23,6 +23,7 @@ window.AIDE_DATA = [
     <ul>
       <li>Choisir <strong>« Supprimer toute la période »</strong> ou <strong>« Supprimer ce jour seul »</strong>.</li>
       <li>Cocher <strong>« Générer un PDF d'annulation »</strong> si le dossier officiel doit être mis à jour (disponible aussi bien pour la période complète que pour un jour seul).</li>
+      <li>Cocher <strong>« Retirer également de mon calendrier Outlook »</strong> (visible si la sync Outlook est activée dans les Paramètres) pour que l'event correspondant soit supprimé. En cas de suppression d'un jour seul d'une période multi-jours, l'event original est retiré et les sous-périodes restantes sont automatiquement ré-ouvertes dans Outlook.</li>
       <li>Cliquer <strong>Confirmer la suppression</strong>.</li>
     </ul>
   </li>
@@ -60,6 +61,7 @@ window.AIDE_DATA = [
 <ul>
   <li>Message : « Absence du JJ/MM au JJ/MM supprimée par l'administrateur. Soldes mis à jour. »</li>
   <li>Si le salarié est connecté, la notification apparaît en direct ; sinon elle l'attend à sa prochaine connexion.</li>
+  <li>Un bouton <strong>« Retirer de mon calendrier »</strong> apparaît dans le toast pour annuler l'event Outlook côté son poste (depuis v1.2, la sync calendrier est universelle — tous les salariés reçoivent un ICS dès la pose).</li>
   <li>Si l'admin supprime sa propre absence, aucune notification n'est envoyée.</li>
 </ul>
 
@@ -132,6 +134,77 @@ UPDATE soldes SET cp_n = cp_n - 0.42 WHERE salarie_id = 5 AND annee = 2026;</cod
   <li>Pour un changement de statut <strong>arrêt maladie</strong>, ne JAMAIS toucher <code>salaries.en_arret_maladie</code> en SQL — passer par la fiche UI (qui ajoute automatiquement la ligne <code>historique_taux</code>).</li>
   <li>Si possible, prendre une <strong>capture d'écran</strong> de l'état avant modification pour traçabilité.</li>
 </ul>
+`
+    },
+
+    {
+        id: 'sync-outlook',
+        titre: "Synchronisation calendrier Outlook",
+        motsCles: ['outlook', 'calendrier', 'ics', 'sync', 'synchronisation', 'agenda', 'event', 'rendez-vous'],
+        contenu: `
+<h3>Synchronisation calendrier Outlook</h3>
+
+<p>Depuis la v1.2, l'application peut envoyer automatiquement les absences dans le calendrier Outlook personnel de chaque utilisateur (admin et salariés). Le mécanisme utilise des fichiers <code>.ics</code> ouverts via Outlook (calendrier par défaut du compte Windows connecté). <strong>Aucune configuration par utilisateur n'est nécessaire</strong> : la sync est universelle.</p>
+
+<h4>Quand l'event est-il créé ?</h4>
+<ul>
+  <li><strong>Un salarié pose une absence</strong> → Outlook s'ouvre immédiatement sur son poste avec l'event prêt à enregistrer. <em>Pas besoin d'attendre la validation admin.</em></li>
+  <li><strong>L'admin pose son propre congé</strong> (section Mes Congés) → Outlook s'ouvre côté admin, comme un salarié.</li>
+  <li><strong>L'admin valide la demande d'un autre salarié</strong> → <strong>rien</strong> côté admin. Seul le salarié concerné a l'event dans son calendrier (créé à la pose). Lilian ne voit donc plus tous les congés des autres dans son agenda perso.</li>
+</ul>
+
+<h4>Quand l'event est-il retiré ?</h4>
+<ul>
+  <li><strong>L'admin refuse une demande</strong> → toast côté salarié avec bouton <strong>« 📅 Retirer de mon calendrier »</strong>. Le salarié clique → Outlook s'ouvre avec un CANCEL qui retire l'event.</li>
+  <li><strong>Le salarié annule sa demande en attente</strong> (corbeille « Mes demandes en cours ») → modale de confirmation avec une checkbox <strong>« Retirer également de mon calendrier Outlook »</strong> cochée par défaut. Le CANCEL est envoyé avant la suppression DB.</li>
+  <li><strong>L'admin supprime une absence validée</strong> → la modale de suppression a une checkbox <strong>« Retirer également de mon calendrier Outlook »</strong> (visible si la sync admin est activée dans Paramètres). Si cochée, le CANCEL est envoyé côté admin. <em>Le salarié reçoit un toast « Absence supprimée » avec son propre bouton « Retirer de mon calendrier ».</em></li>
+</ul>
+
+<h4>Suppression d'un jour seul d'une période multi-jours</h4>
+<p>Cas particulier : l'admin retire un jour d'une absence de plusieurs jours et coche « Retirer de mon calendrier Outlook ».</p>
+<ol>
+  <li>L'event original (la période complète) est <strong>annulé</strong> dans Outlook.</li>
+  <li>Les 1 ou 2 sous-périodes restantes sont <strong>rouvertes</strong> automatiquement via de nouveaux events Outlook.</li>
+</ol>
+<p>Concrètement : Outlook ouvre plusieurs fenêtres successives — une pour le CANCEL, une pour chaque sous-absence à ré-ouvrir. L'admin enregistre chacune.</p>
+
+<h4>Réglage côté admin (Paramètres → Synchronisation calendrier Outlook)</h4>
+<ul>
+  <li><strong>Case activée</strong> (défaut) : la pose admin pour soi-même + la checkbox « Retirer du calendrier » de la modale suppression sont disponibles.</li>
+  <li><strong>Case décochée</strong> : aucune action admin ne déclenche d'event Outlook côté admin. Les salariés continuent normalement de recevoir leurs events à la pose.</li>
+</ul>
+
+<h4>Pré-requis côté poste</h4>
+<ul>
+  <li>Outlook desktop doit être <strong>installé et configuré</strong> comme application par défaut Windows pour les fichiers <code>.ics</code> (c'est le cas par défaut sur la plupart des configurations M365).</li>
+  <li>Le compte Outlook connecté détermine dans quel calendrier l'event est créé : sur le poste de Lilian → son compte (ex. <code>pilotage@</code>), sur le poste d'un salarié → son compte perso.</li>
+</ul>
+
+<h4>⚠️ Important : garder Outlook ouvert pour une expérience fluide</h4>
+<p>L'app Conges envoie le <code>.ics</code> via la commande standard Windows « ouvrir ce fichier avec son application par défaut ». Le comportement dépend ensuite de l'état d'Outlook :</p>
+<ul>
+  <li><strong>Outlook est déjà ouvert</strong> ✅ — L'event apparaît en quasi-temps réel, généralement avec une popup d'ajout au calendrier.</li>
+  <li><strong>Outlook est fermé</strong> ⏳ — Windows démarre Outlook en background, ce qui peut prendre 5 à 30 secondes (surtout au premier lancement après ouverture de session, ou avec le « New Outlook » qui est plus lent au boot que le classique). L'event arrive au démarrage manuel ou automatique d'Outlook, sans notification visible.</li>
+  <li><strong>« New Outlook »</strong> 🐌 — La nouvelle version d'Outlook ne vole jamais le focus. L'event arrive silencieusement dans le calendrier sans popup. Il faut l'ouvrir et regarder dans le calendrier pour le voir.</li>
+</ul>
+<p><strong>Recommandation pratique</strong> : garder Outlook ouvert en permanence sur les postes. Lilian et la plupart des salariés l'ouvrent déjà le matin de toute façon. Si l'event n'apparaît pas dans les 30 secondes après une action dans Conges, il suffit d'ouvrir Outlook manuellement — le fichier en file d'attente est traité à l'ouverture.</p>
+
+<h4>Cas où l'event n'arrive pas dans le bon calendrier</h4>
+<p>Outlook ajoute l'event au <strong>calendrier par défaut</strong> du compte connecté. Si le compte a plusieurs calendriers (perso + boîte partagée), il faut soit :</p>
+<ul>
+  <li>Configurer Outlook pour que le bon calendrier soit le calendrier par défaut (clic droit sur le calendrier → <em>Définir comme dossier de calendrier par défaut</em>).</li>
+  <li>Ou au moment où Outlook propose la fenêtre d'ajout, choisir manuellement le calendrier de destination dans le menu déroulant.</li>
+</ul>
+
+<h4>Cas où rien ne se passe</h4>
+<p>Si après une action (pose, suppression, refus...) aucun event Outlook n'apparaît et qu'Outlook a été ouvert, vérifier :</p>
+<ol>
+  <li>Que la case <strong>« Synchronisation calendrier Outlook »</strong> est cochée dans <em>Paramètres</em> (côté admin).</li>
+  <li>Que le fichier <code>.ics</code> a bien été généré : tape <code>%TEMP%</code> dans la barre d'adresse de l'Explorateur, et cherche <code>conges-lce-absence-X-publish.ics</code> (le X est l'ID de l'absence). Si présent → le problème est entre le fichier et Outlook (association Windows, Outlook fermé...). Si absent → problème côté Conges, contacter le support.</li>
+  <li>Double-cliquer le fichier <code>.ics</code> manuellement pour forcer l'ouverture. Si Outlook ne réagit pas, vérifier dans <em>Paramètres Windows → Applications par défaut</em> que <code>.ics</code> est bien associé à Outlook.</li>
+</ol>
+
+<p class="aide-tip"><i class="fa-solid fa-circle-info"></i> <strong>Note :</strong> Si un salarié pose puis voit sa demande refusée, l'event reste momentanément dans son Outlook jusqu'à ce qu'il clique sur « Retirer de mon calendrier » dans le toast de refus. Le toast reste affiché tant que le bouton n'a pas été cliqué (pas d'auto-dismiss).</p>
 `
     }
 ];

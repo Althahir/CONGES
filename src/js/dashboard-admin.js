@@ -1605,6 +1605,10 @@ async function validerDemande(absenceId) {
             } catch (pdfErr) {
                 console.error('Erreur génération PDF après validation:', pdfErr);
             }
+
+            // Sync calendrier Outlook côté admin retirée à partir de v1.2 :
+            // l'admin ne reçoit plus l'event dans son calendrier quand il valide pour
+            // quelqu'un d'autre. Le salarié, lui, a reçu son ICS au moment de la pose.
         }
 
         await loadDemandesEnAttente();
@@ -5418,7 +5422,28 @@ document.getElementById('btnConfirmerSuppressionRecup').addEventListener('click'
 
 // ========== MODAL SUPPRESSION ==========
 
-function ouvrirModalSuppression(absence, dateISO) {
+// Sync calendrier Outlook lors d'une suppression (checkbox modale).
+// CANCEL doit être appelé AVANT deleteAbsence (l'absence doit encore exister en DB).
+// PUBLISH appelé APRÈS recréation des sous-absences (cas suppression jour seul).
+async function envoyerCancelOutlookSiDemande(absenceId) {
+    const cb = document.getElementById('supprimerCalendrierOutlook');
+    if (!cb || !cb.checked) return;
+    try {
+        await window.api.genererIcsAbsence(absenceId, { method: 'CANCEL', sequence: 1, includeName: true });
+    } catch (e) { console.error('[ICS CANCEL]', e); }
+}
+
+async function envoyerPublishOutlookSiDemande(absenceIds) {
+    const cb = document.getElementById('supprimerCalendrierOutlook');
+    if (!cb || !cb.checked) return;
+    for (const id of absenceIds || []) {
+        try {
+            await window.api.genererIcsAbsence(id, { includeName: true });
+        } catch (e) { console.error('[ICS PUBLISH]', e); }
+    }
+}
+
+async function ouvrirModalSuppression(absence, dateISO) {
     absenceCliquee = absence;
     jourClique = dateISO;
     
@@ -5450,6 +5475,20 @@ function ouvrirModalSuppression(absence, dateISO) {
     // Reset la checkbox PDF d'annulation à chaque ouverture
     const cbPdf = document.getElementById('genererPdfAnnulation');
     if (cbPdf) cbPdf.checked = false;
+
+    // Reset la checkbox "retirer du calendrier Outlook" et l'affiche si sync activée
+    const cbCal = document.getElementById('supprimerCalendrierOutlook');
+    const wrapperCal = document.getElementById('optionSupprimerCalendrierWrapper');
+    if (cbCal) cbCal.checked = false;
+    if (wrapperCal) {
+        wrapperCal.style.display = 'none';
+        try {
+            const cfg = await window.api.getConfigApp();
+            if (cfg && (cfg.sync_outlook_admin === '1' || cfg.sync_outlook_admin === 1)) {
+                wrapperCal.style.display = 'flex';
+            }
+        } catch (e) { /* sync désactivée ou indisponible : checkbox reste masquée */ }
+    }
 
     // Afficher/masquer l'option "jour seul"
     const optionJour = document.querySelector('input[value="jour"]').parentElement;
@@ -5508,6 +5547,9 @@ document.getElementById('btnConfirmerSuppression').addEventListener('click', asy
                 }
             }
 
+            // ICS CANCEL avant DELETE (l'absence doit encore exister en DB)
+            await envoyerCancelOutlookSiDemande(absenceCliquee.id);
+
             // Supprimer toute l'absence (recalcule les soldes en interne — recrédit auto à l'identique)
             await window.api.deleteAbsence(absenceCliquee.id, { adminId: user.id });
 
@@ -5556,7 +5598,12 @@ document.getElementById('btnConfirmerSuppression').addEventListener('click', asy
                 }
             }
 
-            await supprimerUnJour(absenceCliquee, jourClique);
+            // ICS CANCEL avant DELETE (l'absence doit encore exister en DB)
+            await envoyerCancelOutlookSiDemande(absenceCliquee.id);
+
+            const newIds = await supprimerUnJour(absenceCliquee, jourClique);
+            // PUBLISH des sous-absences créées dans Outlook (l'event original a déjà été CANCEL)
+            await envoyerPublishOutlookSiDemande(newIds);
 
             // PDF d'annulation du jour supprimé (1 journée)
             if (genererPdf && salarieInfo) {
@@ -5644,7 +5691,10 @@ async function flowSuppressionCp(typeSuppression, genererPdf) {
         }
     }
 
-    // 3. DELETE skipRecredit + recrédit selon choix
+    // 3. ICS CANCEL avant DELETE (l'absence doit encore exister en DB)
+    await envoyerCancelOutlookSiDemande(absence.id);
+
+    // 4. DELETE skipRecredit + recrédit selon choix
     await window.api.deleteAbsence(absence.id, { skipRecredit: true, adminId: user.id });
     await window.api.appliquerRecreditCp(absence.salarie_id, annee, choix.recreditN1, choix.recreditN);
 
@@ -5688,7 +5738,9 @@ async function flowSuppressionCp(typeSuppression, genererPdf) {
     } else {
         // 4b. Suppression jour seul : recréer les sous-absences avec décomposition ajustée
         const decomp = ajusterDecompositionApresRecredit(ancienDebiteN1, ancienDebiteN, choix.recreditN1, choix.recreditN);
-        await recreerSousAbsencesCp(absence, jourClique, decomp);
+        const newIds = await recreerSousAbsencesCp(absence, jourClique, decomp);
+        // PUBLISH des sous-absences créées dans Outlook (l'event original a déjà été CANCEL)
+        await envoyerPublishOutlookSiDemande(newIds);
         // PDF d'annulation pour le jour cliqué uniquement (1j)
         await genererPdfAnnulationLocal({
             type: absence.type,
@@ -5741,7 +5793,7 @@ async function recreerSousAbsencesCp(absence, dateISO, decompositionGlobale) {
             skipNotification: true
         });
         await window.api.setDecompositionAbsence(newAbs.id, decompositionGlobale.debiteN1, decompositionGlobale.debiteN);
-        return;
+        return [newAbs.id];
     }
 
     // Cas 2 : dernier jour supprimé
@@ -5760,7 +5812,7 @@ async function recreerSousAbsencesCp(absence, dateISO, decompositionGlobale) {
             skipNotification: true
         });
         await window.api.setDecompositionAbsence(newAbs.id, decompositionGlobale.debiteN1, decompositionGlobale.debiteN);
-        return;
+        return [newAbs.id];
     }
 
     // Cas 3 : milieu (split en 2). On répartit la décomposition globale entre les 2 morceaux :
@@ -5802,6 +5854,7 @@ async function recreerSousAbsencesCp(absence, dateISO, decompositionGlobale) {
     const p2N = totalN - p1N;
     await window.api.setDecompositionAbsence(newAbs1.id, p1N1, p1N);
     await window.api.setDecompositionAbsence(newAbs2.id, Math.max(0, p2N1), Math.max(0, p2N));
+    return [newAbs1.id, newAbs2.id];
 }
 
 // ========== MODALE 2 : RÉAFFECTATION CP ==========
@@ -5914,7 +5967,7 @@ async function supprimerUnJour(absence, dateISO) {
         );
 
         afficherNotificationPersistante('success', 'Premier jour supprimé', 'Soldes mis à jour.', 4000, null, null, true);
-        return;
+        return [newAbs1.id];
     }
 
     // Cas 2 : Supprimer le dernier jour
@@ -5943,7 +5996,7 @@ async function supprimerUnJour(absence, dateISO) {
         );
 
         afficherNotificationPersistante('success', 'Dernier jour supprimé', 'Soldes mis à jour.', 4000, null, null, true);
-        return;
+        return [newAbs2.id];
     }
 
     // Cas 3 : Supprimer un jour au milieu (couper en 2)
@@ -5993,6 +6046,7 @@ async function supprimerUnJour(absence, dateISO) {
     );
 
     afficherNotificationPersistante('success', 'Jour supprimé', 'Absence coupée en 2 périodes. Soldes mis à jour.', 4000, null, null, true);
+    return [newAbsP1.id, newAbsP2.id];
 }
 
 function formatDateISO(date) {
@@ -6122,6 +6176,17 @@ if (formAbsenceUser) {
                 };
 
                 const pdfResult = await window.api.genererPDF(pdfData);
+
+                // Sync calendrier Outlook (opt-in admin via Paramètres).
+                // includeName: true → admin = calendrier équipe, affiche le nom du salarié.
+                try {
+                    const cfg = await window.api.getConfigApp();
+                    if (cfg && (cfg.sync_outlook_admin === '1' || cfg.sync_outlook_admin === 1)) {
+                        await window.api.genererIcsAbsence(result.id, { includeName: true });
+                    }
+                } catch (errIcs) {
+                    console.error('[ICS] Erreur génération:', errIcs);
+                }
 
                 // Afficher succès (adapté selon impression réussie ou pas)
                 if (pdfResult && pdfResult.printed) {
@@ -6408,10 +6473,28 @@ async function chargerParametres() {
         const config = await window.api.getConfigApp();
         document.getElementById('tauxCpNormal').value = config.taux_cp_normal || '2.08333';
         document.getElementById('tauxCpArret').value = config.taux_cp_arret || '1.66333';
+        const syncCheckbox = document.getElementById('syncOutlookAdmin');
+        if (syncCheckbox) syncCheckbox.checked = config.sync_outlook_admin === '1' || config.sync_outlook_admin === 1;
     } catch (error) {
         console.error('Erreur chargement paramètres:', error);
     }
 }
+
+document.getElementById('syncOutlookAdmin')?.addEventListener('change', async (e) => {
+    const msg = document.getElementById('syncOutlookAdminMsg');
+    const valeur = e.target.checked ? '1' : '0';
+    try {
+        await window.api.updateConfigApp('sync_outlook_admin', valeur);
+        msg.textContent = e.target.checked ? '✓ Synchronisation activée' : '✓ Synchronisation désactivée';
+        msg.className = 'param-msg success';
+        setTimeout(() => { msg.textContent = ''; msg.className = 'param-msg'; }, 2500);
+    } catch (error) {
+        console.error('Erreur sauvegarde sync_outlook_admin:', error);
+        msg.textContent = 'Erreur';
+        msg.className = 'param-msg error';
+        e.target.checked = !e.target.checked; // revert visuel
+    }
+});
 
 document.getElementById('btnSaveParamTaux')?.addEventListener('click', async () => {
     const tauxNormal = document.getElementById('tauxCpNormal').value;

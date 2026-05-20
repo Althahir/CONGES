@@ -222,11 +222,17 @@ function escapeHtmlUser(str) {
 }
 
 // Modale de confirmation jolie réutilisable. Retourne une promise true/false.
-function confirmModal({ titre, message, info, iconClass, confirmText, confirmClass, cancelText }) {
+function confirmModal({ titre, message, info, iconClass, confirmText, confirmClass, cancelText, checkboxLabel, checkboxChecked }) {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'modal';
         overlay.style.display = 'flex';
+        // Si checkboxLabel est fourni : retourne { confirmed, checkboxChecked }
+        // Sinon (rétro-compat) : retourne directement le boolean.
+        const hasCheckbox = !!checkboxLabel;
+        const checkboxHtml = hasCheckbox
+            ? `<label class="confirm-modal-checkbox"><input type="checkbox" class="js-checkbox" ${checkboxChecked ? 'checked' : ''}> ${escapeHtmlUser(checkboxLabel)}</label>`
+            : '';
         overlay.innerHTML = `
             <div class="modal-content" style="max-width: 440px;">
                 <div class="modal-header">
@@ -236,6 +242,7 @@ function confirmModal({ titre, message, info, iconClass, confirmText, confirmCla
                 <div class="modal-body">
                     ${info ? `<p class="info-refus-demande">${info}</p>` : ''}
                     <p class="texte-refus-demande">${escapeHtmlUser(message)}</p>
+                    ${checkboxHtml}
                 </div>
                 <div class="modal-footer">
                     <button class="btn-secondary js-cancel">${escapeHtmlUser(cancelText || 'Annuler')}</button>
@@ -244,9 +251,10 @@ function confirmModal({ titre, message, info, iconClass, confirmText, confirmCla
             </div>
         `;
         document.body.appendChild(overlay);
-        const close = (result) => {
+        const close = (confirmed) => {
+            const cbState = hasCheckbox ? overlay.querySelector('.js-checkbox').checked : false;
             overlay.remove();
-            resolve(result);
+            resolve(hasCheckbox ? { confirmed, checkboxChecked: cbState } : confirmed);
         };
         overlay.querySelector('.js-close').addEventListener('click', () => close(false));
         overlay.querySelector('.js-cancel').addEventListener('click', () => close(false));
@@ -325,7 +333,10 @@ async function chargerMesDemandesEnCours(toutesAbsences) {
             const typeTexte = item.querySelector('.mes-demande-item-type')?.textContent.trim() || '';
             const datesTexte = item.querySelector('.mes-demande-item-dates')?.textContent.trim() || '';
             const info = `<strong>${escapeHtmlUser(typeTexte)}</strong><br>${escapeHtmlUser(datesTexte)}`;
-            const ok = await confirmModal({
+            // Pour les absences, propose en plus de retirer l'event du calendrier
+            // Outlook (la pose user a déclenché un PUBLISH automatique en v1.2).
+            // Pour les hsup, pas d'ICS associé donc pas de checkbox.
+            const opts = {
                 titre: 'Annuler la demande',
                 info,
                 message: 'Confirmer l\'annulation de cette demande en attente ?',
@@ -333,10 +344,23 @@ async function chargerMesDemandesEnCours(toutesAbsences) {
                 confirmText: 'Annuler la demande',
                 confirmClass: 'btn-danger',
                 cancelText: 'Conserver'
-            });
-            if (!ok) return;
+            };
+            if (kind === 'absence') {
+                opts.checkboxLabel = 'Retirer également de mon calendrier Outlook';
+                opts.checkboxChecked = true;
+            }
+            const res = await confirmModal(opts);
+            const confirmed = (kind === 'absence') ? res.confirmed : res;
+            const retirerCalendrier = (kind === 'absence') ? res.checkboxChecked : false;
+            if (!confirmed) return;
             try {
                 if (kind === 'absence') {
+                    // ICS CANCEL AVANT le DELETE (l'absence existe encore en DB)
+                    if (retirerCalendrier) {
+                        try {
+                            await window.api.genererIcsAbsence(id, { method: 'CANCEL', sequence: 1, includeName: false });
+                        } catch (errIcs) { console.error('[ICS CANCEL]', errIcs); }
+                    }
                     await window.api.deleteAbsence(id);
                 } else if (kind === 'hsup') {
                     await window.api.deleteHeureSup({ id, actorId: user.id });
@@ -1014,6 +1038,16 @@ document.getElementById('formAbsence').addEventListener('submit', async (e) => {
         const resultAbsence = await window.api.createAbsence(absenceData);
 
         if (resultAbsence.success) {
+            // Génération ICS immédiate dans le calendrier perso de l'utilisateur,
+            // dès la pose (sans attendre la validation admin). Cohérent : la majorité
+            // des demandes sont validées, et un éventuel refus déclenchera un toast
+            // avec bouton « Retirer de mon calendrier » côté user.
+            try {
+                await window.api.genererIcsAbsence(resultAbsence.id, { includeName: false });
+            } catch (errIcs) {
+                console.error('[ICS] Erreur génération à la pose:', errIcs);
+            }
+
             // Si la demande est en attente, on ne débite PAS les soldes et on ne génère PAS de PDF.
             // Le débit et le PDF seront faits par l'admin au moment de la validation.
             if (resultAbsence.statut === 'en_attente') {
@@ -1566,6 +1600,7 @@ async function init() {
         for (const notif of (initNotifs || [])) {
             if (_idsNotifsVues.has(notif.id)) continue;
             _idsNotifsVues.add(notif.id);
+            _hydrateAbsenceIdFromDetails(notif);
             if (notif.type === 'demande_validee' || notif.type === 'recup_validee') {
                 _bufferValidees.push(notif);
             } else if (notif.type === 'demande_refusee' || notif.type === 'recup_refusee') {
@@ -1596,6 +1631,7 @@ async function init() {
             for (const notif of (notifs || [])) {
                 if (_idsNotifsVues.has(notif.id)) continue;
                 _idsNotifsVues.add(notif.id);
+                _hydrateAbsenceIdFromDetails(notif);
                 if (notif.type === 'demande_validee' || notif.type === 'recup_validee') {
                     _bufferValidees.push(notif);
                 } else if (notif.type === 'demande_refusee' || notif.type === 'recup_refusee') {
@@ -1614,6 +1650,21 @@ async function init() {
 // ========== TOAST (workflow validation) — même structure que côté admin ==========
 const _toastQueueUser = [];
 let _toastActifUser = false;
+
+// Parse `details` (JSON string en DB) pour récupérer absence_id et absence_snapshot
+// quand la notif vient du polling/init (les events live les passent déjà au top level).
+// Le snapshot est utilisé pour les notifs `absence_supprimee` afin de générer un
+// ICS CANCEL malgré que l'absence n'existe plus en DB.
+function _hydrateAbsenceIdFromDetails(notif) {
+    if ((notif.absence_id && notif.absence_snapshot) || !notif.details) return;
+    try {
+        const parsed = typeof notif.details === 'string' ? JSON.parse(notif.details) : notif.details;
+        if (parsed) {
+            if (!notif.absence_id && parsed.absence_id) notif.absence_id = parsed.absence_id;
+            if (!notif.absence_snapshot && parsed.absence_snapshot) notif.absence_snapshot = parsed.absence_snapshot;
+        }
+    } catch (e) { /* details malformé, on ignore */ }
+}
 
 function afficherToastUser(notif) {
     // Le son ne joue qu'une fois par rafale : si un toast est déjà visible ou
@@ -1635,11 +1686,22 @@ function _afficherProchainToastUser() {
 
     const toast = document.createElement('div');
     toast.className = `notification-persistante ${type}`;
+    // Bouton "Retirer de mon calendrier" — uniquement pour les notifs qui
+    // signifient qu'une absence doit disparaître du calendrier du user
+    // (suppression admin OU refus admin). Nécessite le snapshot car l'absence
+    // est soit supprimée en DB, soit marquée refusée. Depuis v1.2, la pose user
+    // génère un ICS direct → plus de bouton "Ajouter" sur la validation.
+    const estCancel = (notif.type === 'absence_supprimee' || notif.type === 'demande_refusee')
+        && notif.absence_id && notif.absence_snapshot;
+    const boutonIcs = estCancel
+        ? `<button class="notification-action-ics" type="button" data-mode="cancel"><i class="fa-solid fa-calendar-minus"></i> Retirer de mon calendrier</button>`
+        : '';
     toast.innerHTML = `
         <div class="notification-icon"><i class="fa-solid ${icon}"></i></div>
         <div class="notification-content">
             <h4>${titre}</h4>
             <p>${message}</p>
+            ${boutonIcs}
         </div>
         <button class="notification-close"><i class="fa-solid fa-times"></i></button>
     `;
@@ -1664,8 +1726,31 @@ function _afficherProchainToastUser() {
         }, 300);
     };
 
-    const autoDismissTimer = setTimeout(dismiss, 5000);
+    // Auto-dismiss désactivé si on a un bouton d'action (laisser l'utilisateur le temps de cliquer)
+    const autoDismissTimer = boutonIcs ? null : setTimeout(dismiss, 5000);
     toast.querySelector('.notification-close').addEventListener('click', dismiss);
+
+    const btnIcs = toast.querySelector('.notification-action-ics');
+    if (btnIcs) {
+        btnIcs.addEventListener('click', async () => {
+            btnIcs.disabled = true;
+            try {
+                await window.api.genererIcsAbsence(notif.absence_id, {
+                    method: 'CANCEL',
+                    sequence: 1,
+                    includeName: false,
+                    absenceSnapshot: notif.absence_snapshot
+                });
+                btnIcs.innerHTML = '<i class="fa-solid fa-check"></i> Calendrier ouvert';
+                // Petit délai pour laisser voir la confirmation visuelle, puis dismiss
+                // (qui marque aussi la notif DB comme lue).
+                setTimeout(dismiss, 1200);
+            } catch (e) {
+                console.error('[ICS] Erreur ouverture:', e);
+                btnIcs.disabled = false;
+            }
+        });
+    }
 }
 
 // Écouter les notifs temps réel envoyées par le main process (workflow validation).
@@ -1679,7 +1764,7 @@ function _purgerBufferValidation() {
     const r = _bufferRefusees; _bufferRefusees = [];
 
     if (v.length === 1) {
-        afficherToastUser({ id: v[0].id || null, titre: v[0].titre, message: v[0].message, statut: 'success' });
+        afficherToastUser({ id: v[0].id || null, titre: v[0].titre, message: v[0].message, statut: 'success', absence_id: v[0].absence_id || null });
     } else if (v.length > 1) {
         afficherToastUser({
             ids: v.map(x => x.id).filter(Boolean),
@@ -1689,7 +1774,17 @@ function _purgerBufferValidation() {
         });
     }
     if (r.length === 1) {
-        afficherToastUser({ id: r[0].id || null, titre: r[0].titre, message: r[0].message, statut: 'error' });
+        // type 'demande_refusee' préservé pour permettre l'affichage du bouton
+        // « Retirer de mon calendrier » via le snapshot embarqué.
+        afficherToastUser({
+            id: r[0].id || null,
+            type: 'demande_refusee',
+            titre: r[0].titre,
+            message: r[0].message,
+            statut: 'error',
+            absence_id: r[0].absence_id || null,
+            absence_snapshot: r[0].absence_snapshot || null
+        });
     } else if (r.length > 1) {
         afficherToastUser({
             ids: r.map(x => x.id).filter(Boolean),

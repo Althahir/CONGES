@@ -18,7 +18,7 @@ app.setPath('userData', path.join(app.getPath('appData'), 'conges-lce'));
 // d'ingérer des events, pas de lire ou modifier quoi que ce soit). Le mettre dans le code
 // évite de devoir éditer config.json sur chaque poste prod. Surcharge possible via
 // config.json (champ `sentryDsn`) si besoin de switcher de projet sans rebuild.
-const SENTRY_DSN_DEFAULT = 'https://9971861dcef5da1acd0b1e8c07ff2324@o4511349559066624.ingest.de.sentry.io/4511354115981392'; // ← Coller ici le DSN du projet Sentry "conges-lce"
+const SENTRY_DSN_DEFAULT = 'https://9971861dcef5da1acd0b1e8c07ff2324@o4511349559066624.ingest.de.sentry.io/4511354115981392c'; // ← Coller ici le DSN du projet Sentry "conges-lce"
 
 if (app.isPackaged) {
     try {
@@ -195,6 +195,7 @@ require('./handlers/config-app')(ctx, safeHandle);
 require('./handlers/navigation')(ctx, safeHandle);
 require('./handlers/db-admin')(ctx, safeHandle);
 require('./handlers/credentials')(ctx, safeHandle);
+require('./handlers/ics')(ctx, safeHandle);
 
 // ========== BASE DE DONNÉES TURSO ==========
 
@@ -462,6 +463,18 @@ const MIGRATIONS = [
         // Backfill : toutes les saisies pré-existantes sont considérées validées
         await db.execute(`UPDATE heures_supplementaires SET statut = 'valide' WHERE statut IS NULL OR statut = ''`);
         await db.execute('CREATE INDEX IF NOT EXISTS idx_heures_sup_statut ON heures_supplementaires(statut)');
+    },
+
+    // v9 : opt-in synchronisation calendrier Outlook (.ics)
+    //      par salarié (default 0 = désactivé) + option globale admin (default 1)
+    async function v9(db) {
+        try {
+            await db.execute("ALTER TABLE salaries ADD COLUMN sync_calendar_outlook INTEGER DEFAULT 0");
+        } catch (e) { /* colonne existe déjà */ }
+        await db.execute({
+            sql: "INSERT OR IGNORE INTO config_app (cle, valeur) VALUES ('sync_outlook_admin', '1')",
+            args: []
+        });
     },
 ];
 

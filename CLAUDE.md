@@ -132,7 +132,7 @@ rtt_annuels           (id, annee_debut, date_debut, date_fin, nb_jours_periode, 
 heures_supplementaires(id, salarie_id, date, heures, commentaire, date_creation, source)
                       -- heures: peut être négatif (retrait/récupération) ou positif (crédit)
                       -- source: 'manuel' (saisie modale) | 'import_excel' (import des onglets RECUP <Nom>)
-db_version            (version) -- actuellement v7
+db_version            (version) -- actuellement v9
 ```
 
 ---
@@ -210,7 +210,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ---
 
-## État actuel du projet (08/05/2026 — v1.1.1 buildée, à publier sur GitHub)
+## État actuel du projet (20/05/2026 — v1.2.0 buildée, à publier sur GitHub)
 
 **Fonctionnel** : authentification, CRUD salariés, pose d'absences (CP/RTT/RECUP), calendrier annuel + global, soldes compacts avec couleurs contextuelles + ligne « en attente », traitements automatiques CP mensuel + CP annuel + RTT, export PDF (congés + récap salarié + stats), notifications DB + toasts (auto-dismiss côté user 5s, côté admin sur demande), jours fériés (auto-génération), heures supplémentaires, import/export Excel, statistiques (Chart.js), dark mode complet, drag-to-select calendrier, demi-journées (AM/PM).
 
@@ -363,6 +363,44 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 - **Correctif solde Emilie REDOUTE** (08/05/2026) : solde rectifié sur Turso prod. Filet de sécurité dans `utils-cp.js` (déployé avec v1.1.0) garantit que les futurs traitements mensuels utilisent le bon taux pour les salariés en arrêt maladie sans entrée `historique_taux`.
 
+**v1.2.0 (20/05/2026) — Synchronisation calendrier Outlook (.ics) avec workflow complet** :
+
+- **Module `src/handlers/ics.js`** — générateur RFC 5545, line folding 75 octets, échappement texte, all-day vs horaire (8h-12h matin / 14h-18h après-midi, floating time sans TZID), multi-jours avec demi-journées aux extrémités (plusieurs VEVENT dans un seul VCALENDAR, UID partagé). Handler IPC `genererIcsAbsence(absenceId, options)` : charge l'absence + le salarié depuis Turso (ou utilise `options.absenceSnapshot` si fourni), génère le `.ics`, l'écrit dans `%TEMP%\conges-lce-absence-X-{publish|cancel}.ics`, puis `shell.openPath()` → Outlook s'ouvre avec l'event prêt à ajouter au calendrier perso de l'utilisateur connecté sur le poste.
+
+- **Migration v9** : `ALTER TABLE salaries ADD COLUMN sync_calendar_outlook INTEGER DEFAULT 0` + `INSERT OR IGNORE INTO config_app ('sync_outlook_admin', '1')`. La colonne `sync_calendar_outlook` reste en DB pour rétro-compat mais **n'est plus lue ni écrite par le code** depuis la refonte du 20/05/2026 (sync user devenue universelle).
+
+- **Paradigme final** (après discussion équipe, abandon de Microsoft Graph API et calendrier partagé `contact@`) :
+  - **User pose une absence** → `genererIcsAbsence(newId, { includeName: false })` immédiatement après `createAbsence` réussi, sans attendre validation. Le user voit son event tout de suite dans Outlook.
+  - **Admin valide pour quelqu'un d'autre** → **pas** d'ICS côté admin (bloc retiré de `validerAbsence`). Lilian (`pilotage@`) ne voit plus tous les events des autres dans son agenda perso.
+  - **Admin pose pour soi-même** (Mes Congés admin) → ICS côté admin (inchangé) si `sync_outlook_admin === '1'`. L'admin est analogue à un user dans ce cas.
+  - **Admin refuse une demande** → `refuserAbsence` handler enrichit la notif `demande_refusee` avec `absence_id + absence_snapshot` (event live + colonne `details` JSON). Côté user : toast avec bouton « 📅 Retirer de mon calendrier » qui génère un ICS CANCEL via le snapshot embarqué (l'absence est en `refuse` en DB, le snapshot suffit).
+  - **User annule sa demande en attente** (corbeille « Mes demandes en cours ») → modale `confirmModal` étendue avec checkbox « Retirer de mon calendrier » cochée par défaut. Si cochée, ICS CANCEL envoyé **avant** le `deleteAbsence` (l'absence existe encore en DB, pas besoin de snapshot).
+  - **Admin supprime une absence validée** → checkbox `#supprimerCalendrierOutlook` dans `#modalSuppressionAbsence` (visible si `sync_outlook_admin === '1'`). Si cochée : ICS CANCEL **avant** `deleteAbsence` + (pour la suppression jour seul d'une période multi-jours) PUBLISH de chaque sous-absence recréée. Câblé dans les 3 branches : complete simple, jour seul simple, `flowSuppressionCp`. `recreerSousAbsencesCp` et `supprimerUnJour` retournent maintenant `[newIds]` pour permettre le PUBLISH par le caller.
+
+- **Helpers `dashboard-admin.js`** : `envoyerCancelOutlookSiDemande(absenceId)` (CANCEL via la checkbox modale, à appeler AVANT DELETE) et `envoyerPublishOutlookSiDemande(absenceIds)` (PUBLISH des sous-absences après recréation). Try/catch silencieux : ne bloque jamais le flow principal.
+
+- **Côté user** :
+  - Plus de variable `_userSyncCalendar` (sync universelle).
+  - `_hydrateAbsenceIdFromDetails` hydrate désormais aussi `absence_snapshot` depuis la colonne `details`.
+  - `afficherToastUser` affiche un bouton « 📅 Retirer de mon calendrier » pour les notifs `absence_supprimee` ET `demande_refusee` (les seules à porter un snapshot). Plus de bouton « Ajouter » car l'ICS est envoyé à la pose.
+  - `_purgerBufferValidation` préserve `type/absence_id/absence_snapshot` pour les refus single (les rafales aggrégées n'ont pas de bouton, acceptable).
+  - `confirmModal` étendue : option `checkboxLabel` + `checkboxChecked`. Si fournie → retourne `{ confirmed, checkboxChecked }`. Si pas fournie → retourne `bool` (rétro-compat avec les usages existants).
+
+- **Fiche salarié** : checkbox « Proposer l'ajout des congés validés au calendrier Outlook » **retirée** (HTML + 3 refs JS dans `dashboard-admin.js` + paramètre des handlers `createSalarie` / `updateSalarie` dans `salaries.js`). La colonne DB `sync_calendar_outlook` reste mais devient inutilisée.
+
+- **Paramètres admin** : tuile « Synchronisation calendrier Outlook » conservée (contrôle uniquement la pose admin pour soi-même + la checkbox CANCEL de la modale suppression).
+
+- **FAQ `aide-data.js`** : fiche « Supprimer un congé » mise à jour pour la checkbox CANCEL Outlook + nouvelle fiche « Synchronisation calendrier Outlook » dédiée (règle de sync FAQ respectée).
+
+- **Décisions design importantes** :
+  - Floating time pour les demi-journées : pas de TZID, l'event s'affiche à l'heure locale du client (cohérent pour une app franco-française).
+  - UID partagé entre les 3 VEVENT d'un multi-jours : validé visuellement, Outlook crée bien 3 events distincts.
+  - Pose user → ICS immédiat : la majorité des demandes sont validées, autant peupler le calendrier tout de suite. Les rares désync (refus, annulation) sont gérées via les boutons CANCEL.
+  - Admin valide pour autres → pas d'ICS : Lilian ne veut pas voir tous les events des autres dans son agenda perso.
+  - Sync user universelle : simplifie l'onboarding, garantit que personne n'oublie d'activer. Le user peut toujours refuser au cas par cas (en fermant la fenêtre Outlook qui s'ouvre).
+
+- **Alternatives écartées** : Microsoft Graph API (écrire dans `contact@laciotatentreprendre.fr` calendrier partagé) et mail SMTP avec auto-accept côté `contact@`. Abandonnés après discussion équipe : le calendrier individuel par poste suffit. Si le besoin remonte un jour, ~1-2j de dev pour le module Graph.
+
 **Manquant / en cours** : voir `DOCS/TODO.md`
 
 ---
@@ -380,7 +418,7 @@ Admin : height: calc(100vh - 160px)  /* header + nav + padding */
 
 ## ⚠️ Aide admin (FAQ) — toujours à jour
 
-Le bouton `?` du header admin ouvre une modale d'aide pilotée par `src/js/aide-data.js` (9 fiches HTML : suppression congé, réaffectation soldes, validation, traitements, arrêt maladie, heures sup, pose, import/export, jours fériés).
+Le bouton `?` du header admin ouvre une modale d'aide pilotée par `src/js/aide-data.js` (10 fiches HTML : suppression congé, réaffectation soldes, validation, traitements, arrêt maladie, heures sup, pose, import/export, jours fériés, synchronisation calendrier Outlook).
 
 **Règle** : à chaque modification de code qui change un flow admin user-facing (ajout d'option dans une modale, nouveau workflow, changement d'emplacement d'un bouton, nouvelle règle métier...), **mettre à jour la fiche concernée dans `aide-data.js` dans le même commit**. La FAQ est la source de vérité visible par l'utilisateur — toute divergence crée du support inutile.
 
