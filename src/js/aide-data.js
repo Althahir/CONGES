@@ -138,6 +138,41 @@ UPDATE soldes SET cp_n = cp_n - 0.42 WHERE salarie_id = 5 AND annee = 2026;</cod
     },
 
     {
+        id: 'traitements-auto',
+        titre: "Traitements automatiques : acquisition des CP et basculement annuel",
+        motsCles: ['traitement', 'traitements', 'automatique', 'mensuel', 'acquisition', 'cp mensuel', 'basculement', 'annuel', 'rtt', 'rattrapage', 'manqué', 'oublié', '1er du mois', 'solde faux', 'écart paie', 'bulletin'],
+        contenu: `
+<h3>Traitements automatiques : acquisition des CP et basculement annuel</h3>
+
+<h4>Ce qui tourne tout seul</h4>
+<ul>
+  <li><strong>Acquisition CP mensuelle</strong> — le 1<sup>er</sup> de chaque mois, l'application crédite les congés acquis sur le <strong>mois écoulé</strong> (2,08333 j au taux normal, 1,66333 j en arrêt maladie). Le mois de septembre est donc crédité le 1<sup>er</sup> octobre.</li>
+  <li><strong>Basculement annuel CP</strong> — le 1<sup>er</sup> juin, les CP N sont transférés en CP N-1 et le compteur CP N repart de zéro.</li>
+  <li><strong>Attribution des RTT</strong> — le 1<sup>er</sup> juin également, selon les paramètres RTT de l'année saisis dans les Paramètres.</li>
+</ul>
+
+<h4>Et si personne n'ouvre l'application le 1<sup>er</sup> du mois ?</h4>
+<p><strong>Rien n'est perdu.</strong> L'application ne se demande plus « sommes-nous le 1<sup>er</sup> ? » mais « quelles échéances sont passées sans avoir été traitées ? ». Au prochain démarrage, tous les mois manqués sont rattrapés automatiquement, dans l'ordre chronologique.</p>
+<p>Exemple : le 1<sup>er</sup> août 2026 tombait un samedi, bureau fermé. Auparavant, l'acquisition de juillet était perdue définitivement et il fallait s'en apercevoir en comparant avec les bulletins de paie. Désormais, l'ouverture de l'application le lundi suivant crédite juillet normalement.</p>
+<p>La vérification a lieu <strong>au démarrage</strong> puis <strong>toutes les 6 heures</strong>, ce qui couvre aussi les postes laissés allumés en permanence, qui ne repassent jamais par un démarrage.</p>
+
+<h4>Peut-on créditer deux fois par erreur ?</h4>
+<p>Non. Chaque échéance ne peut être honorée qu'une seule fois, et cette garantie vaut pour tous les postes à la fois : si plusieurs personnes ouvrent l'application le même matin, un seul poste effectue le traitement. Un traitement partiellement réussi n'est jamais rejoué non plus, pour ne pas recréditer les salariés déjà traités.</p>
+
+<h4>Vérifier ce qui a été traité</h4>
+<p>Section <strong>Paramètres</strong> : chaque tuile (« Taux d'acquisition CP », « Basculement annuel CP », « Traitement annuel RTT ») affiche en bas la date du dernier traitement effectué et le nombre de salariés concernés. Une notification est également envoyée à chaque administrateur à chaque traitement, y compris lors d'un rattrapage.</p>
+
+<h4>Un solde semble en retard par rapport au bulletin de paie</h4>
+<ol>
+  <li><strong>Vérifier la date</strong> : l'acquisition du mois en cours n'est créditée que le 1<sup>er</sup> du mois suivant. Un écart d'un mois en cours de mois est normal.</li>
+  <li><strong>Vérifier l'historique des traitements</strong> dans les Paramètres : si un mois manque, ouvrir l'application suffit désormais à le rattraper.</li>
+  <li><strong>Vérifier le statut « arrêt maladie »</strong> du salarié : un salarié en arrêt acquiert à taux réduit. Le passage en arrêt doit toujours se faire <strong>depuis la fiche salarié</strong>, jamais directement en base, sous peine de fausser le taux appliqué.</li>
+  <li>Si l'écart persiste, voir la fiche <em>« Remettre les soldes à jour après une erreur de calcul »</em>.</li>
+</ol>
+`
+    },
+
+    {
         id: 'sync-outlook',
         titre: "Synchronisation calendrier Outlook",
         motsCles: ['outlook', 'calendrier', 'ics', 'sync', 'synchronisation', 'agenda', 'event', 'rendez-vous'],

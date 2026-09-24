@@ -58,7 +58,29 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
     // ========== TRAITEMENT CP MENSUEL (IPC) ==========
 
-    safeHandle('executerTraitementCPMensuel', async (event, annee, mois) => {
+    safeHandle('executerTraitementCPMensuel', async (event, annee, mois, forcer = false) => {
+        // Garde anti-double-crédit : relancer un mois déjà traité ajouterait une seconde
+        // fois les CP à tous les salariés. 'forcer' reste possible pour une reprise
+        // volontaire après correction de données.
+        if (!forcer) {
+            const dejaFait = await ctx.db.execute({
+                sql: `SELECT date_execution FROM historique_traitements
+                      WHERE type = ? AND annee = ? AND statut IN ('success', 'partial')
+                      LIMIT 1`,
+                args: [`CP_MENSUEL_${mois}`, annee]
+            });
+            if (dejaFait.rows[0]) {
+                return {
+                    success: false,
+                    dejaFait: true,
+                    statut: 'skipped',
+                    nbMisAJour: 0,
+                    details: [],
+                    erreurs: [`Le traitement CP de ${MOIS_NOMS[mois] || `mois ${mois}`} ${annee} a déjà été effectué le ${dejaFait.rows[0].date_execution}.`]
+                };
+            }
+        }
+
         const salariesResult = await ctx.db.execute({ sql: 'SELECT * FROM salaries WHERE actif = 1', args: [] });
         const salaries = salariesResult.rows;
 
@@ -293,35 +315,146 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
 
     // ========== VERIFICATION AUTOMATIQUE DES TRAITEMENTS ==========
 
-    async function verifierTraitementsAutomatiques() {
-        console.log('Vérification des traitements automatiques...');
+    // Un traitement n'est dû qu'une fois, mais l'app n'est pas forcément ouverte le jour
+    // de l'échéance : 1er tombant un week-end ou un férié, période de congés, poste laissé
+    // allumé sans redémarrage... On raisonne donc en « échéances passées non honorées »
+    // et non en « sommes-nous le jour J ». Sans ça, un mois manqué était perdu à jamais
+    // (cas réel : CP_MENSUEL_7 2026, dû le samedi 01/08/2026, jamais exécuté).
+    const RATTRAPAGE_MAX_MOIS = 24;
+    const VERROU_PERIME_HEURES = 2;
 
-        const aujourdhui = new Date();
-        const annee = aujourdhui.getFullYear();
-        const mois = aujourdhui.getMonth() + 1;
-        const jour = aujourdhui.getDate();
+    function indexMois(m) { return m.annee * 12 + (m.mois - 1); }
+    function moisSuivant(m) { return m.mois === 12 ? { annee: m.annee + 1, mois: 1 } : { annee: m.annee, mois: m.mois + 1 }; }
+    function moisPrecedent(m) { return m.mois === 1 ? { annee: m.annee - 1, mois: 12 } : { annee: m.annee, mois: m.mois - 1 }; }
+
+    // Verrou inter-postes. Toutes les instances Electron partagent la même base Turso et
+    // rattraperont la même échéance au même moment (typiquement le lundi matin après un
+    // 1er tombé un samedi). La PRIMARY KEY (type, annee) rend la prise de verrou atomique :
+    // le second INSERT échoue sur contrainte, donc un seul poste crédite.
+    // Table dédiée : historique_traitements porte un CHECK strict sur 'statut' et n'a pas
+    // vocation à héberger des états transitoires. Créée à la demande par son seul
+    // consommateur, ce qui garde le module autonome (et testable hors Electron).
+    let tableVerrousPrete = false;
+    async function assurerTableVerrous() {
+        if (tableVerrousPrete) return;
+        await ctx.db.execute(`CREATE TABLE IF NOT EXISTS traitements_verrous (
+            type TEXT NOT NULL,
+            annee INTEGER NOT NULL,
+            date_prise TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (type, annee)
+        )`);
+        tableVerrousPrete = true;
+    }
+
+    async function prendreVerrouTraitement(type, annee) {
+        // Un traitement enregistré en 'success' ou en 'partial' ne doit jamais être rejoué :
+        // un 'partial' a déjà crédité une partie des salariés, les repasser les double-créditerait.
+        const dejaFait = await ctx.db.execute({
+            sql: `SELECT 1 FROM historique_traitements
+                  WHERE type = ? AND annee = ? AND statut IN ('success', 'partial') LIMIT 1`,
+            args: [type, annee]
+        });
+        if (dejaFait.rows[0]) return false;
 
         try {
-            // --- Traitement CP mensuel automatique (1er du mois) ---
-            if (jour === 1) {
-                let moisATraiter = mois - 1;
-                let anneeATraiter = annee;
-                if (moisATraiter === 0) { moisATraiter = 12; anneeATraiter--; }
+            await ctx.db.execute({
+                sql: 'INSERT INTO traitements_verrous (type, annee) VALUES (?, ?)',
+                args: [type, annee]
+            });
+            return true;
+        } catch (e) {
+            const estConflit = (e && e.code === 'SQLITE_CONSTRAINT')
+                || /constraint/i.test(String((e && e.message) || ''));
+            if (estConflit) return false;   // un autre poste traite déjà cette échéance
+            throw e;
+        }
+    }
 
-                const dejaFaitResult = await ctx.db.execute({
-                    sql: `SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = 'success'`,
-                    args: [`CP_MENSUEL_${moisATraiter}`, anneeATraiter]
+    async function libererVerrouTraitement(type, annee) {
+        try {
+            await ctx.db.execute({
+                sql: 'DELETE FROM traitements_verrous WHERE type = ? AND annee = ?',
+                args: [type, annee]
+            });
+        } catch (e) { console.error('Erreur libération verrou traitement:', e); }
+    }
+
+    // Un poste qui coupe en plein traitement laisserait un verrou éternel : on purge
+    // les verrous plus vieux que VERROU_PERIME_HEURES avant chaque vérification.
+    async function purgerVerrousPerimes() {
+        try {
+            await ctx.db.execute({
+                sql: `DELETE FROM traitements_verrous WHERE date_prise < datetime('now', ?)`,
+                args: [`-${VERROU_PERIME_HEURES} hours`]
+            });
+        } catch (e) { console.error('Erreur purge verrous traitements:', e); }
+    }
+
+    // Dernier mois d'acquisition effectivement crédité — point de reprise du rattrapage.
+    async function getDernierMoisCredite() {
+        const result = await ctx.db.execute({
+            sql: `SELECT annee, CAST(REPLACE(type, 'CP_MENSUEL_', '') AS INTEGER) AS mois
+                  FROM historique_traitements
+                  WHERE type LIKE 'CP_MENSUEL_%' AND statut IN ('success', 'partial')
+                  ORDER BY annee DESC, mois DESC
+                  LIMIT 1`,
+            args: []
+        });
+        const row = result.rows[0];
+        if (!row || !row.mois) return null;
+        return { annee: Number(row.annee), mois: Number(row.mois) };
+    }
+
+    let verificationEnCours = false;
+
+    async function verifierTraitementsAutomatiques() {
+        // La vérification tourne au démarrage ET périodiquement : on empêche deux passes
+        // concurrentes dans la même instance.
+        if (verificationEnCours) return;
+        verificationEnCours = true;
+
+        try {
+            console.log('Vérification des traitements automatiques...');
+
+            const aujourdhui = new Date();
+            const annee = aujourdhui.getFullYear();
+            const mois = aujourdhui.getMonth() + 1;
+
+            await assurerTableVerrous();
+            await purgerVerrousPerimes();
+
+            const taches = [];
+
+            // --- Traitements CP mensuels échus ---
+            // Le mois M est dû le 1er du mois M+1. On empile tous les mois échus depuis
+            // le dernier crédité, et pas seulement le mois précédent.
+            const dernierCredite = await getDernierMoisCredite();
+            const dernierMoisDu = moisPrecedent({ annee, mois });
+
+            // Sans historique (installation neuve, table vidée), on ne crédite rien
+            // rétroactivement : on se limite au mois écoulé, comme avant.
+            let curseur = dernierCredite ? moisSuivant(dernierCredite) : dernierMoisDu;
+
+            let nbMoisEmpiles = 0;
+            while (indexMois(curseur) <= indexMois(dernierMoisDu) && nbMoisEmpiles < RATTRAPAGE_MAX_MOIS) {
+                const m = curseur;
+                taches.push({
+                    echeance: new Date(m.annee, m.mois, 1),   // 1er du mois suivant
+                    priorite: 0,                              // avant les annuels de même date
+                    type: `CP_MENSUEL_${m.mois}`,
+                    annee: m.annee,
+                    libelle: `CP mensuel ${MOIS_NOMS[m.mois]} ${m.annee}`,
+                    exec: () => executerTraitementCPMensuelAuto(m.annee, m.mois)
                 });
-
-                if (!dejaFaitResult.rows[0]) {
-                    console.log(`Exécution du traitement CP mensuel pour ${moisATraiter}/${anneeATraiter}...`);
-                    await executerTraitementCPMensuelAuto(anneeATraiter, moisATraiter);
-                } else {
-                    console.log(`Traitement CP mensuel ${moisATraiter}/${anneeATraiter} déjà effectué`);
-                }
+                curseur = moisSuivant(m);
+                nbMoisEmpiles++;
             }
 
-            // --- Traitements annuels (CP basculement + RTT) ---
+            if (nbMoisEmpiles >= RATTRAPAGE_MAX_MOIS) {
+                console.warn(`Rattrapage CP mensuel plafonné à ${RATTRAPAGE_MAX_MOIS} mois — relancer l'application pour poursuivre.`);
+            }
+
+            // --- Traitements annuels échus (basculement CP + RTT) ---
             const configResult = await ctx.db.execute({
                 sql: 'SELECT * FROM config_traitements WHERE actif = 1',
                 args: []
@@ -329,77 +462,102 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
             const config = configResult.rows;
 
             for (const conf of config) {
-                if (conf.jour === jour && conf.mois === mois) {
-                    console.log(`Date de traitement ${conf.type} atteinte !`);
+                if (conf.type !== 'CP_ANNUEL' && conf.type !== 'RTT_ANNUEL') continue;
 
-                    const dejaFaitResult = await ctx.db.execute({
-                        sql: `SELECT * FROM historique_traitements WHERE type = ? AND annee = ? AND statut = 'success'`,
-                        args: [conf.type, annee]
-                    });
+                const echeance = new Date(annee, conf.mois - 1, conf.jour);
+                if (echeance > aujourdhui) continue;   // pas encore due cette année
 
-                    if (!dejaFaitResult.rows[0]) {
-                        console.log(`Exécution du traitement ${conf.type}...`);
-                        if (conf.type === 'CP_ANNUEL') {
-                            await executerTraitementCPAnnuelAuto(annee);
-                        } else if (conf.type === 'RTT_ANNUEL') {
-                            await executerTraitementRTTAuto(annee);
-                        }
-                    } else {
-                        console.log(`Traitement ${conf.type} déjà effectué cette année`);
-                    }
+                taches.push({
+                    echeance,
+                    priorite: 1,   // au 1er juin : créditer mai AVANT de basculer N → N-1
+                    type: conf.type,
+                    annee,
+                    libelle: `${conf.type} ${annee}`,
+                    exec: () => conf.type === 'CP_ANNUEL'
+                        ? executerTraitementCPAnnuelAuto(annee)
+                        : executerTraitementRTTAuto(annee)
+                });
+            }
+
+            // Ordre chronologique strict : un rattrapage qui enjambe le 1er juin doit
+            // créditer mai, puis basculer N → N-1, puis créditer juin.
+            taches.sort((a, b) => (a.echeance - b.echeance) || (a.priorite - b.priorite));
+
+            for (const tache of taches) {
+                if (!(await prendreVerrouTraitement(tache.type, tache.annee))) {
+                    console.log(`Traitement ${tache.libelle} déjà effectué (ou en cours sur un autre poste)`);
+                    continue;
+                }
+
+                console.log(`Exécution du traitement ${tache.libelle}...`);
+                try {
+                    await tache.exec();
+                } catch (err) {
+                    // Un échec isolé (paramètres RTT manquants par exemple) ne doit pas
+                    // empêcher les traitements suivants de la file de s'exécuter.
+                    console.error(`Échec du traitement ${tache.libelle} :`, err);
+                } finally {
+                    await libererVerrouTraitement(tache.type, tache.annee);
                 }
             }
 
-            // Rappel RTT année suivante
-            const rttConfig = config.find(c => c.type === 'RTT_ANNUEL');
-            if (rttConfig) {
-                let moisRappel = rttConfig.mois + 1;
-                let anneeRappel = annee;
-                if (moisRappel > 12) { moisRappel = 1; anneeRappel++; }
-
-                if (mois === moisRappel && jour === rttConfig.jour) {
-                    const traitementFaitResult = await ctx.db.execute({
-                        sql: `SELECT * FROM historique_traitements WHERE type = 'RTT_ANNUEL' AND annee = ? AND statut = 'success'`,
-                        args: [annee]
-                    });
-
-                    if (traitementFaitResult.rows[0]) {
-                        const rttNextYearResult = await ctx.db.execute({
-                            sql: 'SELECT id FROM rtt_annuels WHERE annee_debut = ?',
-                            args: [annee + 1]
-                        });
-
-                        if (!rttNextYearResult.rows[0]) {
-                            const dejaNotifieResult = await ctx.db.execute({
-                                sql: `SELECT id FROM notifications WHERE type = 'error' AND titre = 'Paramètres RTT manquants'
-                                      AND message LIKE '%' || ? || '%' AND date_creation > datetime('now', '-30 days')`,
-                                args: [String(annee + 1)]
-                            });
-
-                            if (!dejaNotifieResult.rows[0]) {
-                                const adminsResult = await ctx.db.execute({
-                                    sql: "SELECT id FROM salaries WHERE role = 'admin' AND actif = 1",
-                                    args: []
-                                });
-                                for (const admin of adminsResult.rows) {
-                                    try {
-                                        await ctx.db.execute({
-                                            sql: `INSERT INTO notifications (user_id, type, titre, message, date_creation, lue) VALUES (?, ?, ?, ?, datetime('now'), 0)`,
-                                            args: [admin.id, 'error', 'Paramètres RTT manquants',
-                                                `Les paramètres RTT pour ${annee + 1} ne sont toujours pas configurés (rappel 1 mois après traitement). Le prochain traitement RTT échouera sans ces paramètres.`]
-                                        });
-                                    } catch (e) { console.error('Erreur notification admin:', e); }
-                                }
-                                console.log(`Rappel envoyé : RTT ${annee + 1} non configurés`);
-                            }
-                        }
-                    }
-                }
-            }
+            await verifierRappelRTT(config, annee, aujourdhui);
 
         } catch (error) {
             console.error('Erreur vérification traitements:', error);
+        } finally {
+            verificationEnCours = false;
         }
+    }
+
+    // Rappel : les paramètres RTT de l'année suivante doivent être saisis peu après le
+    // traitement annuel. Déclenché dès que la date de rappel est dépassée (et non le jour
+    // pile) ; la garde anti-doublon de 30 jours en fait un rappel mensuel tant que les
+    // paramètres manquent, au lieu d'une unique chance manquable.
+    async function verifierRappelRTT(config, annee, aujourdhui) {
+        const rttConfig = config.find(c => c.type === 'RTT_ANNUEL');
+        if (!rttConfig) return;
+
+        let moisRappel = rttConfig.mois + 1;
+        let anneeRappel = annee;
+        if (moisRappel > 12) { moisRappel = 1; anneeRappel++; }
+
+        const dateRappel = new Date(anneeRappel, moisRappel - 1, rttConfig.jour);
+        if (dateRappel > aujourdhui) return;
+
+        const traitementFaitResult = await ctx.db.execute({
+            sql: `SELECT * FROM historique_traitements WHERE type = 'RTT_ANNUEL' AND annee = ? AND statut = 'success'`,
+            args: [annee]
+        });
+        if (!traitementFaitResult.rows[0]) return;
+
+        const rttNextYearResult = await ctx.db.execute({
+            sql: 'SELECT id FROM rtt_annuels WHERE annee_debut = ?',
+            args: [annee + 1]
+        });
+        if (rttNextYearResult.rows[0]) return;
+
+        const dejaNotifieResult = await ctx.db.execute({
+            sql: `SELECT id FROM notifications WHERE type = 'error' AND titre = 'Paramètres RTT manquants'
+                  AND message LIKE '%' || ? || '%' AND date_creation > datetime('now', '-30 days')`,
+            args: [String(annee + 1)]
+        });
+        if (dejaNotifieResult.rows[0]) return;
+
+        const adminsResult = await ctx.db.execute({
+            sql: "SELECT id FROM salaries WHERE role = 'admin' AND actif = 1",
+            args: []
+        });
+        for (const admin of adminsResult.rows) {
+            try {
+                await ctx.db.execute({
+                    sql: `INSERT INTO notifications (user_id, type, titre, message, date_creation, lue) VALUES (?, ?, ?, ?, datetime('now'), 0)`,
+                    args: [admin.id, 'error', 'Paramètres RTT manquants',
+                        `Les paramètres RTT pour ${annee + 1} ne sont toujours pas configurés (rappel 1 mois après traitement). Le prochain traitement RTT échouera sans ces paramètres.`]
+                });
+            } catch (e) { console.error('Erreur notification admin:', e); }
+        }
+        console.log(`Rappel envoyé : RTT ${annee + 1} non configurés`);
     }
 
     // Traitement CP mensuel automatique

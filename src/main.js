@@ -551,13 +551,22 @@ app.whenReady().then(async () => {
 
     createWindow();
 
-    setTimeout(async () => {
+    // Vérification des traitements : au démarrage, puis périodiquement. Le tick périodique
+    // couvre les postes laissés allumés en permanence, qui franchiraient sinon le 1er du
+    // mois sans jamais repasser par le démarrage. La fonction est idempotente (verrou en
+    // base), l'appeler souvent ne coûte que quelques SELECT.
+    const INTERVALLE_VERIF_TRAITEMENTS = 6 * 60 * 60 * 1000; // 6 h
+
+    async function lancerVerificationTraitements() {
         try {
             await verifierTraitementsAutomatiques();
         } catch (err) {
             console.error('Erreur vérification traitements auto :', err);
         }
-    }, 2000);
+    }
+
+    setTimeout(lancerVerificationTraitements, 2000);
+    setInterval(lancerVerificationTraitements, INTERVALLE_VERIF_TRAITEMENTS);
 
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
