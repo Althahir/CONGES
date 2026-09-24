@@ -390,19 +390,46 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
         } catch (e) { console.error('Erreur purge verrous traitements:', e); }
     }
 
-    // Dernier mois d'acquisition effectivement crédité — point de reprise du rattrapage.
-    async function getDernierMoisCredite() {
+    // Mois d'acquisition déjà crédités, sous forme d'index (annee * 12 + mois - 1).
+    // On raisonne par ABSENCE et non par point de reprise : un mois manqué peut être
+    // encadré par des mois traités (cas réel : 4, 5, 6, [trou], 8 — reprendre après le
+    // dernier crédité laisserait juillet invisible pour toujours).
+    async function getMoisDejaCredites() {
         const result = await ctx.db.execute({
             sql: `SELECT annee, CAST(REPLACE(type, 'CP_MENSUEL_', '') AS INTEGER) AS mois
                   FROM historique_traitements
-                  WHERE type LIKE 'CP_MENSUEL_%' AND statut IN ('success', 'partial')
-                  ORDER BY annee DESC, mois DESC
-                  LIMIT 1`,
+                  WHERE type LIKE 'CP_MENSUEL_%' AND statut IN ('success', 'partial')`,
+            args: []
+        });
+        const credites = new Set();
+        for (const row of result.rows) {
+            const m = Number(row.mois);
+            if (!m || m < 1 || m > 12) continue;
+            credites.add(indexMois({ annee: Number(row.annee), mois: m }));
+        }
+        return credites;
+    }
+
+    // Borne basse du rattrapage. Le crédit d'un mois atterrit toujours sur cp_n de
+    // l'année du mois : rattraper un mois antérieur au dernier basculement annuel le
+    // placerait sur le mauvais compteur (il aurait dû finir sur cp_n1). On ne rattrape
+    // donc automatiquement que depuis le dernier basculement effectué ; les trous plus
+    // anciens relèvent d'une régularisation manuelle et sont signalés à l'admin.
+    async function getBorneRattrapage() {
+        const result = await ctx.db.execute({
+            sql: `SELECT annee, date_execution FROM historique_traitements
+                  WHERE type = 'CP_ANNUEL' AND statut IN ('success', 'partial')
+                  ORDER BY date_execution DESC LIMIT 1`,
             args: []
         });
         const row = result.rows[0];
-        if (!row || !row.mois) return null;
-        return { annee: Number(row.annee), mois: Number(row.mois) };
+        if (!row || !row.date_execution) return null;
+
+        // Le basculement du 1er juin 2026 sépare les mois acquis jusqu'à mai 2026
+        // (partis sur cp_n1) de ceux de juin 2026 et après (sur cp_n).
+        const dateBascule = new Date(String(row.date_execution).replace(' ', 'T'));
+        if (isNaN(dateBascule.getTime())) return null;
+        return indexMois({ annee: dateBascule.getFullYear(), mois: dateBascule.getMonth() + 1 });
     }
 
     let verificationEnCours = false;
@@ -426,18 +453,33 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
             const taches = [];
 
             // --- Traitements CP mensuels échus ---
-            // Le mois M est dû le 1er du mois M+1. On empile tous les mois échus depuis
-            // le dernier crédité, et pas seulement le mois précédent.
-            const dernierCredite = await getDernierMoisCredite();
+            // Le mois M est dû le 1er du mois M+1. On balaie la fenêtre rattrapable et on
+            // empile tout mois dont le crédit manque — y compris un trou encadré par des
+            // mois traités, qu'un simple « reprendre après le dernier » ne verrait jamais.
+            const moisCredites = await getMoisDejaCredites();
             const dernierMoisDu = moisPrecedent({ annee, mois });
+            const indexFin = indexMois(dernierMoisDu);
 
-            // Sans historique (installation neuve, table vidée), on ne crédite rien
-            // rétroactivement : on se limite au mois écoulé, comme avant.
-            let curseur = dernierCredite ? moisSuivant(dernierCredite) : dernierMoisDu;
+            // Borne basse : jamais avant le dernier basculement annuel (mauvais compteur),
+            // jamais plus de RATTRAPAGE_MAX_MOIS en arrière, et jamais avant le premier
+            // mois connu de l'historique. Sans historique du tout (installation neuve),
+            // on ne crédite rien rétroactivement : on se limite au mois écoulé.
+            let indexDebut;
+            if (moisCredites.size === 0) {
+                indexDebut = indexFin;
+            } else {
+                const borneBascule = await getBorneRattrapage();
+                const premierConnu = Math.min(...moisCredites);
+                indexDebut = Math.max(
+                    borneBascule !== null ? borneBascule : premierConnu,
+                    premierConnu,
+                    indexFin - RATTRAPAGE_MAX_MOIS + 1
+                );
+            }
 
-            let nbMoisEmpiles = 0;
-            while (indexMois(curseur) <= indexMois(dernierMoisDu) && nbMoisEmpiles < RATTRAPAGE_MAX_MOIS) {
-                const m = curseur;
+            for (let idx = indexDebut; idx <= indexFin; idx++) {
+                if (moisCredites.has(idx)) continue;
+                const m = { annee: Math.floor(idx / 12), mois: (idx % 12) + 1 };
                 taches.push({
                     echeance: new Date(m.annee, m.mois, 1),   // 1er du mois suivant
                     priorite: 0,                              // avant les annuels de même date
@@ -446,12 +488,6 @@ module.exports = function registerTraitementsHandlers(ctx, safeHandle) {
                     libelle: `CP mensuel ${MOIS_NOMS[m.mois]} ${m.annee}`,
                     exec: () => executerTraitementCPMensuelAuto(m.annee, m.mois)
                 });
-                curseur = moisSuivant(m);
-                nbMoisEmpiles++;
-            }
-
-            if (nbMoisEmpiles >= RATTRAPAGE_MAX_MOIS) {
-                console.warn(`Rattrapage CP mensuel plafonné à ${RATTRAPAGE_MAX_MOIS} mois — relancer l'application pour poursuivre.`);
             }
 
             // --- Traitements annuels échus (basculement CP + RTT) ---

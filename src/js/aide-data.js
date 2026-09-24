@@ -154,7 +154,8 @@ UPDATE soldes SET cp_n = cp_n - 0.42 WHERE salarie_id = 5 AND annee = 2026;</cod
 <h4>Et si personne n'ouvre l'application le 1<sup>er</sup> du mois ?</h4>
 <p><strong>Rien n'est perdu.</strong> L'application ne se demande plus « sommes-nous le 1<sup>er</sup> ? » mais « quelles échéances sont passées sans avoir été traitées ? ». Au prochain démarrage, tous les mois manqués sont rattrapés automatiquement, dans l'ordre chronologique.</p>
 <p>Exemple : le 1<sup>er</sup> août 2026 tombait un samedi, bureau fermé. Auparavant, l'acquisition de juillet était perdue définitivement et il fallait s'en apercevoir en comparant avec les bulletins de paie. Désormais, l'ouverture de l'application le lundi suivant crédite juillet normalement.</p>
-<p>La vérification a lieu <strong>au démarrage</strong> puis <strong>toutes les 6 heures</strong>, ce qui couvre aussi les postes laissés allumés en permanence, qui ne repassent jamais par un démarrage.</p>
+<p>La vérification a lieu <strong>au démarrage</strong> puis <strong>toutes les 6 heures</strong>, ce qui couvre aussi les postes laissés allumés en permanence, qui ne repassent jamais par un démarrage. Un mois isolé qui manque au milieu de mois correctement traités est rattrapé de la même façon.</p>
+<p><em>Seule limite</em> : le rattrapage ne remonte jamais avant le dernier <strong>basculement annuel du 1<sup>er</sup> juin</strong>. Les congés acquis avant cette date ont été transférés sur le compteur CP N-1, et les recréditer aujourd'hui les placerait à tort sur le CP N. Un tel manque doit être régularisé à la main.</p>
 
 <h4>Peut-on créditer deux fois par erreur ?</h4>
 <p>Non. Chaque échéance ne peut être honorée qu'une seule fois, et cette garantie vaut pour tous les postes à la fois : si plusieurs personnes ouvrent l'application le même matin, un seul poste effectue le traitement. Un traitement partiellement réussi n'est jamais rejoué non plus, pour ne pas recréditer les salariés déjà traités.</p>
